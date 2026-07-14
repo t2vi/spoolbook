@@ -18,6 +18,9 @@
             <TabItem Header="Filament colors">
                 <ContentControl Content="{Binding Colors}"/>
             </TabItem>
+            <TabItem Header="Printers">
+                <ContentControl Content="{Binding Printers}"/>
+            </TabItem>
         </TabControl>
     </DockPanel>
 </UserControl>

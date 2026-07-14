@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Spoolbook.Desktop.Features.Prints"
         xmlns:models="using:Spoolbook.Desktop.Features.Profiles"
+        xmlns:models2="using:Spoolbook.Desktop.Features.Settings.Printers"
         xmlns:conv="using:Avalonia.Data.Converters"
         mc:Ignorable="d"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -28,7 +29,13 @@
         </ComboBox>
 
         <TextBlock Text="Printer"/>
-        <TextBox Text="{Binding Printer}"/>
+        <ComboBox ItemsSource="{Binding PrinterOptions}" SelectedItem="{Binding SelectedPrinter}" HorizontalAlignment="Stretch">
+            <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="models2:Printer">
+                    <TextBlock Text="{Binding Name}"/>
+                </DataTemplate>
+            </ComboBox.ItemTemplate>
+        </ComboBox>
 
         <TextBlock Text="Started"/>
         <StackPanel Orientation="Horizontal" Spacing="8">

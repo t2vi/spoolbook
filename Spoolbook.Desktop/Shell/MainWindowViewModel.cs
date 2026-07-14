@@ -9,6 +9,7 @@ using Spoolbook.Desktop.Features.Settings;
 using Spoolbook.Desktop.Features.Settings.General;
 using Spoolbook.Desktop.Features.Settings.Colors;
 using Spoolbook.Desktop.Features.Settings.Filaments;
+using Spoolbook.Desktop.Features.Settings.Printers;
 using Spoolbook.Desktop.Features.Dashboard;
 using Spoolbook.Desktop.Features.BambuImport;
 namespace Spoolbook.Desktop.Shell;
@@ -26,6 +27,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly FilamentColorService _colorService;
     private readonly AppSettingsService _appSettingsService;
     private readonly DashboardMetricsService _metricsService;
+    private readonly PrinterService _printerService;
 
     [ObservableProperty]
     private ViewModelBase currentPage;
@@ -41,7 +43,8 @@ public partial class MainWindowViewModel : ViewModelBase
         PrintInventoryService printInventoryService,
         FilamentColorService colorService,
         AppSettingsService appSettingsService,
-        DashboardMetricsService metricsService)
+        DashboardMetricsService metricsService,
+        PrinterService printerService)
     {
         _filamentService = filamentService;
         _spoolService = spoolService;
@@ -54,6 +57,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _colorService = colorService;
         _appSettingsService = appSettingsService;
         _metricsService = metricsService;
+        _printerService = printerService;
 
         currentPage = new DashboardViewModel(
             filamentService, spoolService, profileService, importService,
@@ -78,9 +82,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [RelayCommand]
     private void ShowPrints() =>
-        Navigate(new PrintInventoryViewModel(_printInventoryService, _printService, _spoolService, _profileService, _filamentService));
+        Navigate(new PrintInventoryViewModel(_printInventoryService, _printService, _spoolService, _profileService, _filamentService, _printerService));
 
     [RelayCommand]
     private void ShowSettings() =>
-        Navigate(new SettingsViewModel(_colorService, _filamentService, _appSettingsService, _importService));
+        Navigate(new SettingsViewModel(_colorService, _filamentService, _appSettingsService, _importService, _printerService));
 }

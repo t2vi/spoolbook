@@ -1,0 +1,43 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Spoolbook.Desktop.Features.Settings.Printers"
+             xmlns:models="using:Spoolbook.Desktop.Features.Settings.Printers"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             mc:Ignorable="d"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             x:Class="Spoolbook.Desktop.Features.Settings.Printers.PrintersView"
+             x:DataType="vm:PrintersViewModel">
+    <DockPanel Margin="0,12,0,0">
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="12" Margin="0,0,0,8">
+            <Button Content="Add printer" Click="OnAddPrinterClick"/>
+            <TextBlock Text="{Binding ErrorMessage}" Foreground="Red" VerticalAlignment="Center" IsVisible="{Binding ErrorMessage, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
+        </StackPanel>
+
+        <DataGrid ItemsSource="{Binding Printers}"
+                  AutoGenerateColumns="False"
+                  IsReadOnly="True"
+                  CanUserSortColumns="False"
+                  CanUserResizeColumns="True"
+                  GridLinesVisibility="None"
+                  HeadersVisibility="Column"
+                  Background="#1E2124"
+                  CornerRadius="4">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
+                <DataGridTextColumn Header="Model" Binding="{Binding Model}" Width="*"/>
+                <DataGridTemplateColumn Width="Auto">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate x:DataType="models:Printer">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <Button Content="Edit" Click="OnEditPrinterClick" Tag="{Binding}"/>
+                                <Button Content="Delete"
+                                        Command="{Binding $parent[DataGrid].((vm:PrintersViewModel)DataContext).DeleteCommand}"
+                                        CommandParameter="{Binding}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</UserControl>
