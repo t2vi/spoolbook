@@ -20,7 +20,18 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      - name: Publish (macOS .app bundle)
+        if: startsWith(matrix.rid, 'osx-')
+        run: scripts/build-mac-app.sh ${{ matrix.rid }}
+
+      - name: Zip (macOS .app bundle)
+        if: startsWith(matrix.rid, 'osx-')
+        run: |
+          cd dist
+          zip -r ../Spoolbook-${{ matrix.rid }}.zip Spoolbook.app
+
       - name: Publish
+        if: "!startsWith(matrix.rid, 'osx-')"
         run: |
           dotnet publish Spoolbook.Desktop/Spoolbook.Desktop.csproj \
             -c Release -r ${{ matrix.rid }} --self-contained true \
@@ -28,6 +39,7 @@ jobs:
             -o out/${{ matrix.rid }}
 
       - name: Zip
+        if: "!startsWith(matrix.rid, 'osx-')"
         run: |
           cd out/${{ matrix.rid }}
           zip -r ../../Spoolbook-${{ matrix.rid }}.zip .
