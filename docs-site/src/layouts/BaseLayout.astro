@@ -7,7 +7,7 @@ interface Props {
 }
 
 const { title, description = "spoolbook — personal FDM 3D-printing notebook" } = Astro.props
-const base = import.meta.env.BASE_URL
+const base = import.meta.env.BASE_URL.replace(/\/$/, "")
 ---
 
 <!doctype html>
@@ -21,10 +21,10 @@ const base = import.meta.env.BASE_URL
   <body>
     <header class="border-b border-border">
       <nav class="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
-        <a href={base} class="font-semibold">spoolbook</a>
+        <a href={`${base}/`} class="font-semibold">spoolbook</a>
         <div class="flex gap-6 text-sm">
-          <a href={`${base}docs/getting-started`}>Docs</a>
-          <a href={`${base}downloads`}>Downloads</a>
+          <a href={`${base}/docs/getting-started`}>Docs</a>
+          <a href={`${base}/downloads`}>Downloads</a>
           <a href="https://github.com/t2vi/spoolbook">GitHub</a>
         </div>
       </nav>

@@ -3,7 +3,7 @@ import BaseLayout from "../layouts/BaseLayout.astro"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../components/ui/card"
 import { Button } from "../components/ui/button"
 
-const base = import.meta.env.BASE_URL
+const base = import.meta.env.BASE_URL.replace(/\/$/, "")
 
 const features = [
   { title: "Filaments", desc: "Browse/search the catalog, add/edit entries, sync from the external catalog." },
@@ -23,7 +23,7 @@ const features = [
       conditions over time.
     </p>
     <Button asChild size="lg">
-      <a href={`${base}downloads`}>Download</a>
+      <a href={`${base}/downloads`}>Download</a>
     </Button>
   </section>
 
