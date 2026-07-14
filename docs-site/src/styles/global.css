@@ -1,7 +1,9 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+/* Light theme only, deliberately — flat/minimal docs site, no dark mode. */
 :root {
+  color-scheme: light;
   --background: 0 0% 100%;
   --foreground: 240 10% 3.9%;
   --primary: 217 91% 60%;
@@ -10,16 +12,6 @@
   --muted-foreground: 240 3.8% 46.1%;
   --border: 240 5.9% 90%;
   --radius: 0.5rem;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --border: 240 3.7% 15.9%;
-  }
 }
 
 @theme inline {
