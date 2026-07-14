@@ -1,0 +1,22 @@
+<!DOCTYPE html><html lang="en"> <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="description" content="spoolbook — personal FDM 3D-printing notebook"><title>Getting Started — spoolbook</title><link rel="stylesheet" href="/spoolbook/_astro/BaseLayout.BDOBW_Kb.css"></head> <body> <header class="border-b border-border"> <nav class="mx-auto flex max-w-4xl items-center justify-between px-6 py-4"> <a href="/spoolbook" class="font-semibold">spoolbook</a> <div class="flex gap-6 text-sm"> <a href="/spoolbookdocs/getting-started">Docs</a> <a href="/spoolbookdownloads">Downloads</a> <a href="https://github.com/t2vi/spoolbook">GitHub</a> </div> </nav> </header> <main class="mx-auto max-w-4xl px-6 py-12">  <article class="prose max-w-none prose-headings:font-semibold"> <h2 id="installing">Installing</h2>
+<p>Download the build for your OS from the <a href="/spoolbook/downloads">Downloads</a> page.</p>
+<ul>
+<li><strong>macOS</strong>: unzip, right-click <code>Spoolbook.app</code> → Open (first launch only — it’s ad-hoc signed, not notarized, so Gatekeeper will warn once).</li>
+<li><strong>Windows</strong>: unzip, run <code>Spoolbook.Desktop.exe</code>.</li>
+<li><strong>Linux</strong>: unzip, <code>chmod +x Spoolbook.Desktop &#x26;&#x26; ./Spoolbook.Desktop</code>.</li>
+</ul>
+<h2 id="first-run">First run</h2>
+<p>spoolbook is single-user with no account or login. On first launch it seeds a starter filament
+catalog and begins syncing fresh data automatically in the background (throttled to once every
+24 hours).</p>
+<h2 id="adding-your-first-spool">Adding your first spool</h2>
+<ol>
+<li>Go to <strong>Filaments</strong>, find or add the filament type on your roll (brand + material + variant + color).</li>
+<li>Go to <strong>Spools</strong>, create a Spool against that Filament — this represents the physical roll.</li>
+<li>Go to <strong>Profiles</strong>, create a Print Profile for it, or import one directly from Bambu Studio.</li>
+<li>After a print, log it under <strong>Prints</strong> — the exact settings from the Profile version you used
+are locked in permanently, so editing the Profile later (e.g. a seasonal temperature tweak)
+never rewrites what a past print recorded.</li>
+</ol> </article>  </main> <footer class="mt-24 border-t border-border"> <p class="mx-auto max-w-4xl px-6 py-8 text-sm text-muted-foreground">
+spoolbook is a personal project — single-user, no account needed.
+</p> </footer> </body></html>
