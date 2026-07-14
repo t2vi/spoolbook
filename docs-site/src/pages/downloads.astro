@@ -1,0 +1,46 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro"
+
+const res = await fetch("https://api.github.com/repos/t2vi/spoolbook/releases")
+const releases = res.ok ? await res.json() : []
+
+const platformLabels: Record<string, string> = {
+  "win-x64": "Windows (x64)",
+  "osx-arm64": "macOS (Apple Silicon)",
+  "osx-x64": "macOS (Intel)",
+  "linux-x64": "Linux (x64)",
+}
+
+function platformFor(name: string) {
+  const match = Object.keys(platformLabels).find((rid) => name.includes(rid))
+  return match ? platformLabels[match] : name
+}
+---
+
+<BaseLayout title="Downloads">
+  <h1 class="mb-8 text-3xl font-bold">Downloads</h1>
+
+  {releases.length === 0 && <p class="text-muted-foreground">No releases published yet.</p>}
+
+  {releases.map((release: any) => (
+    <section class="mb-12">
+      <h2 class="mb-1 text-xl font-semibold">{release.name || release.tag_name}</h2>
+      <p class="mb-4 text-sm text-muted-foreground">
+        {new Date(release.published_at).toLocaleDateString()}
+      </p>
+      <ul class="grid gap-3 sm:grid-cols-2">
+        {release.assets.map((asset: any) => (
+          <li>
+            <a
+              href={asset.browser_download_url}
+              class="block rounded-md border border-border px-4 py-3 transition-colors hover:bg-muted"
+            >
+              <span class="font-medium">{platformFor(asset.name)}</span>
+              <span class="block text-xs text-muted-foreground">{asset.name}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  ))}
+</BaseLayout>

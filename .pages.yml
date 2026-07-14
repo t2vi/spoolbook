@@ -1,0 +1,21 @@
+media:
+  input: docs-site/public/uploads
+  output: /uploads
+
+content:
+  - name: docs
+    label: Documentation
+    type: collection
+    path: docs-site/src/content/docs
+    view:
+      fields: [title, order]
+    fields:
+      - name: title
+        label: Title
+        type: string
+      - name: order
+        label: Order
+        type: number
+      - name: body
+        label: Content
+        type: rich-text
