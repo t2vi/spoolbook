@@ -6,14 +6,14 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RID="osx-arm64"
+RID="${1:-osx-arm64}"
 APP_NAME="Spoolbook"
 DIST_DIR="$REPO_ROOT/dist"
 APP_DIR="$DIST_DIR/$APP_NAME.app"
 PUBLISH_DIR="$REPO_ROOT/Spoolbook.Desktop/bin/Release/net10.0/$RID/publish"
 
 echo "Publishing (RID=$RID)..."
-dotnet publish "$REPO_ROOT/Spoolbook.Desktop" -c Release -r "$RID" --self-contained false -o "$PUBLISH_DIR"
+dotnet publish "$REPO_ROOT/Spoolbook.Desktop" -c Release -r "$RID" --self-contained true -p:PublishSingleFile=true -o "$PUBLISH_DIR"
 
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
