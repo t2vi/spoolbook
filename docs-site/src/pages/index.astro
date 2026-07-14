@@ -1,0 +1,51 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro"
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../components/ui/card"
+import { Button } from "../components/ui/button"
+
+const base = import.meta.env.BASE_URL
+
+const features = [
+  { title: "Filaments", desc: "Browse/search the catalog, add/edit entries, sync from the external catalog." },
+  { title: "Spools", desc: "Track individual physical rolls against a Filament type." },
+  { title: "Profiles", desc: "Reusable print settings, generic or spool-specific; import Bambu Studio filament presets directly." },
+  { title: "Prints", desc: "Log a print job with a profile + spool reference, ambient conditions, and outcome." },
+  { title: "Dashboard", desc: "At-a-glance view across the above." },
+]
+---
+
+<BaseLayout title="Home">
+  <section class="hero mb-16 rounded-xl p-10 text-white">
+    <h1 class="mb-4 text-4xl font-bold">spoolbook</h1>
+    <p class="mb-6 max-w-xl text-white/90">
+      A personal FDM 3D-printing notebook — track filaments, spools, print profiles, and
+      individual prints, so print outcomes can be correlated against settings and ambient
+      conditions over time.
+    </p>
+    <Button asChild size="lg">
+      <a href={`${base}downloads`}>Download</a>
+    </Button>
+  </section>
+
+  <h2 class="mb-6 text-2xl font-semibold">Features</h2>
+  <div class="grid gap-6 sm:grid-cols-2">
+    {features.map((f) => (
+      <Card>
+        <CardHeader>
+          <CardTitle>{f.title}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CardDescription>{f.desc}</CardDescription>
+        </CardContent>
+      </Card>
+    ))}
+  </div>
+</BaseLayout>
+
+<style lang="scss">
+  @use "../styles/variables" as *;
+
+  .hero {
+    background: linear-gradient(135deg, $color-primary, $color-primary-dark);
+  }
+</style>
