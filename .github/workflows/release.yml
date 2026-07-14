@@ -14,13 +14,17 @@ jobs:
       matrix:
         include:
           - rid: win-x64
-            runner: ubuntu-latest
+            runner: windows-latest
+            exe: out/win-x64/Spoolbook.Desktop.exe
           - rid: linux-x64
             runner: ubuntu-latest
+            exe: out/linux-x64/Spoolbook.Desktop
           - rid: osx-x64
             runner: macos-latest
+            exe: dist/Spoolbook.app/Contents/MacOS/Spoolbook.Desktop
           - rid: osx-arm64
             runner: macos-latest
+            exe: dist/Spoolbook.app/Contents/MacOS/Spoolbook.Desktop
     steps:
       - uses: actions/checkout@v5
 
@@ -28,9 +32,45 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      # Avalonia needs a display to open a window; ubuntu-latest has none by default.
+      # windows-latest/macos-latest runners already have one.
+      - name: Start Xvfb
+        if: matrix.rid == 'linux-x64'
+        run: |
+          sudo apt-get update && sudo apt-get install -y xvfb
+          Xvfb :99 -screen 0 1280x1024x24 &
+          echo "DISPLAY=:99" >> "$GITHUB_ENV"
+
       - name: Publish (macOS .app bundle)
         if: startsWith(matrix.rid, 'osx-')
         run: scripts/build-mac-app.sh ${{ matrix.rid }}
+
+      - name: Publish
+        if: "!startsWith(matrix.rid, 'osx-')"
+        shell: bash
+        run: |
+          dotnet publish Spoolbook.Desktop/Spoolbook.Desktop.csproj \
+            -c Release -r ${{ matrix.rid }} --self-contained true \
+            -p:PublishSingleFile=true \
+            -o out/${{ matrix.rid }}
+
+      # Confirms the build actually launches on its target OS, not just that it compiled —
+      # catches missing native deps / Gatekeeper-style failures a clean build wouldn't.
+      - name: Smoke test — app launches and stays running
+        shell: pwsh
+        run: |
+          $exe = "${{ matrix.exe }}"
+          if ("${{ runner.os }}" -ne "Windows") {
+            chmod +x $exe
+          }
+          $proc = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 5
+          if ($proc.HasExited) {
+            Write-Error "App exited early (code $($proc.ExitCode)) instead of staying open"
+            exit 1
+          }
+          Write-Host "App still running after 5s - smoke test passed"
+          Stop-Process -Id $proc.Id -Force
 
       - name: Zip (macOS .app bundle)
         if: startsWith(matrix.rid, 'osx-')
@@ -38,19 +78,16 @@ jobs:
           cd dist
           zip -r ../Spoolbook-${{ matrix.rid }}.zip Spoolbook.app
 
-      - name: Publish
-        if: "!startsWith(matrix.rid, 'osx-')"
-        run: |
-          dotnet publish Spoolbook.Desktop/Spoolbook.Desktop.csproj \
-            -c Release -r ${{ matrix.rid }} --self-contained true \
-            -p:PublishSingleFile=true \
-            -o out/${{ matrix.rid }}
+      - name: Zip (Windows)
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: Compress-Archive -Path out/win-x64/* -DestinationPath Spoolbook-win-x64.zip
 
-      - name: Zip
-        if: "!startsWith(matrix.rid, 'osx-')"
+      - name: Zip (Linux)
+        if: matrix.rid == 'linux-x64'
         run: |
-          cd out/${{ matrix.rid }}
-          zip -r ../../Spoolbook-${{ matrix.rid }}.zip .
+          cd out/linux-x64
+          zip -r ../../Spoolbook-linux-x64.zip .
 
       - name: Upload to release
         run: gh release upload "${{ github.event.release.tag_name }}" "Spoolbook-${{ matrix.rid }}.zip"
