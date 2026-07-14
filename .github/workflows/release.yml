@@ -9,10 +9,18 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
-        rid: [win-x64, osx-x64, osx-arm64, linux-x64]
+        include:
+          - rid: win-x64
+            runner: ubuntu-latest
+          - rid: linux-x64
+            runner: ubuntu-latest
+          - rid: osx-x64
+            runner: macos-latest
+          - rid: osx-arm64
+            runner: macos-latest
     steps:
       - uses: actions/checkout@v5
 

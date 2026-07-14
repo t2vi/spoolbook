@@ -51,5 +51,9 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
+echo "Ad-hoc signing (no Developer ID — avoids the 'is damaged' Gatekeeper error on unsigned bundles;
+still shows the 'unidentified developer' prompt since it isn't notarized)..."
+codesign --force --deep --sign - "$APP_DIR"
+
 echo "Built $APP_DIR"
 echo "Run: open \"$APP_DIR\""
