@@ -1,0 +1,26 @@
+# .NET / Avalonia
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.db
+*.db-shm
+*.db-wal
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code (personal/local, not shared)
+.claude/
+docs/adr
+CLAUDE.md
+CONTEXT.md
+
+# Others
+.vscode
+.env*
+
+# Local .app bundle build output
+dist/

@@ -1,0 +1,20 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Spoolbook.Desktop.Features.Profiles"
+        mc:Ignorable="d"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        x:Class="Spoolbook.Desktop.Features.Profiles.TextPromptWindow"
+        x:DataType="vm:TextPromptViewModel"
+        Width="380" SizeToContent="Height"
+        Background="#26292C"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+    <StackPanel Margin="16" Spacing="8">
+        <TextBlock Text="{Binding Title}" FontWeight="Bold"/>
+        <TextBox Text="{Binding Text}" PlaceholderText="e.g. Winter 2026"/>
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="Cancel" Command="{Binding CancelCommand}"/>
+            <Button Content="OK" Command="{Binding OkCommand}"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

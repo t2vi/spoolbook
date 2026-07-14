@@ -1,0 +1,52 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Spoolbook.Desktop.Features.Spools"
+        xmlns:conv="using:Avalonia.Data.Converters"
+        mc:Ignorable="d"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        x:Class="Spoolbook.Desktop.Features.Spools.SpoolEditWindow"
+        x:DataType="vm:SpoolEditViewModel"
+        Title="{Binding PageTitle}"
+        Width="480" SizeToContent="Height"
+        Background="#26292C"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+    <StackPanel Margin="16" Spacing="8">
+        <TextBlock Text="{Binding PageTitle}" FontSize="20" FontWeight="Bold" Margin="0,0,0,8"/>
+
+        <TextBlock Text="Filament"/>
+        <TextBlock Text="{Binding SelectedFilament}" IsVisible="{Binding IsEdit}" VerticalAlignment="Center"/>
+        <AutoCompleteBox ItemsSource="{Binding FilamentOptions}" SelectedItem="{Binding SelectedFilament}"
+                         FilterMode="Contains" MinimumPrefixLength="0" PlaceholderText="Type to search filaments…"
+                         IsVisible="{Binding !IsEdit}"/>
+
+        <TextBlock Text="Lot code"/>
+        <TextBox Text="{Binding LotCode}"/>
+
+        <TextBlock Text="Purchased"/>
+        <DatePicker SelectedDate="{Binding PurchasedAt}"/>
+
+        <TextBlock Text="Opened"/>
+        <DatePicker SelectedDate="{Binding OpenedAt}"/>
+
+        <TextBlock Text="Emptied"/>
+        <DatePicker SelectedDate="{Binding EmptiedAt}"/>
+
+        <TextBlock Text="Weight (grams)"/>
+        <TextBox Text="{Binding WeightGramsText}" PlaceholderText="e.g. 1000"/>
+
+        <TextBlock Text="Diameter (mm)"/>
+        <ComboBox ItemsSource="{Binding DiameterOptions}" SelectedItem="{Binding SelectedDiameterMm}" PlaceholderText="Unspecified"/>
+
+        <TextBlock Text="Notes"/>
+        <TextBox Text="{Binding Notes}" AcceptsReturn="True" Height="80" TextWrapping="Wrap"/>
+
+        <TextBlock Text="{Binding ErrorMessage}" Foreground="Red" IsVisible="{Binding ErrorMessage, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
+
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="Delete" Command="{Binding DeleteCommand}" IsVisible="{Binding IsEdit}"/>
+            <Button Content="Cancel" Command="{Binding CancelCommand}"/>
+            <Button Content="Save" Command="{Binding SaveCommand}"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

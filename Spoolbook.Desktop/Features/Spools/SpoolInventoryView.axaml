@@ -1,0 +1,93 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Spoolbook.Desktop.Features.Spools"
+             xmlns:models="using:Spoolbook.Desktop.Features.Spools"
+             xmlns:local="using:Spoolbook.Desktop.Converters"
+             xmlns:common="using:Spoolbook.Desktop.Common"
+             mc:Ignorable="d"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             x:Class="Spoolbook.Desktop.Features.Spools.SpoolInventoryView"
+             x:DataType="vm:SpoolInventoryViewModel">
+    <DockPanel Margin="16">
+        <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,0,0,12">
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <TextBlock Text="All spools" FontSize="20" FontWeight="Bold" VerticalAlignment="Center"/>
+                <Button Content="Add spool" Click="OnAddSpoolClick"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <StackPanel Width="160">
+                    <TextBlock Text="Brand"/>
+                    <AutoCompleteBox Text="{Binding BrandFilter}" ItemsSource="{Binding BrandOptions}" FilterMode="Contains" MinimumPrefixLength="0"/>
+                </StackPanel>
+                <StackPanel Width="140">
+                    <TextBlock Text="Material"/>
+                    <AutoCompleteBox Text="{Binding MaterialFilter}" ItemsSource="{Binding MaterialOptions}" FilterMode="Contains" MinimumPrefixLength="0"/>
+                </StackPanel>
+                <Button Content="Filter" Command="{Binding ApplyFiltersCommand}" VerticalAlignment="Bottom"/>
+            </StackPanel>
+        </StackPanel>
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,12,0,0">
+            <Button Content="Previous" Command="{Binding PreviousPageCommand}"/>
+            <TextBlock Text="{Binding Page}" VerticalAlignment="Center"/>
+            <TextBlock Text="/" VerticalAlignment="Center"/>
+            <TextBlock Text="{Binding TotalPages}" VerticalAlignment="Center"/>
+            <Button Content="Next" Command="{Binding NextPageCommand}"/>
+            <TextBlock Text="Per page" VerticalAlignment="Center" Margin="12,0,0,0"/>
+            <ComboBox ItemsSource="{x:Static common:PageSizes.Options}" SelectedItem="{Binding PageSize}"/>
+        </StackPanel>
+
+        <DataGrid ItemsSource="{Binding Spools}"
+                  AutoGenerateColumns="False"
+                  IsReadOnly="True"
+                  CanUserSortColumns="False"
+                  CanUserResizeColumns="True"
+                  GridLinesVisibility="None"
+                  HeadersVisibility="Column"
+                  Background="#1E2124"
+                  CornerRadius="4">
+            <DataGrid.Columns>
+                <DataGridTextColumn Binding="{Binding Filament.Brand}" Width="*">
+                    <DataGridTextColumn.Header>
+                        <Button Classes="tableHeader" Content="Filament" Command="{Binding SortByCommand}" CommandParameter="Filament"/>
+                    </DataGridTextColumn.Header>
+                </DataGridTextColumn>
+                <DataGridTemplateColumn Header="Color" Width="*">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate x:DataType="models:Spool">
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="8,0">
+                                <Border Width="14" Height="14" CornerRadius="3" BorderThickness="1"
+                                        BorderBrush="{Binding Filament.Color, Converter={x:Static local:ColorSwatchBorderConverter.Instance}}"
+                                        Background="{Binding Filament.Color, Converter={x:Static local:ColorSwatchConverter.Instance}}"/>
+                                <TextBlock Text="{Binding Filament.Color}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Lot code" Binding="{Binding LotCode}" Width="*"/>
+                <DataGridTextColumn Binding="{Binding PurchasedAt}" Width="*">
+                    <DataGridTextColumn.Header>
+                        <Button Classes="tableHeader" Content="Purchased" Command="{Binding SortByCommand}" CommandParameter="PurchasedAt"/>
+                    </DataGridTextColumn.Header>
+                </DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding OpenedAt}" Width="*">
+                    <DataGridTextColumn.Header>
+                        <Button Classes="tableHeader" Content="Opened" Command="{Binding SortByCommand}" CommandParameter="OpenedAt"/>
+                    </DataGridTextColumn.Header>
+                </DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding EmptiedAt}" Width="*">
+                    <DataGridTextColumn.Header>
+                        <Button Classes="tableHeader" Content="Emptied" Command="{Binding SortByCommand}" CommandParameter="EmptiedAt"/>
+                    </DataGridTextColumn.Header>
+                </DataGridTextColumn>
+                <DataGridTemplateColumn Width="Auto">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate x:DataType="models:Spool">
+                            <Button Content="Edit" Margin="4,0" Click="OnEditSpoolClick" Tag="{Binding}"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</UserControl>

@@ -1,0 +1,40 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Spoolbook.Desktop.Features.Settings.Colors"
+        xmlns:conv="using:Avalonia.Data.Converters"
+        xmlns:local="using:Spoolbook.Desktop.Converters"
+        mc:Ignorable="d"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        x:Class="Spoolbook.Desktop.Features.Settings.Colors.ColorEditWindow"
+        x:DataType="vm:ColorEditViewModel"
+        Title="{Binding PageTitle}"
+        Width="380" SizeToContent="Height"
+        Background="#26292C"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+    <StackPanel Margin="16" Spacing="8">
+        <TextBlock Text="{Binding PageTitle}" FontSize="18" FontWeight="Bold"/>
+        <StackPanel Orientation="Horizontal" Spacing="8">
+            <StackPanel Width="200">
+                <TextBlock Text="Name"/>
+                <TextBox Text="{Binding Name}"/>
+            </StackPanel>
+            <StackPanel Width="160">
+                <TextBlock Text="Hex"/>
+                <TextBox Text="{Binding Hex}"/>
+            </StackPanel>
+            <StackPanel Width="36">
+                <TextBlock Text=" "/>
+                <Border Width="32" Height="32" CornerRadius="4" BorderThickness="1"
+                        BorderBrush="{Binding Hex, Converter={x:Static local:HexToBorderBrushConverter.Instance}}"
+                        Background="{Binding Hex, Converter={x:Static local:HexToBrushConverter.Instance}}"/>
+            </StackPanel>
+        </StackPanel>
+        <TextBlock Text="Multi-color? Comma-separate hex codes, e.g. #1A1A1A, #D4AF37" FontSize="11" Opacity="0.6"/>
+        <TextBlock Text="{Binding ErrorMessage}" Foreground="Red" IsVisible="{Binding ErrorMessage, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="Cancel" Command="{Binding CancelCommand}"/>
+            <Button Content="Save" Command="{Binding SaveCommand}"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

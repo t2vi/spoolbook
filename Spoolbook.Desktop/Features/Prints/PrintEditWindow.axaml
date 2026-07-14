@@ -1,0 +1,68 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Spoolbook.Desktop.Features.Prints"
+        xmlns:models="using:Spoolbook.Desktop.Features.Profiles"
+        xmlns:conv="using:Avalonia.Data.Converters"
+        mc:Ignorable="d"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        x:Class="Spoolbook.Desktop.Features.Prints.PrintEditWindow"
+        x:DataType="vm:PrintEditViewModel"
+        Title="{Binding PageTitle}"
+        Width="480" SizeToContent="Height"
+        Background="#26292C"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+    <StackPanel Margin="16" Spacing="8">
+        <TextBlock Text="{Binding PageTitle}" FontSize="20" FontWeight="Bold" Margin="0,0,0,8"/>
+
+        <TextBlock Text="Spool"/>
+        <ComboBox ItemsSource="{Binding SpoolOptions}" SelectedItem="{Binding SelectedSpool}" HorizontalAlignment="Stretch"/>
+
+        <TextBlock Text="Profile"/>
+        <ComboBox ItemsSource="{Binding ProfileOptions}" SelectedItem="{Binding SelectedProfile}" HorizontalAlignment="Stretch">
+            <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="models:PrintProfile">
+                    <TextBlock Text="{Binding Name}"/>
+                </DataTemplate>
+            </ComboBox.ItemTemplate>
+        </ComboBox>
+
+        <TextBlock Text="Printer"/>
+        <TextBox Text="{Binding Printer}"/>
+
+        <TextBlock Text="Started"/>
+        <StackPanel Orientation="Horizontal" Spacing="8">
+            <DatePicker SelectedDate="{Binding StartedDate}"/>
+            <TimePicker SelectedTime="{Binding StartedTime}"/>
+        </StackPanel>
+
+        <TextBlock Text="Ended"/>
+        <StackPanel Orientation="Horizontal" Spacing="8">
+            <DatePicker SelectedDate="{Binding EndedDate}"/>
+            <TimePicker SelectedTime="{Binding EndedTime}"/>
+        </StackPanel>
+
+        <TextBlock Text="Result"/>
+        <ComboBox ItemsSource="{Binding StatusOptions}" SelectedItem="{Binding Status}" HorizontalAlignment="Stretch"/>
+
+        <TextBlock Text="AMS humidity (%)"/>
+        <TextBox Text="{Binding AmsHumidityText}" PlaceholderText="e.g. 15"/>
+
+        <TextBlock Text="Actual room temp (°C)"/>
+        <TextBox Text="{Binding ActualRoomTempText}" PlaceholderText="e.g. 19.5, from a thermometer"/>
+
+        <CheckBox Content="Clean build plate" IsThreeState="True" IsChecked="{Binding CleanBuildPlate}"/>
+
+        <TextBlock Text="Notes"/>
+        <TextBox Text="{Binding Notes}" AcceptsReturn="True" Height="80" TextWrapping="Wrap"
+                 PlaceholderText="What happened, and anything unusual (room conditions, etc.)"/>
+
+        <TextBlock Text="{Binding ErrorMessage}" Foreground="Red" IsVisible="{Binding ErrorMessage, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
+
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="Delete" Command="{Binding DeleteCommand}" IsVisible="{Binding IsEdit}"/>
+            <Button Content="Cancel" Command="{Binding CancelCommand}"/>
+            <Button Content="Save" Command="{Binding SaveCommand}"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

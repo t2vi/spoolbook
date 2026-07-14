@@ -1,0 +1,27 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Spoolbook.Desktop.Shell"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        x:Class="Spoolbook.Desktop.Shell.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="/Assets/spoolbook.ico"
+        Title="Spoolbook.Desktop"
+        Width="900" Height="600"
+        WindowState="Maximized"
+        Background="#26292C">
+
+    <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="12" Margin="16,12">
+            <TextBlock Text="spoolbook" FontWeight="Bold" FontSize="18" VerticalAlignment="Center" Margin="0,0,16,0"/>
+            <Button Content="🏠 Dashboard" Command="{Binding ShowDashboardCommand}"/>
+            <Button Content="🧵 Spools" Command="{Binding ShowSpoolsCommand}"/>
+            <Button Content="📋 Profiles" Command="{Binding ShowProfilesCommand}"/>
+            <Button Content="🖨️ Prints" Command="{Binding ShowPrintsCommand}"/>
+            <Button Content="⚙️ Settings" Command="{Binding ShowSettingsCommand}"/>
+        </StackPanel>
+        <ContentControl Content="{Binding CurrentPage}"/>
+    </DockPanel>
+
+</Window>

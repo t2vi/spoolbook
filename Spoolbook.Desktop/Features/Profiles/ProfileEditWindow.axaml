@@ -1,0 +1,131 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Spoolbook.Desktop.Features.Profiles"
+        xmlns:svc="using:Spoolbook.Desktop.Features.BambuImport"
+        xmlns:models="using:Spoolbook.Desktop.Features.Profiles"
+        xmlns:conv="using:Avalonia.Data.Converters"
+        mc:Ignorable="d"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        x:Class="Spoolbook.Desktop.Features.Profiles.ProfileEditWindow"
+        x:DataType="vm:ProfileEditViewModel"
+        x:Name="Root"
+        Title="{Binding PageTitle}"
+        Width="900" Height="700"
+        Background="#26292C"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True">
+    <DockPanel Margin="16">
+        <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,0,0,12">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="{Binding PageTitle}" FontSize="20" FontWeight="Bold"/>
+                <TextBlock Text="{Binding VersionNumber, StringFormat='v{0}'}" FontSize="20" Foreground="Gray"
+                           IsVisible="{Binding IsEdit}" VerticalAlignment="Center"/>
+                <TextBlock Text="●" FontSize="14" Foreground="#FF9500" VerticalAlignment="Center"
+                           ToolTip.Tip="Unsaved changes" IsVisible="{Binding IsDirty}"/>
+                <Button Content="Check for updates" Command="{Binding CheckForUpdatesCommand}" IsVisible="{Binding CanCheckForUpdates}"/>
+                <Button Content="Versions" Click="OnVersionsClick" IsVisible="{Binding HasMultipleVersions}"/>
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="Filament" VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding SelectedFilament}" IsVisible="{Binding IsEdit}" VerticalAlignment="Center"/>
+                <AutoCompleteBox Width="320" ItemsSource="{Binding FilamentOptions}" SelectedItem="{Binding SelectedFilament}"
+                                 FilterMode="Contains" MinimumPrefixLength="0" PlaceholderText="Type to search filaments…"
+                                 IsVisible="{Binding !IsEdit}"/>
+            </StackPanel>
+
+            <Expander IsExpanded="{Binding LinkSectionExpanded}">
+                <Expander.Header>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Link to preset file"/>
+                        <TextBlock Text="{Binding LinkedFileLabel}" FontStyle="Italic"
+                                   IsVisible="{Binding LinkedFileLabel, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
+                    </StackPanel>
+                </Expander.Header>
+                <StackPanel Spacing="8" Margin="0,8,0,0">
+                    <TextBlock Text="Link this profile to a Bambu Studio filament preset file — resolves the full inherits chain (user + system presets)."/>
+                    <TextBlock Text="Link one of your own saved presets (also resolves values inherited from its parent preset):"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <AutoCompleteBox Width="320" ItemsSource="{Binding UserPresets}" SelectedItem="{Binding SelectedUserPreset}"
+                                         FilterMode="Contains" MinimumPrefixLength="0" PlaceholderText="Type to search your presets…">
+                            <AutoCompleteBox.ItemTemplate>
+                                <DataTemplate x:DataType="svc:ImportedPreset">
+                                    <TextBlock Text="{Binding Name}"/>
+                                </DataTemplate>
+                            </AutoCompleteBox.ItemTemplate>
+                        </AutoCompleteBox>
+                        <Button Content="Link preset" Command="{Binding LinkToUserPresetCommand}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Choose preset file to link…" Click="OnChooseFileClick"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding LinkHint}"/>
+                </StackPanel>
+            </Expander>
+
+            <TextBlock Text="Scope: this filament (Generic profile — spool-scoping not yet ported)" FontStyle="Italic"/>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <StackPanel Width="240">
+                    <TextBlock Text="Name"/>
+                    <TextBox Text="{Binding Name}"/>
+                </StackPanel>
+            </StackPanel>
+
+            <TextBlock Text="{Binding ErrorMessage}" Foreground="Red" IsVisible="{Binding ErrorMessage, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Save" Click="OnSaveClick"/>
+                <Button Content="Save as new version" Click="OnSaveAsNewVersionClick"/>
+                <Button Content="Duplicate" Command="{Binding DuplicateCommand}" IsVisible="{Binding IsEdit}"/>
+                <Button Content="Delete" Command="{Binding DeleteCommand}" IsVisible="{Binding IsEdit}"/>
+                <Button Content="Cancel" Command="{Binding CancelCommand}"/>
+            </StackPanel>
+        </StackPanel>
+
+        <TabControl ItemsSource="{Binding FieldTabs}">
+            <TabControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ProfileFieldTab">
+                    <TextBlock Text="{Binding Title}"/>
+                </DataTemplate>
+            </TabControl.ItemTemplate>
+            <TabControl.ContentTemplate>
+                <DataTemplate x:DataType="vm:ProfileFieldTab">
+                    <ScrollViewer>
+                        <ItemsControl ItemsSource="{Binding Sections}" Margin="8">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ProfileFieldGroup">
+                                    <StackPanel Margin="0,0,0,16">
+                                        <Grid ColumnDefinitions="Auto,*" Margin="0,0,0,8">
+                                            <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="Bold"/>
+                                            <Border Grid.Column="1" Height="1" Background="Gray" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                        </Grid>
+                                        <ItemsControl ItemsSource="{Binding Fields}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:ProfileFieldEntry">
+                                                    <Grid ColumnDefinitions="240,*" Margin="0,4">
+                                                        <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center"/>
+                                                        <CheckBox Grid.Column="1" IsVisible="{Binding IsBool}" IsChecked="{Binding BoolValue}"/>
+                                                        <TextBox Grid.Column="1" IsVisible="{Binding !IsBool}" Text="{Binding Value}"/>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <Grid ColumnDefinitions="240,*" Margin="0,4" IsVisible="{Binding IsPrintTemperatureSection}">
+                                            <TextBlock Grid.Column="0" Text="Nozzle — Initial layer (°C)" VerticalAlignment="Center"/>
+                                            <TextBox Grid.Column="1" Text="{Binding #Root.DataContext.NozzleTempInitialC}"/>
+                                        </Grid>
+                                        <Grid ColumnDefinitions="240,*" Margin="0,4" IsVisible="{Binding IsPrintTemperatureSection}">
+                                            <TextBlock Grid.Column="0" Text="Nozzle — Other layers (°C)" VerticalAlignment="Center"/>
+                                            <TextBox Grid.Column="1" Text="{Binding #Root.DataContext.NozzleTempC}"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DataTemplate>
+            </TabControl.ContentTemplate>
+        </TabControl>
+    </DockPanel>
+</Window>

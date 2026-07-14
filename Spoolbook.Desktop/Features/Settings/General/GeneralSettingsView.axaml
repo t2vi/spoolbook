@@ -1,0 +1,49 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Spoolbook.Desktop.Features.Settings.General"
+             mc:Ignorable="d"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             x:Class="Spoolbook.Desktop.Features.Settings.General.GeneralSettingsView"
+             x:DataType="vm:GeneralSettingsViewModel">
+    <StackPanel Spacing="16" Margin="0,12,0,0" MaxWidth="600" HorizontalAlignment="Left">
+        <TextBlock Text="Bambu Studio import paths" FontWeight="Bold"/>
+        <TextBlock Text="Auto-detected by default. Override only if Bambu Studio is installed somewhere non-standard." FontStyle="Italic" TextWrapping="Wrap"/>
+
+        <StackPanel Spacing="4">
+            <TextBlock Text="User filament presets folder"/>
+            <TextBlock Text="{Binding DetectedBambuUserPresetsDir, StringFormat='Detected: {0}', TargetNullValue='Detected: (none found)'}" Opacity="0.7" FontSize="12"/>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBox Text="{Binding BambuUserPresetsDir}" PlaceholderText="Leave blank to use detected path" Width="420"/>
+                <Button Content="Browse…" Click="OnBrowseUserPresetsDirClick"/>
+            </StackPanel>
+        </StackPanel>
+
+        <StackPanel Spacing="4">
+            <TextBlock Text="System profiles folder"/>
+            <TextBlock Text="{Binding DetectedBambuSystemProfilesDir, StringFormat='Detected: {0}', TargetNullValue='Detected: (none found)'}" Opacity="0.7" FontSize="12"/>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBox Text="{Binding BambuSystemProfilesDir}" PlaceholderText="Leave blank to use detected path" Width="420"/>
+                <Button Content="Browse…" Click="OnBrowseSystemProfilesDirClick"/>
+            </StackPanel>
+        </StackPanel>
+
+        <TextBlock Text="Filament DB" FontWeight="Bold" Margin="0,16,0,0"/>
+        <StackPanel Spacing="4">
+            <TextBlock Text="{Binding FilamentDbVersion, StringFormat='Filament DB version: {0}'}"/>
+            <TextBlock Text="{Binding FilamentDbSource, StringFormat='Default source: {0}'}" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <StackPanel Spacing="4">
+            <TextBlock Text="Additional sources"/>
+            <TextBlock Text="One URL per line. Each must serve the same JSON shape as the default source (a list of Brand/Material/Variant/Color entries) — merged in on every sync." FontStyle="Italic" TextWrapping="Wrap"/>
+            <TextBox Text="{Binding AdditionalFilamentSourceUrls}" AcceptsReturn="True" Height="80" Width="420" HorizontalAlignment="Left"/>
+        </StackPanel>
+
+        <Button Content="Save" Command="{Binding SaveCommand}"/>
+
+        <TextBlock Text="About" FontWeight="Bold" Margin="0,16,0,0"/>
+        <StackPanel Spacing="4">
+            <TextBlock Text="{Binding AppVersion, StringFormat='App version: {0}'}"/>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

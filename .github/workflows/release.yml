@@ -1,0 +1,38 @@
+name: Release builds
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rid: [win-x64, osx-x64, osx-arm64, linux-x64]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Publish
+        run: |
+          dotnet publish Spoolbook.Desktop/Spoolbook.Desktop.csproj \
+            -c Release -r ${{ matrix.rid }} --self-contained true \
+            -p:PublishSingleFile=true \
+            -o out/${{ matrix.rid }}
+
+      - name: Zip
+        run: |
+          cd out/${{ matrix.rid }}
+          zip -r ../../Spoolbook-${{ matrix.rid }}.zip .
+
+      - name: Upload to release
+        run: gh release upload "${{ github.event.release.tag_name }}" "Spoolbook-${{ matrix.rid }}.zip"
+        env:
+          GH_TOKEN: ${{ github.token }}

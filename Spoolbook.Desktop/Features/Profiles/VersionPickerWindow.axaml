@@ -1,0 +1,54 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Spoolbook.Desktop.Features.Profiles"
+        xmlns:models="using:Spoolbook.Desktop.Features.Profiles"
+        mc:Ignorable="d"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        x:Class="Spoolbook.Desktop.Features.Profiles.VersionPickerWindow"
+        x:DataType="vm:VersionPickerViewModel"
+        Title="Profile versions"
+        Width="680" Height="420"
+        Background="#26292C"
+        WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="16">
+        <TextBlock DockPanel.Dock="Top" Text="Pick a version" FontSize="18" FontWeight="Bold" Margin="0,0,0,12"/>
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,12,0,0" HorizontalAlignment="Right">
+            <Button Content="Cancel" Command="{Binding CancelCommand}"/>
+        </StackPanel>
+
+        <ScrollViewer>
+            <Border Background="#1E2124" CornerRadius="4" Padding="8">
+                <StackPanel>
+                    <Grid ColumnDefinitions="50,*,80,60,90,60,Auto" Margin="4">
+                        <TextBlock Grid.Column="0" Text="Version" FontWeight="Bold"/>
+                        <TextBlock Grid.Column="1" Text="Version name" FontWeight="Bold"/>
+                        <TextBlock Grid.Column="2" Text=" " FontWeight="Bold"/>
+                        <TextBlock Grid.Column="3" Text="Nozzle" FontWeight="Bold"/>
+                        <TextBlock Grid.Column="4" Text="Created" FontWeight="Bold"/>
+                        <TextBlock Grid.Column="5" Text="Current" FontWeight="Bold"/>
+                    </Grid>
+
+                    <ItemsControl ItemsSource="{Binding Versions}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:PrintProfile">
+                                <Grid ColumnDefinitions="50,*,80,60,90,60,Auto" Margin="4,2">
+                                    <TextBlock Grid.Column="0" Text="{Binding VersionNumber, StringFormat='v{0}'}" VerticalAlignment="Center"/>
+                                    <TextBox Grid.Column="1" Text="{Binding VersionName}" PlaceholderText="Unnamed"/>
+                                    <Button Grid.Column="2" Content="Rename"
+                                            Command="{Binding $parent[ItemsControl].((vm:VersionPickerViewModel)DataContext).RenameCommand}"
+                                            CommandParameter="{Binding}"/>
+                                    <TextBlock Grid.Column="3" Text="{Binding NozzleTempC}" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="4" Text="{Binding CreatedAt, StringFormat=d}" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="5" Text="{Binding IsCurrentVersion}" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="6" Content="Load"
+                                            Command="{Binding $parent[ItemsControl].((vm:VersionPickerViewModel)DataContext).SelectCommand}"
+                                            CommandParameter="{Binding}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

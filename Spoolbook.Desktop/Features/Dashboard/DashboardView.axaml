@@ -1,0 +1,98 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Spoolbook.Desktop.Features.Dashboard"
+             xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
+             mc:Ignorable="d"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             x:Class="Spoolbook.Desktop.Features.Dashboard.DashboardView"
+             x:DataType="vm:DashboardViewModel">
+    <UserControl.Styles>
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="#1E2126"/>
+            <Setter Property="CornerRadius" Value="16"/>
+            <Setter Property="Padding" Value="20"/>
+        </Style>
+        <Style Selector="TextBlock.cardLabel">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Opacity" Value="0.7"/>
+        </Style>
+        <Style Selector="TextBlock.cardValue">
+            <Setter Property="FontSize" Value="26"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <Style Selector="TextBlock.cardTitle">
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+        </Style>
+        <Style Selector="Button.statCard">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer>
+        <StackPanel Margin="24" Spacing="20">
+            <TextBlock Text="Dashboard" FontSize="24" FontWeight="Bold"/>
+
+            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="20">
+                <Border Grid.Column="0" Classes="card">
+                    <Button Classes="statCard" Command="{Binding ShowSpoolsCommand}">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Spools" Classes="cardLabel"/>
+                            <TextBlock Text="{Binding SpoolCount}" Classes="cardValue"/>
+                        </StackPanel>
+                    </Button>
+                </Border>
+                <Border Grid.Column="1" Classes="card">
+                    <Button Classes="statCard" Command="{Binding ShowProfilesCommand}">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Print Profiles" Classes="cardLabel"/>
+                            <TextBlock Text="{Binding ProfileCount}" Classes="cardValue"/>
+                        </StackPanel>
+                    </Button>
+                </Border>
+                <Border Grid.Column="2" Classes="card">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Filaments" Classes="cardLabel"/>
+                        <TextBlock Text="{Binding FilamentCount}" Classes="cardValue"/>
+                        <TextBlock Text="{Binding LastFilamentSyncText}" FontSize="11" Opacity="0.6"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <Grid ColumnDefinitions="2*,1*" ColumnSpacing="20">
+                <Border Grid.Column="0" Classes="card">
+                    <StackPanel>
+                        <TextBlock Text="Filaments by brand" Classes="cardTitle"/>
+                        <lvc:CartesianChart Series="{Binding FilamentsByBrandSeries}" LegendPosition="Hidden" FindingStrategy="CompareAll" Height="260"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="1" Classes="card">
+                    <StackPanel>
+                        <TextBlock Text="Filaments by material" Classes="cardTitle"/>
+                        <lvc:CartesianChart Series="{Binding FilamentsByMaterialSeries}" LegendPosition="Hidden" FindingStrategy="CompareAll" Height="260"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="20">
+                <Border Grid.Column="0" Classes="card">
+                    <StackPanel>
+                        <TextBlock Text="Spools by status" Classes="cardTitle"/>
+                        <lvc:PieChart Series="{Binding SpoolsByStatusSeries}" LegendPosition="Hidden" Height="240"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="1" Classes="card">
+                    <StackPanel>
+                        <TextBlock Text="Prints by result" Classes="cardTitle"/>
+                        <lvc:PieChart Series="{Binding PrintsByStatusSeries}" LegendPosition="Hidden" Height="240"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

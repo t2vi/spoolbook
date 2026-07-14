@@ -1,0 +1,33 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Spoolbook.Desktop.App"
+             xmlns:local="using:Spoolbook.Desktop"
+             RequestedThemeVariant="Dark">
+
+    <Application.DataTemplates>
+        <local:ViewLocator/>
+    </Application.DataTemplates>
+
+    <Application.Resources>
+        <!-- Bambu Studio brand green, overriding FluentTheme's accent so buttons/borders/checkboxes match -->
+        <Color x:Key="SystemAccentColor">#00AE42</Color>
+        <Color x:Key="SystemAccentColorLight1">#33C266</Color>
+        <Color x:Key="SystemAccentColorLight2">#66D68F</Color>
+        <Color x:Key="SystemAccentColorLight3">#99E9B8</Color>
+        <Color x:Key="SystemAccentColorDark1">#009639</Color>
+        <Color x:Key="SystemAccentColorDark2">#007D30</Color>
+        <Color x:Key="SystemAccentColorDark3">#006427</Color>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+        <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml"/>
+        <Style Selector="Button.tableHeader">
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="0,4"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+    </Application.Styles>
+</Application>
