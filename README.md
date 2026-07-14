@@ -1,3 +1,6 @@
+[![Release builds](https://github.com/t2vi/spoolbook/actions/workflows/release.yml/badge.svg)](https://github.com/t2vi/spoolbook/actions/workflows/release.yml)
+[![Tests](https://github.com/t2vi/spoolbook/actions/workflows/tests.yml/badge.svg)](https://github.com/t2vi/spoolbook/actions/workflows/tests.yml)
+
 # spoolbook
 
 Personal FDM 3D-printing notebook. Tracks filaments, spools, print profiles, and individual
