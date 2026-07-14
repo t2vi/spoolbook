@@ -1,5 +1,6 @@
 using Spoolbook.Desktop.Data;
 using Spoolbook.Desktop.Features.Settings.Filaments;
+using Spoolbook.Desktop.Features.Settings.Printers;
 using Spoolbook.Desktop.Features.Spools;
 using Spoolbook.Desktop.Features.Profiles;
 using Spoolbook.Desktop.Features.Prints;
@@ -15,7 +16,7 @@ public class FakeWeatherService : IWeatherService
 
 public class PrintServiceTests
 {
-    private static async Task<(int ProfileId, int SpoolId)> SeedAsync(SpoolbookDbContext db)
+    private static async Task<(int ProfileId, int SpoolId, int PrinterId)> SeedAsync(SpoolbookDbContext db)
     {
         var filamentService = new FilamentService(db);
         var filament = await filamentService.CreateAsync(new FilamentInput { Brand = "Bambu Lab", Material = "PLA", Color = "Black" });
@@ -23,19 +24,20 @@ public class PrintServiceTests
         var spool = await spoolService.CreateSpoolAsync(filament.Entry!.Id, new SpoolInput());
         var profileService = new PrintProfileService(db);
         var profile = await profileService.CreateProfileAsync(filament.Entry.Id, new ProfileInput { Name = "Standard", NozzleTempC = "230" });
-        return (profile.Profile!.Id, spool.Spool!.Id);
+        var printerService = new PrinterService(db);
+        var printer = await printerService.CreateAsync(new PrinterInput { Name = "Bambu Lab P2S" });
+        return (profile.Profile!.Id, spool.Spool!.Id, printer.Printer!.Id);
     }
 
     [Fact]
     public async Task CreateAsync_StoresPrintReferencingProfileAndSpool()
     {
         using var db = TestDbFactory.Create();
-        var (profileId, spoolId) = await SeedAsync(db);
+        var (profileId, spoolId, printerId) = await SeedAsync(db);
         var service = new PrintService(db, new FakeWeatherService());
 
-        var result = await service.CreateAsync(profileId, spoolId, new PrintInput
+        var result = await service.CreateAsync(profileId, spoolId, printerId, new PrintInput
         {
-            Printer = "Bambu Lab P2S",
             StartedAt = new DateTime(2026, 1, 1, 8, 0, 0),
             EndedAt = new DateTime(2026, 1, 1, 10, 0, 0),
             Status = PrintStatus.Success
@@ -44,7 +46,7 @@ public class PrintServiceTests
         Assert.True(result.Ok);
         Assert.Equal(profileId, result.Print!.ProfileId);
         Assert.Equal(spoolId, result.Print.SpoolId);
-        Assert.Equal("Bambu Lab P2S", result.Print.Printer);
+        Assert.Equal(printerId, result.Print.PrinterId);
         Assert.Equal(PrintStatus.Success, result.Print.Status);
     }
 
@@ -52,13 +54,12 @@ public class PrintServiceTests
     public async Task CreateAsync_FetchesAmbientWeatherAndSetsSource()
     {
         using var db = TestDbFactory.Create();
-        var (profileId, spoolId) = await SeedAsync(db);
+        var (profileId, spoolId, printerId) = await SeedAsync(db);
         var weather = new FakeWeatherService { Result = (18.4m, 55m) };
         var service = new PrintService(db, weather);
 
-        var result = await service.CreateAsync(profileId, spoolId, new PrintInput
+        var result = await service.CreateAsync(profileId, spoolId, printerId, new PrintInput
         {
-            Printer = "Bambu Lab P2S",
             StartedAt = new DateTime(2026, 1, 1, 8, 0, 0),
             EndedAt = new DateTime(2026, 1, 1, 10, 0, 0),
             Status = PrintStatus.Success
@@ -73,13 +74,12 @@ public class PrintServiceTests
     public async Task CreateAsync_WeatherFetchFails_LeavesAmbientNull()
     {
         using var db = TestDbFactory.Create();
-        var (profileId, spoolId) = await SeedAsync(db);
+        var (profileId, spoolId, printerId) = await SeedAsync(db);
         var weather = new FakeWeatherService { Result = (null, null) };
         var service = new PrintService(db, weather);
 
-        var result = await service.CreateAsync(profileId, spoolId, new PrintInput
+        var result = await service.CreateAsync(profileId, spoolId, printerId, new PrintInput
         {
-            Printer = "Bambu Lab P2S",
             StartedAt = new DateTime(2026, 1, 1, 8, 0, 0),
             EndedAt = new DateTime(2026, 1, 1, 10, 0, 0),
             Status = PrintStatus.Success
@@ -94,12 +94,11 @@ public class PrintServiceTests
     public async Task CreateAsync_StoresAmsHumidityAndNotes()
     {
         using var db = TestDbFactory.Create();
-        var (profileId, spoolId) = await SeedAsync(db);
+        var (profileId, spoolId, printerId) = await SeedAsync(db);
         var service = new PrintService(db, new FakeWeatherService());
 
-        var result = await service.CreateAsync(profileId, spoolId, new PrintInput
+        var result = await service.CreateAsync(profileId, spoolId, printerId, new PrintInput
         {
-            Printer = "Bambu Lab P2S",
             StartedAt = new DateTime(2026, 1, 1, 8, 0, 0),
             EndedAt = new DateTime(2026, 1, 1, 10, 0, 0),
             Status = PrintStatus.Partial,
@@ -120,15 +119,15 @@ public class PrintServiceTests
     public async Task ListAsync_ReturnsPrintsNewestFirst()
     {
         using var db = TestDbFactory.Create();
-        var (profileId, spoolId) = await SeedAsync(db);
+        var (profileId, spoolId, printerId) = await SeedAsync(db);
         var service = new PrintService(db, new FakeWeatherService());
-        await service.CreateAsync(profileId, spoolId, new PrintInput
+        await service.CreateAsync(profileId, spoolId, printerId, new PrintInput
         {
-            Printer = "Bambu Lab P2S", StartedAt = new DateTime(2026, 1, 1, 8, 0, 0), EndedAt = new DateTime(2026, 1, 1, 10, 0, 0), Status = PrintStatus.Success
+            StartedAt = new DateTime(2026, 1, 1, 8, 0, 0), EndedAt = new DateTime(2026, 1, 1, 10, 0, 0), Status = PrintStatus.Success
         });
-        await service.CreateAsync(profileId, spoolId, new PrintInput
+        await service.CreateAsync(profileId, spoolId, printerId, new PrintInput
         {
-            Printer = "Bambu Lab P2S", StartedAt = new DateTime(2026, 1, 2, 8, 0, 0), EndedAt = new DateTime(2026, 1, 2, 10, 0, 0), Status = PrintStatus.Failed
+            StartedAt = new DateTime(2026, 1, 2, 8, 0, 0), EndedAt = new DateTime(2026, 1, 2, 10, 0, 0), Status = PrintStatus.Failed
         });
 
         var prints = await service.ListAsync();
@@ -141,11 +140,11 @@ public class PrintServiceTests
     public async Task GetAsync_IncludesProfileAndSpoolWithFilament()
     {
         using var db = TestDbFactory.Create();
-        var (profileId, spoolId) = await SeedAsync(db);
+        var (profileId, spoolId, printerId) = await SeedAsync(db);
         var service = new PrintService(db, new FakeWeatherService());
-        var created = await service.CreateAsync(profileId, spoolId, new PrintInput
+        var created = await service.CreateAsync(profileId, spoolId, printerId, new PrintInput
         {
-            Printer = "Bambu Lab P2S", StartedAt = new DateTime(2026, 1, 1, 8, 0, 0), EndedAt = new DateTime(2026, 1, 1, 10, 0, 0), Status = PrintStatus.Success
+            StartedAt = new DateTime(2026, 1, 1, 8, 0, 0), EndedAt = new DateTime(2026, 1, 1, 10, 0, 0), Status = PrintStatus.Success
         });
 
         var loaded = await service.GetAsync(created.Print!.Id);
@@ -153,17 +152,18 @@ public class PrintServiceTests
         Assert.NotNull(loaded!.Profile);
         Assert.NotNull(loaded.Spool);
         Assert.NotNull(loaded.Spool!.Filament);
+        Assert.NotNull(loaded.Printer);
     }
 
     [Fact]
     public async Task DeleteAsync_RemovesPrint()
     {
         using var db = TestDbFactory.Create();
-        var (profileId, spoolId) = await SeedAsync(db);
+        var (profileId, spoolId, printerId) = await SeedAsync(db);
         var service = new PrintService(db, new FakeWeatherService());
-        var created = await service.CreateAsync(profileId, spoolId, new PrintInput
+        var created = await service.CreateAsync(profileId, spoolId, printerId, new PrintInput
         {
-            Printer = "Bambu Lab P2S", StartedAt = new DateTime(2026, 1, 1, 8, 0, 0), EndedAt = new DateTime(2026, 1, 1, 10, 0, 0), Status = PrintStatus.Success
+            StartedAt = new DateTime(2026, 1, 1, 8, 0, 0), EndedAt = new DateTime(2026, 1, 1, 10, 0, 0), Status = PrintStatus.Success
         });
 
         var result = await service.DeleteAsync(created.Print!.Id);

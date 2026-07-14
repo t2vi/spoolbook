@@ -1,5 +1,6 @@
 using Spoolbook.Desktop.Data;
 using Spoolbook.Desktop.Features.Settings.Filaments;
+using Spoolbook.Desktop.Features.Settings.Printers;
 using Spoolbook.Desktop.Features.Spools;
 using Spoolbook.Desktop.Features.Profiles;
 using Spoolbook.Desktop.Features.Prints;
@@ -344,11 +345,12 @@ public class PrintProfileServiceTests
     {
         var spoolService = new SpoolService(db);
         var spool = await spoolService.CreateSpoolAsync(filamentId, new SpoolInput());
+        var printer = await new PrinterService(db).CreateAsync(new PrinterInput { Name = "Bambu Lab P2S" });
         db.Prints.Add(new Print
         {
             ProfileId = profileId,
             SpoolId = spool.Spool!.Id,
-            Printer = "Bambu Lab P2S",
+            PrinterId = printer.Printer!.Id,
             StartedAt = new DateTime(2026, 1, 1, 8, 0, 0, DateTimeKind.Utc),
             EndedAt = new DateTime(2026, 1, 1, 10, 0, 0, DateTimeKind.Utc),
             Status = PrintStatus.Success

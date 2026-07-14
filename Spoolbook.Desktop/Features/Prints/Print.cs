@@ -1,5 +1,6 @@
 using Spoolbook.Desktop.Features.Profiles;
 using Spoolbook.Desktop.Features.Spools;
+using Spoolbook.Desktop.Features.Settings.Printers;
 namespace Spoolbook.Desktop.Features.Prints;
 
 public enum PrintStatus { Success, Failed, Partial }
@@ -12,7 +13,8 @@ public class Print
     public PrintProfile? Profile { get; set; }
     public int SpoolId { get; set; }
     public Spool? Spool { get; set; }
-    public required string Printer { get; set; }
+    public int PrinterId { get; set; }
+    public Printer? Printer { get; set; }
     public DateTime StartedAt { get; set; }
     public DateTime EndedAt { get; set; }
     public PrintStatus Status { get; set; }

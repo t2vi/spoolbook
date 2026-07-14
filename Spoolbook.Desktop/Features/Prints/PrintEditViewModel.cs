@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using Spoolbook.Desktop.Common;
 using Spoolbook.Desktop.Features.Profiles;
 using Spoolbook.Desktop.Features.Spools;
+using Spoolbook.Desktop.Features.Settings.Printers;
 namespace Spoolbook.Desktop.Features.Prints;
 
 public partial class PrintEditViewModel : ViewModelBase
@@ -12,6 +13,7 @@ public partial class PrintEditViewModel : ViewModelBase
     private readonly PrintService _printService;
     private readonly SpoolService _spoolService;
     private readonly PrintProfileService _profileService;
+    private readonly PrinterService _printerService;
     private readonly int? _id;
 
     [ObservableProperty]
@@ -27,7 +29,10 @@ public partial class PrintEditViewModel : ViewModelBase
     private PrintProfile? selectedProfile;
 
     [ObservableProperty]
-    private string printer = "Bambu Lab P2S";
+    private ObservableCollection<Printer> printerOptions = new();
+
+    [ObservableProperty]
+    private Printer? selectedPrinter;
 
     [ObservableProperty]
     private DateTimeOffset? startedDate;
@@ -65,18 +70,18 @@ public partial class PrintEditViewModel : ViewModelBase
     public string PageTitle => IsEdit ? "Edit print" : "Add print";
     public Action? Close { get; set; }
 
-    public PrintEditViewModel(PrintService printService, SpoolService spoolService, PrintProfileService profileService, Print? existing)
+    public PrintEditViewModel(PrintService printService, SpoolService spoolService, PrintProfileService profileService, PrinterService printerService, Print? existing)
     {
         _printService = printService;
         _spoolService = spoolService;
         _profileService = profileService;
+        _printerService = printerService;
 
         if (existing is not null)
         {
             _id = existing.Id;
             IsEdit = true;
             SelectedSpool = existing.Spool;
-            Printer = existing.Printer;
             StartedDate = new DateTimeOffset(existing.StartedAt.Date, TimeSpan.Zero);
             StartedTime = existing.StartedAt.TimeOfDay;
             EndedDate = new DateTimeOffset(existing.EndedAt.Date, TimeSpan.Zero);
@@ -89,6 +94,7 @@ public partial class PrintEditViewModel : ViewModelBase
         }
 
         _ = LoadSpoolOptionsAsync(existing?.Profile);
+        _ = LoadPrinterOptionsAsync(existing?.Printer);
     }
 
     private async Task LoadSpoolOptionsAsync(PrintProfile? existingProfile)
@@ -96,6 +102,14 @@ public partial class PrintEditViewModel : ViewModelBase
         SpoolOptions = new ObservableCollection<Spool>(await _spoolService.ListAllAsync());
         if (SelectedSpool is not null)
             await LoadProfileOptionsAsync(SelectedSpool.FilamentId, existingProfile);
+    }
+
+    private async Task LoadPrinterOptionsAsync(Printer? preselect)
+    {
+        PrinterOptions = new ObservableCollection<Printer>(await _printerService.ListAsync());
+        SelectedPrinter = preselect is not null
+            ? PrinterOptions.FirstOrDefault(p => p.Id == preselect.Id) ?? preselect
+            : PrinterOptions.FirstOrDefault();
     }
 
     partial void OnSelectedSpoolChanged(Spool? value)
@@ -122,6 +136,11 @@ public partial class PrintEditViewModel : ViewModelBase
         if (SelectedProfile is null)
         {
             ErrorMessage = "Pick a profile.";
+            return;
+        }
+        if (SelectedPrinter is null)
+        {
+            ErrorMessage = "Pick a printer.";
             return;
         }
         if (StartedDate is null || StartedTime is null || EndedDate is null || EndedTime is null)
@@ -154,7 +173,6 @@ public partial class PrintEditViewModel : ViewModelBase
 
         var input = new PrintInput
         {
-            Printer = Printer,
             StartedAt = StartedDate.Value.Date + StartedTime.Value,
             EndedAt = EndedDate.Value.Date + EndedTime.Value,
             Status = Status,
@@ -165,8 +183,8 @@ public partial class PrintEditViewModel : ViewModelBase
         };
 
         var result = _id.HasValue
-            ? await _printService.UpdateAsync(_id.Value, input)
-            : await _printService.CreateAsync(SelectedProfile.Id, SelectedSpool.Id, input);
+            ? await _printService.UpdateAsync(_id.Value, SelectedPrinter.Id, input)
+            : await _printService.CreateAsync(SelectedProfile.Id, SelectedSpool.Id, SelectedPrinter.Id, input);
 
         if (!result.Ok)
         {

@@ -43,6 +43,7 @@ public class PrintInventoryService
         var baseQuery = _db.Prints
             .Include(p => p.Profile)
             .Include(p => p.Spool).ThenInclude(s => s!.Filament)
+            .Include(p => p.Printer)
             .AsQueryable();
 
         if (!string.IsNullOrEmpty(query.Brand))
@@ -78,8 +79,8 @@ public class PrintInventoryService
                 ? query.OrderByDescending(p => p.Status)
                 : query.OrderBy(p => p.Status),
             PrintSortColumn.Printer => order == SortOrder.Desc
-                ? query.OrderByDescending(p => p.Printer)
-                : query.OrderBy(p => p.Printer),
+                ? query.OrderByDescending(p => p.Printer!.Name)
+                : query.OrderBy(p => p.Printer!.Name),
             _ => order == SortOrder.Desc
                 ? query.OrderByDescending(p => p.StartedAt)
                 : query.OrderBy(p => p.StartedAt)

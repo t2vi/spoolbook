@@ -5,6 +5,7 @@ using Spoolbook.Desktop.Features.Prints;
 using Spoolbook.Desktop.Features.Settings.General;
 using Spoolbook.Desktop.Features.Settings.Colors;
 using Spoolbook.Desktop.Features.Settings.Filaments;
+using Spoolbook.Desktop.Features.Settings.Printers;
 namespace Spoolbook.Desktop.Data;
 
 public class SpoolbookDbContext : DbContext
@@ -15,12 +16,14 @@ public class SpoolbookDbContext : DbContext
     public DbSet<PrintProfile> PrintProfiles => Set<PrintProfile>();
     public DbSet<Print> Prints => Set<Print>();
     public DbSet<AppSettings> AppSettings => Set<AppSettings>();
+    public DbSet<Printer> Printers => Set<Printer>();
 
     public SpoolbookDbContext(DbContextOptions<SpoolbookDbContext> options) : base(options) { }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<FilamentColor>().HasIndex(c => c.Name).IsUnique();
+        modelBuilder.Entity<Printer>().HasIndex(p => p.Name).IsUnique();
 
         modelBuilder.Entity<FilamentColor>().HasData(KnownColors.Select((c, i) => new FilamentColor { Id = i + 1, Name = c.Name, Hex = c.Hex }));
         modelBuilder.Entity<Filament>().HasData(FilamentCatalog.Select((f, i) =>
@@ -54,6 +57,12 @@ public class SpoolbookDbContext : DbContext
             .HasOne(p => p.Spool)
             .WithMany()
             .HasForeignKey(p => p.SpoolId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Print>()
+            .HasOne(p => p.Printer)
+            .WithMany()
+            .HasForeignKey(p => p.PrinterId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 

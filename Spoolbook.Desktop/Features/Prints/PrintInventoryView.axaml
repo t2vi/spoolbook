@@ -57,7 +57,7 @@
                 </DataGridTextColumn>
                 <DataGridTextColumn Header="Spool" Binding="{Binding Spool}" Width="*"/>
                 <DataGridTextColumn Header="Profile" Binding="{Binding Profile.Name}" Width="*"/>
-                <DataGridTextColumn Binding="{Binding Printer}" Width="*">
+                <DataGridTextColumn Binding="{Binding Printer.Name}" Width="*">
                     <DataGridTextColumn.Header>
                         <Button Classes="tableHeader" Content="Printer" Command="{Binding SortByCommand}" CommandParameter="Printer"/>
                     </DataGridTextColumn.Header>

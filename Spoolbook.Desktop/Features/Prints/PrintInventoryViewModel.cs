@@ -6,6 +6,7 @@ using Spoolbook.Desktop.Common;
 using Spoolbook.Desktop.Features.Profiles;
 using Spoolbook.Desktop.Features.Spools;
 using Spoolbook.Desktop.Features.Settings.Filaments;
+using Spoolbook.Desktop.Features.Settings.Printers;
 namespace Spoolbook.Desktop.Features.Prints;
 
 public partial class PrintInventoryViewModel : ViewModelBase
@@ -15,6 +16,7 @@ public partial class PrintInventoryViewModel : ViewModelBase
     private readonly SpoolService _spoolService;
     private readonly PrintProfileService _profileService;
     private readonly FilamentService _filamentService;
+    private readonly PrinterService _printerService;
 
     [ObservableProperty]
     private string? brandFilter;
@@ -53,13 +55,15 @@ public partial class PrintInventoryViewModel : ViewModelBase
         PrintService printService,
         SpoolService spoolService,
         PrintProfileService profileService,
-        FilamentService filamentService)
+        FilamentService filamentService,
+        PrinterService printerService)
     {
         _inventoryService = inventoryService;
         _printService = printService;
         _spoolService = spoolService;
         _profileService = profileService;
         _filamentService = filamentService;
+        _printerService = printerService;
         _ = ReloadAsync();
     }
 
@@ -122,5 +126,5 @@ public partial class PrintInventoryViewModel : ViewModelBase
     }
 
     public PrintEditViewModel CreateEditViewModel(Print? existing) =>
-        new(_printService, _spoolService, _profileService, existing);
+        new(_printService, _spoolService, _profileService, _printerService, existing);
 }

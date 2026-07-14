@@ -1,4 +1,5 @@
 using Spoolbook.Desktop.Features.Settings.Filaments;
+using Spoolbook.Desktop.Features.Settings.Printers;
 using Spoolbook.Desktop.Features.Spools;
 using Spoolbook.Desktop.Features.Profiles;
 using Spoolbook.Desktop.Features.Prints;
@@ -138,11 +139,12 @@ public class SpoolServiceTests
         var spool = await service.CreateSpoolAsync(filamentId, new SpoolInput { LotCode = "A" });
         var profileService = new PrintProfileService(db);
         var profile = await profileService.CreateProfileAsync(filamentId, new ProfileInput { Name = "Standard", NozzleTempC = "230" });
+        var printer = await new PrinterService(db).CreateAsync(new PrinterInput { Name = "Bambu Lab P2S" });
         db.Prints.Add(new Print
         {
             ProfileId = profile.Profile!.Id,
             SpoolId = spool.Spool!.Id,
-            Printer = "Bambu Lab P2S",
+            PrinterId = printer.Printer!.Id,
             StartedAt = new DateTime(2026, 1, 1, 8, 0, 0, DateTimeKind.Utc),
             EndedAt = new DateTime(2026, 1, 1, 10, 0, 0, DateTimeKind.Utc),
             Status = PrintStatus.Success

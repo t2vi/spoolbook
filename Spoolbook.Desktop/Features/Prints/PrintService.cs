@@ -4,7 +4,6 @@ namespace Spoolbook.Desktop.Features.Prints;
 
 public class PrintInput
 {
-    public required string Printer { get; set; }
     public DateTime StartedAt { get; set; }
     public DateTime EndedAt { get; set; }
     public PrintStatus Status { get; set; }
@@ -36,6 +35,7 @@ public class PrintService
         await _db.Prints
             .Include(p => p.Profile)
             .Include(p => p.Spool).ThenInclude(s => s!.Filament)
+            .Include(p => p.Printer)
             .OrderByDescending(p => p.StartedAt)
             .ToListAsync();
 
@@ -43,9 +43,10 @@ public class PrintService
         await _db.Prints
             .Include(p => p.Profile)
             .Include(p => p.Spool).ThenInclude(s => s!.Filament)
+            .Include(p => p.Printer)
             .FirstOrDefaultAsync(p => p.Id == id);
 
-    public async Task<PrintResult> CreateAsync(int profileId, int spoolId, PrintInput input)
+    public async Task<PrintResult> CreateAsync(int profileId, int spoolId, int printerId, PrintInput input)
     {
         var (tempC, humidityPct) = await _weatherService.GetAmbientAsync(input.StartedAt, input.EndedAt);
 
@@ -53,7 +54,7 @@ public class PrintService
         {
             ProfileId = profileId,
             SpoolId = spoolId,
-            Printer = input.Printer,
+            PrinterId = printerId,
             StartedAt = input.StartedAt,
             EndedAt = input.EndedAt,
             Status = input.Status,
@@ -72,14 +73,14 @@ public class PrintService
         return new PrintResult { Ok = true, Print = print };
     }
 
-    public async Task<PrintResult> UpdateAsync(int id, PrintInput input)
+    public async Task<PrintResult> UpdateAsync(int id, int printerId, PrintInput input)
     {
         var print = await _db.Prints.FindAsync(id);
         if (print is null) throw new InvalidOperationException("Print not found");
 
         var (tempC, humidityPct) = await _weatherService.GetAmbientAsync(input.StartedAt, input.EndedAt);
 
-        print.Printer = input.Printer;
+        print.PrinterId = printerId;
         print.StartedAt = input.StartedAt;
         print.EndedAt = input.EndedAt;
         print.Status = input.Status;

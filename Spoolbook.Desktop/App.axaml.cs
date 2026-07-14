@@ -11,6 +11,7 @@ using Spoolbook.Desktop.Features.Prints;
 using Spoolbook.Desktop.Features.Settings.General;
 using Spoolbook.Desktop.Features.Settings.Colors;
 using Spoolbook.Desktop.Features.Settings.Filaments;
+using Spoolbook.Desktop.Features.Settings.Printers;
 using Spoolbook.Desktop.Features.BambuImport;
 using Spoolbook.Desktop.Features.Dashboard;
 using Spoolbook.Desktop.Shell;
@@ -52,6 +53,7 @@ public partial class App : Application
             var colorService = new FilamentColorService(db);
             var appSettingsService = new AppSettingsService(db);
             var metricsService = new DashboardMetricsService(db, appSettingsService);
+            var printerService = new PrinterService(db);
 
             Converters.ColorSwatchConverter.SetPalette(colorService.ListAsync().GetAwaiter().GetResult());
 
@@ -66,7 +68,7 @@ public partial class App : Application
                 DataContext = new MainWindowViewModel(
                     filamentService, spoolService, profileService, importService,
                     spoolInventoryService, profileInventoryService, printService, printInventoryService, colorService,
-                    appSettingsService, metricsService),
+                    appSettingsService, metricsService, printerService),
             };
 
             if (appSettings.LastFilamentSyncAt is null || DateTime.UtcNow - appSettings.LastFilamentSyncAt.Value > TimeSpan.FromHours(24))

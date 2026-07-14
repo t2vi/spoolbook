@@ -1,0 +1,26 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Spoolbook.Desktop.Features.Settings.Printers"
+        xmlns:conv="using:Avalonia.Data.Converters"
+        mc:Ignorable="d"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        x:Class="Spoolbook.Desktop.Features.Settings.Printers.PrinterEditWindow"
+        x:DataType="vm:PrinterEditViewModel"
+        Title="{Binding PageTitle}"
+        Width="360" SizeToContent="Height"
+        Background="#26292C"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+    <StackPanel Margin="16" Spacing="8">
+        <TextBlock Text="{Binding PageTitle}" FontSize="18" FontWeight="Bold"/>
+        <TextBlock Text="Name"/>
+        <TextBox Text="{Binding Name}"/>
+        <TextBlock Text="Model"/>
+        <TextBox Text="{Binding Model}" PlaceholderText="e.g. Bambu Lab P2S"/>
+        <TextBlock Text="{Binding ErrorMessage}" Foreground="Red" IsVisible="{Binding ErrorMessage, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="Cancel" Command="{Binding CancelCommand}"/>
+            <Button Content="Save" Command="{Binding SaveCommand}"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

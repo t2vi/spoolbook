@@ -3,6 +3,7 @@ using Spoolbook.Desktop.Data;
 using Spoolbook.Desktop.Features.Dashboard;
 using Spoolbook.Desktop.Features.Settings.Filaments;
 using Spoolbook.Desktop.Features.Settings.General;
+using Spoolbook.Desktop.Features.Settings.Printers;
 using Spoolbook.Desktop.Features.Spools;
 using Spoolbook.Desktop.Features.Profiles;
 using Spoolbook.Desktop.Features.Prints;
@@ -93,10 +94,11 @@ public class DashboardMetricsServiceTests
         var filament = await filamentService.CreateAsync(new FilamentInput { Brand = "Test Brand", Material = "PLA", Color = "Black" });
         var spool = await spoolService.CreateSpoolAsync(filament.Entry!.Id, new SpoolInput());
         var profile = await profileService.CreateProfileAsync(filament.Entry.Id, new ProfileInput { Name = "Standard", NozzleTempC = "230" });
+        var printer = await new PrinterService(db).CreateAsync(new PrinterInput { Name = "P2S" });
         var printService = new PrintService(db, new FakeWeatherService());
-        await printService.CreateAsync(profile.Profile!.Id, spool.Spool!.Id, new PrintInput
+        await printService.CreateAsync(profile.Profile!.Id, spool.Spool!.Id, printer.Printer!.Id, new PrintInput
         {
-            Printer = "P2S", StartedAt = new DateTime(2026, 1, 1), EndedAt = new DateTime(2026, 1, 1, 2, 0, 0), Status = PrintStatus.Success
+            StartedAt = new DateTime(2026, 1, 1), EndedAt = new DateTime(2026, 1, 1, 2, 0, 0), Status = PrintStatus.Success
         });
         var service = new DashboardMetricsService(db, new AppSettingsService(db));
 
