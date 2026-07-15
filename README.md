@@ -23,15 +23,24 @@ sync — see below).
   `SpoolId`). Stays editable — it's a "current best settings" record, not history: editing one
   in place is the expected workflow for seasonal adjustment (hot day → lower temp, later prints
   just reuse the edited profile).
+- **Printer** — a physical printer the user owns, identified by a unique name and optional model.
+  Promoted from a free-text string on Print to a first-class entity once more than one printer
+  became relevant.
+- **Project** — a `.3mf` project file (the actual sliced project sent to the printer), linked by
+  path rather than copied in (project files can be tens of MBs). Reusable across multiple Prints
+  (e.g. reprinting the same sliced file after a failure), so it's its own entity rather than a
+  field on Print. Drift on disk (moved, deleted, overwritten) is detected via a cheap mtime/size
+  stat, not a content hash, and surfaced as a non-blocking badge — not a validity gate.
 - **Print** — a single print job. References a specific Print Profile version rather than
   copying its ~140 settings fields; once any Print references a profile version, that version is
   locked from further in-place edits, so "which settings I used" stays accurate without
-  duplicating data. Records status (success/failed/partial), printer, start/end time, notes, and
-  ambient conditions — temp/humidity auto-fetched from Open-Meteo for the print window (fixed
-  Melbourne coordinates, no location picker — single-user app), or entered manually. Printer
-  telemetry (Bambu Lab P2S) is manual start/end entry for now — Bambu has no official local API,
-  only unofficial/reverse-engineered LAN MQTT, which isn't worth building against yet; automatic
-  logging is deferred.
+  duplicating data. Records status (success/failed/partial), the Printer used, optionally a
+  Project (the `.3mf` that was actually sliced), start/end time, notes, and ambient conditions —
+  temp/humidity auto-fetched from Open-Meteo for the print window (fixed Melbourne coordinates, no
+  location picker — single-user app), or entered manually. Printer telemetry (Bambu Lab P2S) is
+  manual start/end entry for now — Bambu has no official local API, only unofficial/
+  reverse-engineered LAN MQTT, which isn't worth building against yet; automatic logging is
+  deferred.
 
 ## Features
 
@@ -41,10 +50,12 @@ sync — see below).
   presets directly from the JSON files Bambu Studio saves on disk (not `.3mf` project files —
   those just embed the same JSON), including reading whichever fields are present when a preset
   inherits from a system base.
-- **Prints** — log a print job with a profile + spool reference, ambient conditions, and outcome.
+- **Prints** — log a print job with a profile + spool + printer reference, an optional linked
+  `.3mf` Project, ambient conditions, and outcome.
 - **Dashboard** — at-a-glance view across the above.
 - **Settings** — Bambu preset directories, filament catalog source (default + user-added
-  additional source URLs, merged on every sync), filament DB version/sync status, app version.
+  additional source URLs, merged on every sync), filament DB version/sync status, app version,
+  and the list of owned Printers.
 
 ## Filament catalog
 
