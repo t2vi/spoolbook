@@ -37,6 +37,19 @@
             </ComboBox.ItemTemplate>
         </ComboBox>
 
+        <TextBlock Text="Project (.3mf)"/>
+        <StackPanel Orientation="Horizontal" Spacing="8">
+            <ComboBox ItemsSource="{Binding ProjectOptions}" SelectedItem="{Binding SelectedProject}" HorizontalAlignment="Stretch" Width="360">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:Project">
+                        <TextBlock Text="{Binding FileName}"/>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+            <Button Content="Browse..." Click="OnBrowseProjectClick"/>
+        </StackPanel>
+        <TextBlock Text="{Binding ProjectStatusText}" Foreground="Orange" IsVisible="{Binding ProjectStatusText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
+
         <TextBlock Text="Started"/>
         <StackPanel Orientation="Horizontal" Spacing="8">
             <DatePicker SelectedDate="{Binding StartedDate}"/>

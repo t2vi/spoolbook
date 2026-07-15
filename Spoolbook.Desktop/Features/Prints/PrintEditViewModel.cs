@@ -14,6 +14,7 @@ public partial class PrintEditViewModel : ViewModelBase
     private readonly SpoolService _spoolService;
     private readonly PrintProfileService _profileService;
     private readonly PrinterService _printerService;
+    private readonly ProjectService _projectService;
     private readonly int? _id;
 
     [ObservableProperty]
@@ -33,6 +34,15 @@ public partial class PrintEditViewModel : ViewModelBase
 
     [ObservableProperty]
     private Printer? selectedPrinter;
+
+    [ObservableProperty]
+    private ObservableCollection<Project> projectOptions = new();
+
+    [ObservableProperty]
+    private Project? selectedProject;
+
+    [ObservableProperty]
+    private string? projectStatusText;
 
     [ObservableProperty]
     private DateTimeOffset? startedDate;
@@ -70,12 +80,13 @@ public partial class PrintEditViewModel : ViewModelBase
     public string PageTitle => IsEdit ? "Edit print" : "Add print";
     public Action? Close { get; set; }
 
-    public PrintEditViewModel(PrintService printService, SpoolService spoolService, PrintProfileService profileService, PrinterService printerService, Print? existing)
+    public PrintEditViewModel(PrintService printService, SpoolService spoolService, PrintProfileService profileService, PrinterService printerService, ProjectService projectService, Print? existing)
     {
         _printService = printService;
         _spoolService = spoolService;
         _profileService = profileService;
         _printerService = printerService;
+        _projectService = projectService;
 
         if (existing is not null)
         {
@@ -95,6 +106,7 @@ public partial class PrintEditViewModel : ViewModelBase
 
         _ = LoadSpoolOptionsAsync(existing?.Profile);
         _ = LoadPrinterOptionsAsync(existing?.Printer);
+        _ = LoadProjectOptionsAsync(existing?.Project);
     }
 
     private async Task LoadSpoolOptionsAsync(PrintProfile? existingProfile)
@@ -115,6 +127,45 @@ public partial class PrintEditViewModel : ViewModelBase
     partial void OnSelectedSpoolChanged(Spool? value)
     {
         if (value is not null) _ = LoadProfileOptionsAsync(value.FilamentId, null);
+    }
+
+    partial void OnSelectedProjectChanged(Project? value)
+    {
+        ProjectStatusText = value is null ? null : DescribeStatus(ProjectService.GetFileStatus(value));
+    }
+
+    private static string? DescribeStatus(ProjectFileStatus status) => status switch
+    {
+        ProjectFileStatus.Missing => "File not found at the linked path.",
+        ProjectFileStatus.Changed => "File may have changed since it was attached.",
+        _ => null
+    };
+
+    private async Task LoadProjectOptionsAsync(Project? preselect)
+    {
+        ProjectOptions = new ObservableCollection<Project>(await _projectService.ListAsync());
+        if (preselect is not null && !ProjectOptions.Any(p => p.Id == preselect.Id))
+            ProjectOptions.Add(preselect);
+        SelectedProject = preselect is not null
+            ? ProjectOptions.FirstOrDefault(p => p.Id == preselect.Id)
+            : null;
+    }
+
+    [RelayCommand]
+    private async Task AttachProjectFileAsync(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath)) return;
+
+        var result = await _projectService.UpsertByPathAsync(filePath);
+        if (!result.Ok)
+        {
+            ErrorMessage = result.Error == "file_not_found" ? "That file could not be found." : result.Error;
+            return;
+        }
+
+        if (!ProjectOptions.Any(p => p.Id == result.Project!.Id))
+            ProjectOptions.Add(result.Project!);
+        SelectedProject = ProjectOptions.First(p => p.Id == result.Project!.Id);
     }
 
     private async Task LoadProfileOptionsAsync(int filamentId, PrintProfile? preselect)
@@ -179,7 +230,8 @@ public partial class PrintEditViewModel : ViewModelBase
             Notes = string.IsNullOrWhiteSpace(Notes) ? null : Notes,
             AmsHumidityPct = amsHumidity,
             ActualRoomTempC = actualRoomTemp,
-            CleanBuildPlate = CleanBuildPlate
+            CleanBuildPlate = CleanBuildPlate,
+            ProjectId = SelectedProject?.Id
         };
 
         var result = _id.HasValue

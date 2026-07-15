@@ -28,6 +28,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly AppSettingsService _appSettingsService;
     private readonly DashboardMetricsService _metricsService;
     private readonly PrinterService _printerService;
+    private readonly ProjectService _projectService;
 
     [ObservableProperty]
     private ViewModelBase currentPage;
@@ -44,7 +45,8 @@ public partial class MainWindowViewModel : ViewModelBase
         FilamentColorService colorService,
         AppSettingsService appSettingsService,
         DashboardMetricsService metricsService,
-        PrinterService printerService)
+        PrinterService printerService,
+        ProjectService projectService)
     {
         _filamentService = filamentService;
         _spoolService = spoolService;
@@ -58,6 +60,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _appSettingsService = appSettingsService;
         _metricsService = metricsService;
         _printerService = printerService;
+        _projectService = projectService;
 
         currentPage = new DashboardViewModel(
             filamentService, spoolService, profileService, importService,
@@ -82,7 +85,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [RelayCommand]
     private void ShowPrints() =>
-        Navigate(new PrintInventoryViewModel(_printInventoryService, _printService, _spoolService, _profileService, _filamentService, _printerService));
+        Navigate(new PrintInventoryViewModel(_printInventoryService, _printService, _spoolService, _profileService, _filamentService, _printerService, _projectService));
 
     [RelayCommand]
     private void ShowSettings() =>

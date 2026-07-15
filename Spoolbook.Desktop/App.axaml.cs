@@ -54,6 +54,7 @@ public partial class App : Application
             var appSettingsService = new AppSettingsService(db);
             var metricsService = new DashboardMetricsService(db, appSettingsService);
             var printerService = new PrinterService(db);
+            var projectService = new ProjectService(db);
 
             Converters.ColorSwatchConverter.SetPalette(colorService.ListAsync().GetAwaiter().GetResult());
 
@@ -68,7 +69,7 @@ public partial class App : Application
                 DataContext = new MainWindowViewModel(
                     filamentService, spoolService, profileService, importService,
                     spoolInventoryService, profileInventoryService, printService, printInventoryService, colorService,
-                    appSettingsService, metricsService, printerService),
+                    appSettingsService, metricsService, printerService, projectService),
             };
 
             if (appSettings.LastFilamentSyncAt is null || DateTime.UtcNow - appSettings.LastFilamentSyncAt.Value > TimeSpan.FromHours(24))
