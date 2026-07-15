@@ -11,6 +11,7 @@ public class PrintInput
     public int? AmsHumidityPct { get; set; }
     public decimal? ActualRoomTempC { get; set; }
     public bool? CleanBuildPlate { get; set; }
+    public int? ProjectId { get; set; }
 }
 
 public class PrintResult
@@ -36,6 +37,7 @@ public class PrintService
             .Include(p => p.Profile)
             .Include(p => p.Spool).ThenInclude(s => s!.Filament)
             .Include(p => p.Printer)
+            .Include(p => p.Project)
             .OrderByDescending(p => p.StartedAt)
             .ToListAsync();
 
@@ -44,6 +46,7 @@ public class PrintService
             .Include(p => p.Profile)
             .Include(p => p.Spool).ThenInclude(s => s!.Filament)
             .Include(p => p.Printer)
+            .Include(p => p.Project)
             .FirstOrDefaultAsync(p => p.Id == id);
 
     public async Task<PrintResult> CreateAsync(int profileId, int spoolId, int printerId, PrintInput input)
@@ -55,6 +58,7 @@ public class PrintService
             ProfileId = profileId,
             SpoolId = spoolId,
             PrinterId = printerId,
+            ProjectId = input.ProjectId,
             StartedAt = input.StartedAt,
             EndedAt = input.EndedAt,
             Status = input.Status,
@@ -81,6 +85,7 @@ public class PrintService
         var (tempC, humidityPct) = await _weatherService.GetAmbientAsync(input.StartedAt, input.EndedAt);
 
         print.PrinterId = printerId;
+        print.ProjectId = input.ProjectId;
         print.StartedAt = input.StartedAt;
         print.EndedAt = input.EndedAt;
         print.Status = input.Status;

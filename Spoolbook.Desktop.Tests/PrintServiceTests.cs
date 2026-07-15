@@ -116,6 +116,46 @@ public class PrintServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_StoresOptionalProjectReference()
+    {
+        using var db = TestDbFactory.Create();
+        var (profileId, spoolId, printerId) = await SeedAsync(db);
+        var service = new PrintService(db, new FakeWeatherService());
+        var projectService = new ProjectService(db);
+        var path = Path.Combine(Path.GetTempPath(), $"spoolbook-test-{Guid.NewGuid():N}.3mf");
+        File.WriteAllText(path, "3mf-bytes");
+        var project = await projectService.UpsertByPathAsync(path);
+
+        var result = await service.CreateAsync(profileId, spoolId, printerId, new PrintInput
+        {
+            StartedAt = new DateTime(2026, 1, 1, 8, 0, 0),
+            EndedAt = new DateTime(2026, 1, 1, 10, 0, 0),
+            Status = PrintStatus.Success,
+            ProjectId = project.Project!.Id
+        });
+
+        Assert.Equal(project.Project.Id, result.Print!.ProjectId);
+        File.Delete(path);
+    }
+
+    [Fact]
+    public async Task CreateAsync_ProjectIsOptional()
+    {
+        using var db = TestDbFactory.Create();
+        var (profileId, spoolId, printerId) = await SeedAsync(db);
+        var service = new PrintService(db, new FakeWeatherService());
+
+        var result = await service.CreateAsync(profileId, spoolId, printerId, new PrintInput
+        {
+            StartedAt = new DateTime(2026, 1, 1, 8, 0, 0),
+            EndedAt = new DateTime(2026, 1, 1, 10, 0, 0),
+            Status = PrintStatus.Success
+        });
+
+        Assert.Null(result.Print!.ProjectId);
+    }
+
+    [Fact]
     public async Task ListAsync_ReturnsPrintsNewestFirst()
     {
         using var db = TestDbFactory.Create();

@@ -17,6 +17,7 @@ public class SpoolbookDbContext : DbContext
     public DbSet<Print> Prints => Set<Print>();
     public DbSet<AppSettings> AppSettings => Set<AppSettings>();
     public DbSet<Printer> Printers => Set<Printer>();
+    public DbSet<Project> Projects => Set<Project>();
 
     public SpoolbookDbContext(DbContextOptions<SpoolbookDbContext> options) : base(options) { }
 
@@ -24,6 +25,7 @@ public class SpoolbookDbContext : DbContext
     {
         modelBuilder.Entity<FilamentColor>().HasIndex(c => c.Name).IsUnique();
         modelBuilder.Entity<Printer>().HasIndex(p => p.Name).IsUnique();
+        modelBuilder.Entity<Project>().HasIndex(p => p.FilePath).IsUnique();
 
         modelBuilder.Entity<FilamentColor>().HasData(KnownColors.Select((c, i) => new FilamentColor { Id = i + 1, Name = c.Name, Hex = c.Hex }));
         modelBuilder.Entity<Filament>().HasData(FilamentCatalog.Select((f, i) =>
@@ -63,6 +65,12 @@ public class SpoolbookDbContext : DbContext
             .HasOne(p => p.Printer)
             .WithMany()
             .HasForeignKey(p => p.PrinterId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Print>()
+            .HasOne(p => p.Project)
+            .WithMany()
+            .HasForeignKey(p => p.ProjectId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 

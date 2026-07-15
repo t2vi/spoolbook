@@ -15,6 +15,8 @@ public class Print
     public Spool? Spool { get; set; }
     public int PrinterId { get; set; }
     public Printer? Printer { get; set; }
+    public int? ProjectId { get; set; }
+    public Project? Project { get; set; }
     public DateTime StartedAt { get; set; }
     public DateTime EndedAt { get; set; }
     public PrintStatus Status { get; set; }

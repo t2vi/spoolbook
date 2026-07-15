@@ -17,6 +17,7 @@ public partial class PrintInventoryViewModel : ViewModelBase
     private readonly PrintProfileService _profileService;
     private readonly FilamentService _filamentService;
     private readonly PrinterService _printerService;
+    private readonly ProjectService _projectService;
 
     [ObservableProperty]
     private string? brandFilter;
@@ -56,7 +57,8 @@ public partial class PrintInventoryViewModel : ViewModelBase
         SpoolService spoolService,
         PrintProfileService profileService,
         FilamentService filamentService,
-        PrinterService printerService)
+        PrinterService printerService,
+        ProjectService projectService)
     {
         _inventoryService = inventoryService;
         _printService = printService;
@@ -64,6 +66,7 @@ public partial class PrintInventoryViewModel : ViewModelBase
         _profileService = profileService;
         _filamentService = filamentService;
         _printerService = printerService;
+        _projectService = projectService;
         _ = ReloadAsync();
     }
 
@@ -126,5 +129,5 @@ public partial class PrintInventoryViewModel : ViewModelBase
     }
 
     public PrintEditViewModel CreateEditViewModel(Print? existing) =>
-        new(_printService, _spoolService, _profileService, _printerService, existing);
+        new(_printService, _spoolService, _profileService, _printerService, _projectService, existing);
 }
