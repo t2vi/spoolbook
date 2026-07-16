@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Spoolbook.Desktop.Features.Dashboard"
              xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
+             xmlns:controls="using:Spoolbook.Desktop.Controls"
              mc:Ignorable="d"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              x:Class="Spoolbook.Desktop.Features.Dashboard.DashboardView"
@@ -12,25 +13,10 @@
             <Setter Property="CornerRadius" Value="16"/>
             <Setter Property="Padding" Value="20"/>
         </Style>
-        <Style Selector="TextBlock.cardLabel">
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Opacity" Value="0.7"/>
-        </Style>
-        <Style Selector="TextBlock.cardValue">
-            <Setter Property="FontSize" Value="26"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-        </Style>
         <Style Selector="TextBlock.cardTitle">
             <Setter Property="FontSize" Value="15"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="0,0,0,12"/>
-        </Style>
-        <Style Selector="Button.statCard">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-            <Setter Property="HorizontalAlignment" Value="Stretch"/>
         </Style>
     </UserControl.Styles>
 
@@ -39,22 +25,8 @@
             <TextBlock Text="Dashboard" FontSize="24" FontWeight="Bold"/>
 
             <Grid ColumnDefinitions="*,*,*" ColumnSpacing="20">
-                <Border Grid.Column="0" Classes="card">
-                    <Button Classes="statCard" Command="{Binding ShowSpoolsCommand}">
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="Spools" Classes="cardLabel"/>
-                            <TextBlock Text="{Binding SpoolCount}" Classes="cardValue"/>
-                        </StackPanel>
-                    </Button>
-                </Border>
-                <Border Grid.Column="1" Classes="card">
-                    <Button Classes="statCard" Command="{Binding ShowProfilesCommand}">
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="Print Profiles" Classes="cardLabel"/>
-                            <TextBlock Text="{Binding ProfileCount}" Classes="cardValue"/>
-                        </StackPanel>
-                    </Button>
-                </Border>
+                <controls:StatCard Grid.Column="0" Label="Spools" Value="{Binding SpoolCount}" Command="{Binding ShowSpoolsCommand}"/>
+                <controls:StatCard Grid.Column="1" Label="Print Profiles" Value="{Binding ProfileCount}" Command="{Binding ShowProfilesCommand}"/>
                 <Border Grid.Column="2" Classes="card">
                     <StackPanel Spacing="4">
                         <TextBlock Text="Filaments" Classes="cardLabel"/>

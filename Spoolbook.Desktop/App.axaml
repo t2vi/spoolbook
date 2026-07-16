@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Spoolbook.Desktop.App"
              xmlns:local="using:Spoolbook.Desktop"
+             xmlns:controls="using:Spoolbook.Desktop.Controls"
              RequestedThemeVariant="Dark">
 
     <Application.DataTemplates>
@@ -17,6 +18,30 @@
         <Color x:Key="SystemAccentColorDark1">#009639</Color>
         <Color x:Key="SystemAccentColorDark2">#007D30</Color>
         <Color x:Key="SystemAccentColorDark3">#006427</Color>
+
+        <ControlTheme x:Key="{x:Type controls:StatCard}" TargetType="controls:StatCard">
+            <Setter Property="Background" Value="#1E2126"/>
+            <Setter Property="CornerRadius" Value="16"/>
+            <Setter Property="Padding" Value="20"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="controls:StatCard">
+                    <Border Background="{TemplateBinding Background}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="{TemplateBinding Label}" Classes="cardLabel"/>
+                            <TextBlock Text="{TemplateBinding Value}" Classes="cardValue"/>
+                        </StackPanel>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="#191b1a"/>
+            </Style>
+        </ControlTheme>
     </Application.Resources>
 
     <Application.Styles>
@@ -27,6 +52,15 @@
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Padding" Value="0,4"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+
+        <Style Selector="TextBlock.cardLabel">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Opacity" Value="0.7"/>
+        </Style>
+        <Style Selector="TextBlock.cardValue">
+            <Setter Property="FontSize" Value="26"/>
             <Setter Property="FontWeight" Value="Bold"/>
         </Style>
     </Application.Styles>

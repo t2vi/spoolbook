@@ -38,9 +38,6 @@ public class ProfileInventoryService
 
     public async Task<ProfileInventoryResult> ListAsync(ProfileInventoryQuery query)
     {
-        var page = Math.Max(1, query.Page);
-        var pageSize = query.PageSize;
-
         var baseQuery = _db.PrintProfiles.Include(p => p.Filament).Where(p => p.IsCurrentVersion);
 
         if (!string.IsNullOrEmpty(query.Brand))
@@ -54,8 +51,6 @@ public class ProfileInventoryService
             ProfileScope.Spool => baseQuery.Where(p => p.SpoolId != null),
             _ => baseQuery
         };
-
-        var total = await baseQuery.CountAsync();
 
         baseQuery = query.Sort switch
         {
@@ -73,18 +68,15 @@ public class ProfileInventoryService
                 : baseQuery.OrderBy(p => p.Filament!.Brand).ThenBy(p => p.Filament!.Material).ThenBy(p => p.CreatedAt)
         };
 
-        var profiles = await baseQuery
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
+        var paged = await baseQuery.ToPagedListAsync(query.Page, query.PageSize);
 
         return new ProfileInventoryResult
         {
-            Profiles = profiles,
-            Total = total,
-            Page = page,
-            PageSize = pageSize,
-            TotalPages = Math.Max(1, (int)Math.Ceiling(total / (double)pageSize))
+            Profiles = paged.Items,
+            Total = paged.Total,
+            Page = paged.Page,
+            PageSize = paged.PageSize,
+            TotalPages = paged.TotalPages
         };
     }
 }
