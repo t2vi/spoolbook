@@ -1,0 +1,27 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:controls="using:Spoolbook.Desktop.Controls">
+    <ControlTheme x:Key="{x:Type controls:StatCard}" TargetType="controls:StatCard">
+        <Setter Property="Background" Value="#1E2126"/>
+        <Setter Property="CornerRadius" Value="16"/>
+        <Setter Property="Padding" Value="20"/>
+        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="Template">
+            <ControlTemplate TargetType="controls:StatCard">
+                <Border Background="{TemplateBinding Background}"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        Padding="{TemplateBinding Padding}">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="{TemplateBinding Label}" Classes="cardLabel"/>
+                        <TextBlock Text="{TemplateBinding Value}" Classes="cardValue"/>
+                    </StackPanel>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^:pointerover">
+            <Setter Property="Background" Value="#191b1a"/>
+        </Style>
+    </ControlTheme>
+</ResourceDictionary>
