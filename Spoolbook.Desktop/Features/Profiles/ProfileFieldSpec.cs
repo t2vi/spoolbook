@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Spoolbook.Desktop.Features.Profiles;
 
 // Mirrors Bambu Studio's own tab/section layout (Filament/Cooling/Setting Overrides/
@@ -162,6 +164,19 @@ public static class ProfileFieldSpec
         })
     };
 
+    // Most labels carry their unit as a trailing "(unit)" suffix (e.g. "Density (g/cm³)") —
+    // split it off so it renders in TextBoxWithUnit's unit slot instead of the label.
+    private static readonly Regex UnitSuffix = new(@"^(.*)\s\(([^()]+)\)$");
+    private static readonly HashSet<string> NonUnitSuffixes = new() { "experimental" };
+
+    private static (string Label, string Unit) SplitUnit(string label)
+    {
+        var match = UnitSuffix.Match(label);
+        if (!match.Success || NonUnitSuffixes.Contains(match.Groups[2].Value))
+            return (label, "");
+        return (match.Groups[1].Value, match.Groups[2].Value);
+    }
+
     public static List<ProfileFieldTab> BuildGroups(IReadOnlyDictionary<string, string>? initialValues)
     {
         return Groups
@@ -172,13 +187,18 @@ public static class ProfileFieldSpec
                 Sections = tabGroup.Select(g => new ProfileFieldGroup
                 {
                     Title = g.Section,
-                    Fields = g.Fields.Select(f => new ProfileFieldEntry
+                    Fields = g.Fields.Select(f =>
                     {
-                        Name = f.Name,
-                        Label = f.Label,
-                        IsBool = f.IsBool,
-                        IsTextArea = f.IsTextArea,
-                        Value = initialValues?.GetValueOrDefault(f.Name) ?? ""
+                        var (label, unit) = SplitUnit(f.Label);
+                        return new ProfileFieldEntry
+                        {
+                            Name = f.Name,
+                            Label = label,
+                            Unit = unit,
+                            IsBool = f.IsBool,
+                            IsTextArea = f.IsTextArea,
+                            Value = initialValues?.GetValueOrDefault(f.Name) ?? ""
+                        };
                     }).ToList()
                 }).ToList()
             }).ToList();

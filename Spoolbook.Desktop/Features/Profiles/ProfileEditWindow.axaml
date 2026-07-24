@@ -4,6 +4,7 @@
         xmlns:svc="using:Spoolbook.Desktop.Features.BambuImport"
         xmlns:models="using:Spoolbook.Desktop.Features.Profiles"
         xmlns:conv="using:Avalonia.Data.Converters"
+        xmlns:controls="using:Spoolbook.Desktop.Controls"
         mc:Ignorable="d"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         x:Class="Spoolbook.Desktop.Features.Profiles.ProfileEditWindow"
@@ -103,19 +104,32 @@
                                         <ItemsControl ItemsSource="{Binding Fields}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:ProfileFieldEntry">
-                                                    <Grid ColumnDefinitions="240,*" Margin="0,4">
+                                                    <Grid Margin="0,4" ColumnSpacing="10" IsSharedSizeScope="True">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="auto" MinWidth="400" />
+                                                            <ColumnDefinition Width="auto" MinWidth="200" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
                                                         <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center"/>
                                                         <CheckBox Grid.Column="1" IsVisible="{Binding IsBool}" IsChecked="{Binding BoolValue}"/>
-                                                        <TextBox Grid.Column="1" IsVisible="{Binding !IsBool}" Text="{Binding Value}"/>
+                                                        <controls:TextBoxWithUnit Grid.Column="1" ZIndex="1" IsVisible="{Binding !IsBool}" Text="{Binding Value}" Unit="{Binding Unit}" />
                                                     </Grid>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
-                                        <Grid ColumnDefinitions="240,*" Margin="0,4" IsVisible="{Binding IsPrintTemperatureSection}">
+                                        <Grid Margin="0,4" IsVisible="{Binding IsPrintTemperatureSection}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="auto" MinWidth="200" />
+                                            </Grid.ColumnDefinitions>
                                             <TextBlock Grid.Column="0" Text="Nozzle — Initial layer (°C)" VerticalAlignment="Center"/>
                                             <TextBox Grid.Column="1" Text="{Binding #Root.DataContext.NozzleTempInitialC}"/>
                                         </Grid>
-                                        <Grid ColumnDefinitions="240,*" Margin="0,4" IsVisible="{Binding IsPrintTemperatureSection}">
+                                        <Grid Margin="0,4" IsVisible="{Binding IsPrintTemperatureSection}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="auto" MinWidth="200" />
+                                            </Grid.ColumnDefinitions>
                                             <TextBlock Grid.Column="0" Text="Nozzle — Other layers (°C)" VerticalAlignment="Center"/>
                                             <TextBox Grid.Column="1" Text="{Binding #Root.DataContext.NozzleTempC}"/>
                                         </Grid>

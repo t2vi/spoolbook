@@ -1,0 +1,41 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:controls="using:Spoolbook.Desktop.Controls">
+    <ControlTheme x:Key="{x:Type controls:TextBoxWithUnit}" TargetType="controls:TextBoxWithUnit">
+        <Setter Property="Template">
+            <ControlTemplate TargetType="controls:TextBoxWithUnit">
+                <Border Classes="Highlight" Background="#111">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox Grid.Column="0"
+                                 BorderThickness="0"
+                                 Background="Transparent"
+                                 Text="{Binding Text, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                            <!-- FluentTheme's own TextBox sets these on Border#PART_BorderElement directly
+                                 on :focus, which local BorderThickness/Background above can't override
+                                 (would need a second /template/ hop, which Avalonia disallows). Shadowing
+                                 the DynamicResource keys here scopes the override to just this TextBox. -->
+                            <TextBox.Resources>
+                                <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
+                                <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
+                                <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
+                            </TextBox.Resources>
+                        </TextBox>
+                        <TextBlock Grid.Column="1"
+                                   VerticalAlignment="Center"
+                                   Margin="4,0,8,0"
+                                   Foreground="Gray"
+                                   Text="{TemplateBinding Unit}" />
+                    </Grid>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^ /template/ Border.Highlight">
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style Selector="^:focus-within /template/ Border.Highlight">
+            <Setter Property="BorderBrush" Value="#00ff00" />
+        </Style>
+    </ControlTheme>
+</ResourceDictionary>

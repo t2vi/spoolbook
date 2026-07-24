@@ -1,0 +1,17 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:common="using:Spoolbook.Desktop.Common"
+             xmlns:local="using:Spoolbook.Desktop.Controls"
+             x:Class="Spoolbook.Desktop.Controls.Pagination"
+             x:DataType="local:Pagination"
+             DataContext="{Binding RelativeSource={RelativeSource Self}}">
+    <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Content="Previous" Command="{Binding PreviousCommand}"/>
+        <TextBlock Text="{Binding Page}" VerticalAlignment="Center"/>
+        <TextBlock Text="/" VerticalAlignment="Center"/>
+        <TextBlock Text="{Binding TotalPages}" VerticalAlignment="Center"/>
+        <Button Content="Next" Command="{Binding NextCommand}"/>
+        <TextBlock Text="Per page" VerticalAlignment="Center" Margin="12,0,0,0"/>
+        <ComboBox ItemsSource="{x:Static common:PageSizes.Options}" SelectedItem="{Binding PageSize}"/>
+    </StackPanel>
+</UserControl>

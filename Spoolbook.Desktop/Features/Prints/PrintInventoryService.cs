@@ -37,9 +37,6 @@ public class PrintInventoryService
 
     public async Task<PrintInventoryResult> ListAsync(PrintInventoryQuery query)
     {
-        var page = Math.Max(1, query.Page);
-        var pageSize = query.PageSize;
-
         var baseQuery = _db.Prints
             .Include(p => p.Profile)
             .Include(p => p.Spool).ThenInclude(s => s!.Filament)
@@ -53,22 +50,17 @@ public class PrintInventoryService
         if (query.Status is not null)
             baseQuery = baseQuery.Where(p => p.Status == query.Status);
 
-        var total = await baseQuery.CountAsync();
-
         baseQuery = ApplySort(baseQuery, query.Sort, query.Order);
 
-        var prints = await baseQuery
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
+        var paged = await baseQuery.ToPagedListAsync(query.Page, query.PageSize);
 
         return new PrintInventoryResult
         {
-            Prints = prints,
-            Total = total,
-            Page = page,
-            PageSize = pageSize,
-            TotalPages = Math.Max(1, (int)Math.Ceiling(total / (double)pageSize))
+            Prints = paged.Items,
+            Total = paged.Total,
+            Page = paged.Page,
+            PageSize = paged.PageSize,
+            TotalPages = paged.TotalPages
         };
     }
 

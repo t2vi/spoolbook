@@ -40,9 +40,6 @@ public class SpoolInventoryService
 
     public async Task<SpoolInventoryResult> ListAsync(SpoolInventoryQuery query)
     {
-        var page = Math.Max(1, query.Page);
-        var pageSize = query.PageSize;
-
         var baseQuery = _db.Spools.Include(s => s.Filament).AsQueryable();
 
         if (!string.IsNullOrEmpty(query.Brand))
@@ -62,22 +59,17 @@ public class SpoolInventoryService
             _ => baseQuery
         };
 
-        var total = await baseQuery.CountAsync();
-
         baseQuery = ApplySort(baseQuery, query.Sort, query.Order);
 
-        var spools = await baseQuery
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
+        var paged = await baseQuery.ToPagedListAsync(query.Page, query.PageSize);
 
         return new SpoolInventoryResult
         {
-            Spools = spools,
-            Total = total,
-            Page = page,
-            PageSize = pageSize,
-            TotalPages = Math.Max(1, (int)Math.Ceiling(total / (double)pageSize))
+            Spools = paged.Items,
+            Total = paged.Total,
+            Page = paged.Page,
+            PageSize = paged.PageSize,
+            TotalPages = paged.TotalPages
         };
     }
 

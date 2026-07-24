@@ -5,6 +5,7 @@ public partial class ProfileFieldEntry : ObservableObject
 {
     public required string Name { get; init; }
     public required string Label { get; init; }
+    public string Unit { get; init; } = "";
     public bool IsBool { get; init; }
     public bool IsTextArea { get; init; }
 
