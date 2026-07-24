@@ -7,7 +7,7 @@ namespace Spoolbook.Desktop.Features.Profiles;
 // ProfileFields.svelte, ported field-for-field.
 public static class ProfileFieldSpec
 {
-    private record FieldDef(string Name, string Label, bool IsBool = false, bool IsTextArea = false);
+    private record FieldDef(string Name, string Label, bool IsBool = false, bool IsTextArea = false, string[]? Options = null, bool HideWhenBlank = false);
 
     private static readonly (string Tab, string Section, FieldDef[] Fields)[] Groups =
     {
@@ -17,7 +17,7 @@ public static class ProfileFieldSpec
             new FieldDef("IsSupport", "Support material", IsBool: true),
             new FieldDef("ImpactStrengthZ", "Impact Strength Z"),
             new FieldDef("RequiredNozzleHrc", "Required nozzle HRC"),
-            new FieldDef("DefaultColourHex", "Default color"),
+            new FieldDef("DefaultColourHex", "Default color", HideWhenBlank: true),
             new FieldDef("DiameterMm", "Diameter (mm)"),
             new FieldDef("DiameterLimitMm", "Diameter limit (mm)"),
             new FieldDef("AdhesivenessCategory", "Adhesiveness Category"),
@@ -28,7 +28,7 @@ public static class ProfileFieldSpec
             new FieldDef("CostPerKg", "Price (money/kg)"),
             new FieldDef("SofteningTempC", "Softening temperature (°C)"),
             new FieldDef("Printable", "Filament printable"),
-            new FieldDef("ExtruderVariant", "Extruder variant"),
+            new FieldDef("ExtruderVariant", "Extruder variant", Options: new[] { "Direct Drive Standard", "Direct Drive High Flow" }),
             new FieldDef("TowerIroningAreaMm2", "Tower ironing area (mm²)"),
             new FieldDef("PrimeVolumeMm3", "Filament prime volume (mm³)"),
             new FieldDef("RammingTravelTimeS", "Travel time after ramming (s)"),
@@ -197,6 +197,8 @@ public static class ProfileFieldSpec
                             Unit = unit,
                             IsBool = f.IsBool,
                             IsTextArea = f.IsTextArea,
+                            Options = f.Options,
+                            HideWhenBlank = f.HideWhenBlank,
                             Value = initialValues?.GetValueOrDefault(f.Name) ?? ""
                         };
                     }).ToList()

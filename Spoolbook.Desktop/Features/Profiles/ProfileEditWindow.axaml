@@ -104,7 +104,7 @@
                                         <ItemsControl ItemsSource="{Binding Fields}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:ProfileFieldEntry">
-                                                    <Grid Margin="0,4" ColumnSpacing="10" IsSharedSizeScope="True">
+                                                    <Grid Margin="0,4" ColumnSpacing="10" IsSharedSizeScope="True" IsVisible="{Binding ShowRow}">
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="auto" MinWidth="400" />
                                                             <ColumnDefinition Width="auto" MinWidth="200" />
@@ -112,7 +112,11 @@
                                                         </Grid.ColumnDefinitions>
                                                         <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center"/>
                                                         <CheckBox Grid.Column="1" IsVisible="{Binding IsBool}" IsChecked="{Binding BoolValue}"/>
-                                                        <controls:TextBoxWithUnit Grid.Column="1" ZIndex="1" IsVisible="{Binding !IsBool}" Text="{Binding Value}" Unit="{Binding Unit}" />
+                                                        <ComboBox Grid.Column="1" IsVisible="{Binding IsEnum}" ItemsSource="{Binding Options}" SelectedItem="{Binding Value}"/>
+                                                        <controls:TextBoxWithUnit Grid.Column="1" ZIndex="1" IsVisible="{Binding IsPlainText}" Text="{Binding Value}" Unit="{Binding Unit}" />
+                                                        <TextBox Grid.Column="1" Grid.ColumnSpan="2" IsVisible="{Binding IsTextArea}" Text="{Binding Value}"
+                                                                 AcceptsReturn="True" TextWrapping="Wrap" MinHeight="100" MaxHeight="240"
+                                                                 VerticalContentAlignment="Top"/>
                                                     </Grid>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
