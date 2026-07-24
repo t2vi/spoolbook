@@ -4,6 +4,7 @@
              xmlns:models="using:Spoolbook.Desktop.Features.Spools"
              xmlns:local="using:Spoolbook.Desktop.Converters"
              xmlns:common="using:Spoolbook.Desktop.Common"
+             xmlns:controls="using:Spoolbook.Desktop.Controls"
              mc:Ignorable="d"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              x:Class="Spoolbook.Desktop.Features.Spools.SpoolInventoryView"
@@ -27,15 +28,9 @@
             </StackPanel>
         </StackPanel>
 
-        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,12,0,0">
-            <Button Content="Previous" Command="{Binding PreviousPageCommand}"/>
-            <TextBlock Text="{Binding Page}" VerticalAlignment="Center"/>
-            <TextBlock Text="/" VerticalAlignment="Center"/>
-            <TextBlock Text="{Binding TotalPages}" VerticalAlignment="Center"/>
-            <Button Content="Next" Command="{Binding NextPageCommand}"/>
-            <TextBlock Text="Per page" VerticalAlignment="Center" Margin="12,0,0,0"/>
-            <ComboBox ItemsSource="{x:Static common:PageSizes.Options}" SelectedItem="{Binding PageSize}"/>
-        </StackPanel>
+        <controls:Pagination DockPanel.Dock="Bottom" Margin="0,12,0,0"
+                              Page="{Binding Page}" TotalPages="{Binding TotalPages}" PageSize="{Binding PageSize}"
+                              PreviousCommand="{Binding PreviousPageCommand}" NextCommand="{Binding NextPageCommand}"/>
 
         <DataGrid ItemsSource="{Binding Spools}"
                   AutoGenerateColumns="False"

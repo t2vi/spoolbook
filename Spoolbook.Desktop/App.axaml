@@ -12,7 +12,8 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceInclude Source="avares://Spoolbook.Desktop/Themes/Colors.axaml"/>
-                <ResourceInclude Source="avares://Spoolbook.Desktop/Controls/StatCard.axaml"/>
+                <ResourceInclude Source="avares://Spoolbook.Desktop/Controls/StatCard/StatCard.axaml"/>
+                <ResourceInclude Source="avares://Spoolbook.Desktop/Controls/TextBoxWithUnit/TextBoxWithUnit.axaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>
