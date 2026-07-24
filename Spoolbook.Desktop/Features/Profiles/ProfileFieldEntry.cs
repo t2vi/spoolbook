@@ -8,6 +8,14 @@ public partial class ProfileFieldEntry : ObservableObject
     public string Unit { get; init; } = "";
     public bool IsBool { get; init; }
     public bool IsTextArea { get; init; }
+    public IReadOnlyList<string>? Options { get; init; }
+    public bool IsEnum => Options is not null;
+    public bool IsPlainText => !IsBool && !IsEnum && !IsTextArea;
+
+    // Some fields (e.g. Default color) are only ever set by Bambu's own first-party presets —
+    // third-party/community presets leave them blank, so show the row only once there's a value.
+    public bool HideWhenBlank { get; init; }
+    public bool ShowRow => !HideWhenBlank || !string.IsNullOrWhiteSpace(Value);
 
     [ObservableProperty]
     private string value = "";
@@ -18,7 +26,11 @@ public partial class ProfileFieldEntry : ObservableObject
         set => Value = value ? "true" : "false";
     }
 
-    partial void OnValueChanged(string value) => OnPropertyChanged(nameof(BoolValue));
+    partial void OnValueChanged(string value)
+    {
+        OnPropertyChanged(nameof(BoolValue));
+        OnPropertyChanged(nameof(ShowRow));
+    }
 }
 
 public class ProfileFieldGroup
