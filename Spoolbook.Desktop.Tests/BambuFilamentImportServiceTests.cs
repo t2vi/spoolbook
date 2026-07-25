@@ -51,7 +51,21 @@ public class BambuFilamentImportServiceTests : IDisposable
     {
         var path = WriteLeaf("""{"name": "Test Preset", "inherits": ""}""");
 
-        var result = await _service.PushToFileAsync(path, new Dictionary<string, string> { ["ShrinkPct"] = "99%" });
+        var result = await _service.PushToFileAsync(path, new Dictionary<string, string> { ["NozzleTempC"] = "230" });
+
+        Assert.True(result.Ok);
+        using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(path));
+        Assert.Equal("230", doc.RootElement.GetProperty("nozzle_temperature")[0].GetString());
+    }
+
+    // ShrinkPct is stored (and edited in the UI) without a "%" — the field's unit label already
+    // shows one — but Bambu's own raw JSON format expects it embedded back in, e.g. "99%".
+    [Fact]
+    public async Task PushToFileAsync_ReAppendsPercentSuffixForShrinkPct()
+    {
+        var path = WriteLeaf("""{"name": "Test Preset", "inherits": ""}""");
+
+        var result = await _service.PushToFileAsync(path, new Dictionary<string, string> { ["ShrinkPct"] = "99" });
 
         Assert.True(result.Ok);
         using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(path));
@@ -84,6 +98,23 @@ public class BambuFilamentImportServiceTests : IDisposable
         Assert.True(result.Ok);
         using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(path));
         Assert.False(doc.RootElement.TryGetProperty("filament_shrink", out _));
+    }
+
+    [Fact]
+    public async Task ImportAsync_StripsPercentSuffixForShrinkPct()
+    {
+        var path = WriteLeaf("""
+        {
+            "name": "Test Preset",
+            "filament_settings_id": ["Test Preset"],
+            "filament_shrink": ["99%"]
+        }
+        """);
+
+        var result = await _service.ImportAsync(path);
+
+        Assert.True(result.Ok);
+        Assert.Equal("99", result.Fields!["ShrinkPct"]);
     }
 
     [Fact]
