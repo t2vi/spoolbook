@@ -17,6 +17,7 @@ Thumbs.db
 docs/adr
 CLAUDE.md
 CONTEXT.md
+skills-lock.json
 
 # Others
 .vscode
