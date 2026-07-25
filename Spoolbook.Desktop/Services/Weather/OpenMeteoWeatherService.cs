@@ -1,4 +1,6 @@
-namespace Spoolbook.Desktop.Features.Prints;
+using Spoolbook.Desktop.Services.Weather;
+
+namespace Spoolbook.Desktop.Services.Weather;
 
 // Melbourne lat/long hardcoded — single-user app, no location picker.
 public class OpenMeteoWeatherService : IWeatherService

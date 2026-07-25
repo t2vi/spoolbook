@@ -1,8 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Spoolbook.Desktop.Features.Profiles"
-        mc:Ignorable="d"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         x:Class="Spoolbook.Desktop.Features.Profiles.TextPromptWindow"
         x:DataType="vm:TextPromptViewModel"
         Width="380" SizeToContent="Height"

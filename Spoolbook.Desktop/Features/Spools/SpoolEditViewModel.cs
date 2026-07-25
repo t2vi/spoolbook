@@ -31,7 +31,7 @@ public partial class SpoolEditViewModel : EditViewModelBase
     private DateTimeOffset? emptiedAt;
 
     [ObservableProperty]
-    private string? weightGramsText;
+    private decimal? weightGrams;
 
     [ObservableProperty]
     private decimal? selectedDiameterMm;
@@ -53,7 +53,7 @@ public partial class SpoolEditViewModel : EditViewModelBase
     partial void OnPurchasedAtChanged(DateTimeOffset? value) => MarkDirty();
     partial void OnOpenedAtChanged(DateTimeOffset? value) => MarkDirty();
     partial void OnEmptiedAtChanged(DateTimeOffset? value) => MarkDirty();
-    partial void OnWeightGramsTextChanged(string? value) => MarkDirty();
+    partial void OnWeightGramsChanged(decimal? value) => MarkDirty();
     partial void OnSelectedDiameterMmChanged(decimal? value) => MarkDirty();
     partial void OnNotesChanged(string? value) => MarkDirty();
 
@@ -71,7 +71,7 @@ public partial class SpoolEditViewModel : EditViewModelBase
             PurchasedAt = ToOffset(existing.PurchasedAt);
             OpenedAt = ToOffset(existing.OpenedAt);
             EmptiedAt = ToOffset(existing.EmptiedAt);
-            WeightGramsText = existing.WeightGrams?.ToString();
+            WeightGrams = existing.WeightGrams;
             SelectedDiameterMm = existing.DiameterMm;
             Notes = existing.Notes;
         }
@@ -100,24 +100,13 @@ public partial class SpoolEditViewModel : EditViewModelBase
             return;
         }
 
-        int? weightGrams = null;
-        if (!string.IsNullOrWhiteSpace(WeightGramsText))
-        {
-            if (!int.TryParse(WeightGramsText, out var parsed))
-            {
-                ErrorMessage = "Weight must be a whole number of grams.";
-                return;
-            }
-            weightGrams = parsed;
-        }
-
         var input = new SpoolInput
         {
             LotCode = string.IsNullOrWhiteSpace(LotCode) ? null : LotCode,
             PurchasedAt = ToDateOnly(PurchasedAt),
             OpenedAt = ToDateOnly(OpenedAt),
             EmptiedAt = ToDateOnly(EmptiedAt),
-            WeightGrams = weightGrams,
+            WeightGrams = WeightGrams.HasValue ? (int)Math.Round(WeightGrams.Value) : null,
             DiameterMm = SelectedDiameterMm,
             Notes = string.IsNullOrWhiteSpace(Notes) ? null : Notes
         };

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Spoolbook.Desktop.Data;
+using Spoolbook.Desktop.Services.Weather;
 namespace Spoolbook.Desktop.Features.Prints;
 
 public class PrintInput

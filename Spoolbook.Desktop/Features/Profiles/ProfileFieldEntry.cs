@@ -8,6 +8,7 @@ public partial class ProfileFieldEntry : ObservableObject
     public string Unit { get; init; } = "";
     public bool IsBool { get; init; }
     public bool IsTextArea { get; init; }
+    public bool IsNumeric { get; init; }
     public IReadOnlyList<string>? Options { get; init; }
     public bool IsEnum => Options is not null;
     public bool IsPlainText => !IsBool && !IsEnum && !IsTextArea;

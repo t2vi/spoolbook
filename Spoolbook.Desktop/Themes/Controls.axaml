@@ -7,4 +7,18 @@
         <Setter Property="Padding" Value="0,4"/>
         <Setter Property="FontWeight" Value="Bold"/>
     </Style>
+
+    <Style Selector="NumericUpDown">
+        <Setter Property="ButtonSpinnerLocation" Value="Left"/>
+        <!-- Fluent's NumericUpDown wraps a PART_TextBox internally and reuses the same
+             TextControl* resource keys TextBoxWithUnit already shadows for its own TextBox (see
+             the comment there) — shadow the focused and pointer-over variants here too so
+             focusing/hovering a NumericUpDown doesn't draw the accent-colored ring or background. -->
+        <Style.Resources>
+            <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
+            <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
+            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="Transparent" />
+            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
+        </Style.Resources>
+    </Style>
 </Styles>

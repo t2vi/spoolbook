@@ -4,8 +4,6 @@
         xmlns:models="using:Spoolbook.Desktop.Features.Profiles"
         xmlns:models2="using:Spoolbook.Desktop.Features.Settings.Printers"
         xmlns:conv="using:Avalonia.Data.Converters"
-        mc:Ignorable="d"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         x:Class="Spoolbook.Desktop.Features.Prints.PrintEditWindow"
         x:DataType="vm:PrintEditViewModel"
         Title="{Binding PageTitle}"
@@ -66,10 +64,10 @@
         <ComboBox ItemsSource="{Binding StatusOptions}" SelectedItem="{Binding Status}" HorizontalAlignment="Stretch"/>
 
         <TextBlock Text="AMS humidity (%)"/>
-        <TextBox Text="{Binding AmsHumidityText}" PlaceholderText="e.g. 15"/>
+        <NumericUpDown Value="{Binding AmsHumidityPct}" Minimum="0" Maximum="100" Increment="1" FormatString="0" PlaceholderText="e.g. 15"/>
 
         <TextBlock Text="Actual room temp (°C)"/>
-        <TextBox Text="{Binding ActualRoomTempText}" PlaceholderText="e.g. 19.5, from a thermometer"/>
+        <NumericUpDown Value="{Binding ActualRoomTempC}" Increment="0.5" FormatString="0.#" ClipValueToMinMax="False" PlaceholderText="e.g. 19.5, from a thermometer"/>
 
         <CheckBox Content="Clean build plate" IsThreeState="True" IsChecked="{Binding CleanBuildPlate}"/>
 

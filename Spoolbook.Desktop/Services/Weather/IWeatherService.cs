@@ -1,4 +1,4 @@
-namespace Spoolbook.Desktop.Features.Prints;
+namespace Spoolbook.Desktop.Services.Weather;
 
 public interface IWeatherService
 {

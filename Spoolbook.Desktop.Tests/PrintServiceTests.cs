@@ -4,6 +4,7 @@ using Spoolbook.Desktop.Features.Settings.Printers;
 using Spoolbook.Desktop.Features.Spools;
 using Spoolbook.Desktop.Features.Profiles;
 using Spoolbook.Desktop.Features.Prints;
+using Spoolbook.Desktop.Services.Weather;
 namespace Spoolbook.Desktop.Tests;
 
 public class FakeWeatherService : IWeatherService

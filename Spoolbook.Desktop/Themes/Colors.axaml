@@ -8,4 +8,5 @@
     <Color x:Key="SystemAccentColorDark1">#009639</Color>
     <Color x:Key="SystemAccentColorDark2">#007D30</Color>
     <Color x:Key="SystemAccentColorDark3">#006427</Color>
+    <Color x:Key="DefaultBackground">#26292C</Color>
 </ResourceDictionary>

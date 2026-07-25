@@ -15,6 +15,8 @@ using Spoolbook.Desktop.Features.Settings.Printers;
 using Spoolbook.Desktop.Features.BambuImport;
 using Spoolbook.Desktop.Features.Dashboard;
 using Spoolbook.Desktop.Shell;
+using Spoolbook.Desktop.Services.Weather;
+
 namespace Spoolbook.Desktop;
 
 public partial class App : Application
