@@ -22,6 +22,8 @@
                                 <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
                                 <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
                                 <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
+                                <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="Transparent" />
+                                <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
                             </TextBox.Resources>
                         </TextBox>
                         <NumericUpDown Grid.Column="0"
@@ -30,7 +32,19 @@
                                        Background="Transparent"
                                        FormatString="0.####"
                                        ClipValueToMinMax="False"
-                                       Value="{Binding NumericValue, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" />
+                                       Value="{Binding NumericValue, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                            <!-- Same shadow as the TextBox above, scoped to this instance only —
+                                 NumericUpDown wraps a PART_TextBox internally and reuses the same
+                                 TextControl* keys. Deliberately NOT global (Themes/Controls.axaml):
+                                 standalone NumericUpDowns elsewhere (Spool weight, Print AMS
+                                 humidity/room temp) should keep normal focus/hover feedback. -->
+                            <NumericUpDown.Resources>
+                                <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
+                                <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
+                                <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="Transparent" />
+                                <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
+                            </NumericUpDown.Resources>
+                        </NumericUpDown>
                         <TextBlock Grid.Column="1"
                                    VerticalAlignment="Center"
                                    Margin="4,0,8,0"
