@@ -57,7 +57,9 @@ public static class ProfileFieldSpec
             new FieldDef("MaxVolumetricSpeedMm3S", "Max volumetric speed (mm³/s)"),
             new FieldDef("RammingVolumetricSpeedMm3S", "Ramming volumetric speed — Extruder change (mm³/s)"),
             new FieldDef("RammingVolumetricSpeedNcMm3S", "Ramming volumetric speed — Hotend change (mm³/s)"),
-            new FieldDef("ScarfSeamType", "Scarf seam type"),
+            // ponytail: raw Bambu enum values shown as-is (no pretty-label translation), matches
+            // every other Options field in this app; upgrade if "none"/"external"/"all" reads too raw.
+            new FieldDef("ScarfSeamType", "Scarf seam type", Options: new[] { "none", "external", "all" }),
             new FieldDef("ScarfHeightPct", "Scarf start height"),
             new FieldDef("ScarfGapPct", "Scarf slope gap"),
             new FieldDef("ScarfLengthMm", "Scarf length (mm)")
@@ -72,12 +74,12 @@ public static class ProfileFieldSpec
             new FieldDef("FanCoolingLayerTimeS", "Layer time (s)", IsNumeric: true),
             new FieldDef("SlowDownForLayerCooling", "Slow printing down for better layer cooling", IsBool: true),
             new FieldDef("NoSlowDownForCoolingOnOutwalls", "Don't slow down outer walls", IsBool: true),
-            new FieldDef("CoolingSlowdownLogic", "Cooling slowdown logic"),
+            new FieldDef("CoolingSlowdownLogic", "Cooling slowdown logic", Options: new[] { "uniform_cooling", "consistent_surface" }),
             new FieldDef("CoolingPerimeterTransitionDistanceMm", "Perimeter transition distance (mm)"),
             new FieldDef("SlowDownMinSpeedMmS", "Min print speed (mm/s)"),
             new FieldDef("SlowDownLayerTimeS", "Slow down layer time (s)"),
-            new FieldDef("OverhangFanThreshold", "Cooling overhang threshold"),
-            new FieldDef("OverhangThresholdParticipatingCooling", "Overhang threshold for participating cooling"),
+            new FieldDef("OverhangFanThreshold", "Cooling overhang threshold", Options: new[] { "0%", "10%", "25%", "50%", "75%", "95%" }),
+            new FieldDef("OverhangThresholdParticipatingCooling", "Overhang threshold for participating cooling", Options: new[] { "0%", "10%", "25%", "50%", "75%", "100%" }),
             new FieldDef("OverhangFanSpeedPct", "Fan speed for overhangs (%)", IsNumeric: true),
             new FieldDef("PreStartFanTimeS", "Pre start fan time (s)"),
             new FieldDef("EnableOverhangBridgeFan", "Keep fan always on", IsBool: true)
@@ -95,7 +97,7 @@ public static class ProfileFieldSpec
         {
             new FieldDef("RetractionMm", "Length (mm)"),
             new FieldDef("ZHopMm", "Z hop when retract (mm)"),
-            new FieldDef("ZHopType", "Z Hop Type"),
+            new FieldDef("ZHopType", "Z Hop Type", Options: new[] { "Auto Lift", "Normal Lift", "Slope Lift", "Spiral Lift" }),
             new FieldDef("RetractionSpeedMmS", "Retraction Speed (mm/s)"),
             new FieldDef("DeretractionSpeedMmS", "Deretraction Speed (mm/s)"),
             new FieldDef("ChangeLengthMm", "Length when change hotend (mm)"),
