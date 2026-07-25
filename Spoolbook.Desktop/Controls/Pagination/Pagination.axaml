@@ -4,14 +4,14 @@
              xmlns:local="using:Spoolbook.Desktop.Controls"
              x:Class="Spoolbook.Desktop.Controls.Pagination"
              x:DataType="local:Pagination"
-             DataContext="{Binding RelativeSource={RelativeSource Self}}">
+             x:Name="Root">
     <StackPanel Orientation="Horizontal" Spacing="8">
-        <Button Content="Previous" Command="{Binding PreviousCommand}"/>
-        <TextBlock Text="{Binding Page}" VerticalAlignment="Center"/>
+        <Button Content="Previous" Command="{Binding #Root.PreviousCommand}"/>
+        <TextBlock Text="{Binding #Root.Page}" VerticalAlignment="Center"/>
         <TextBlock Text="/" VerticalAlignment="Center"/>
-        <TextBlock Text="{Binding TotalPages}" VerticalAlignment="Center"/>
-        <Button Content="Next" Command="{Binding NextCommand}"/>
+        <TextBlock Text="{Binding #Root.TotalPages}" VerticalAlignment="Center"/>
+        <Button Content="Next" Command="{Binding #Root.NextCommand}"/>
         <TextBlock Text="Per page" VerticalAlignment="Center" Margin="12,0,0,0"/>
-        <ComboBox ItemsSource="{x:Static common:PageSizes.Options}" SelectedItem="{Binding PageSize}"/>
+        <ComboBox ItemsSource="{x:Static common:PageSizes.Options}" SelectedItem="{Binding #Root.PageSize}"/>
     </StackPanel>
 </UserControl>
