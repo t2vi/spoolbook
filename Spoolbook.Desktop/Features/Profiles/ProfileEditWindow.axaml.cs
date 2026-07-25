@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Spoolbook.Desktop.Common;
 namespace Spoolbook.Desktop.Features.Profiles;
 
 public partial class ProfileEditWindow : Window
@@ -14,6 +15,7 @@ public partial class ProfileEditWindow : Window
             {
                 vm.Close = () => Close();
                 vm.SwitchTo = newVm => DataContext = newVm;
+                EditWindowEscape.Attach(this, () => vm.IsDirty, SaveCurrentAsync, () => vm.CancelCommand.Execute(null));
             }
         };
     }
@@ -52,7 +54,9 @@ public partial class ProfileEditWindow : Window
         if (selected is not null) await vm.LoadVersionAsync(selected);
     }
 
-    private async void OnSaveClick(object? sender, RoutedEventArgs e)
+    private async void OnSaveClick(object? sender, RoutedEventArgs e) => await SaveCurrentAsync();
+
+    private async Task SaveCurrentAsync()
     {
         if (DataContext is not ProfileEditViewModel vm) return;
 

@@ -4,7 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using Spoolbook.Desktop.Common;
 namespace Spoolbook.Desktop.Features.Settings.Printers;
 
-public partial class PrinterEditViewModel : ViewModelBase
+public partial class PrinterEditViewModel : EditViewModelBase
 {
     private readonly PrinterService _printerService;
     private readonly int? _id;
@@ -22,6 +22,9 @@ public partial class PrinterEditViewModel : ViewModelBase
     public string PageTitle => IsEdit ? "Edit printer" : "Add printer";
     public Action? Close { get; set; }
 
+    partial void OnNameChanged(string value) => MarkDirty();
+    partial void OnModelChanged(string? value) => MarkDirty();
+
     public PrinterEditViewModel(PrinterService printerService, Printer? existing)
     {
         _printerService = printerService;
@@ -33,6 +36,8 @@ public partial class PrinterEditViewModel : ViewModelBase
             Name = existing.Name;
             Model = existing.Model;
         }
+
+        Loaded = true;
     }
 
     [RelayCommand]

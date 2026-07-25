@@ -8,7 +8,7 @@ using Spoolbook.Desktop.Features.Spools;
 using Spoolbook.Desktop.Features.Settings.Printers;
 namespace Spoolbook.Desktop.Features.Prints;
 
-public partial class PrintEditViewModel : ViewModelBase
+public partial class PrintEditViewModel : EditViewModelBase
 {
     private readonly PrintService _printService;
     private readonly SpoolService _spoolService;
@@ -104,9 +104,19 @@ public partial class PrintEditViewModel : ViewModelBase
             CleanBuildPlate = existing.CleanBuildPlate;
         }
 
-        _ = LoadSpoolOptionsAsync(existing?.Profile);
-        _ = LoadPrinterOptionsAsync(existing?.Printer);
-        _ = LoadProjectOptionsAsync(existing?.Project);
+        _ = InitializeOptionsAsync(existing);
+    }
+
+    // Awaits all option-list loads before flipping Loaded — several of them (printer, project)
+    // preselect a value asynchronously, which would otherwise falsely mark the form dirty the
+    // moment the load lands rather than only on an actual user edit.
+    private async Task InitializeOptionsAsync(Print? existing)
+    {
+        await Task.WhenAll(
+            LoadSpoolOptionsAsync(existing?.Profile),
+            LoadPrinterOptionsAsync(existing?.Printer),
+            LoadProjectOptionsAsync(existing?.Project));
+        Loaded = true;
     }
 
     private async Task LoadSpoolOptionsAsync(PrintProfile? existingProfile)
@@ -127,12 +137,26 @@ public partial class PrintEditViewModel : ViewModelBase
     partial void OnSelectedSpoolChanged(Spool? value)
     {
         if (value is not null) _ = LoadProfileOptionsAsync(value.FilamentId, null);
+        MarkDirty();
     }
 
     partial void OnSelectedProjectChanged(Project? value)
     {
         ProjectStatusText = value is null ? null : DescribeStatus(ProjectService.GetFileStatus(value));
+        MarkDirty();
     }
+
+    partial void OnSelectedProfileChanged(PrintProfile? value) => MarkDirty();
+    partial void OnSelectedPrinterChanged(Printer? value) => MarkDirty();
+    partial void OnStartedDateChanged(DateTimeOffset? value) => MarkDirty();
+    partial void OnStartedTimeChanged(TimeSpan? value) => MarkDirty();
+    partial void OnEndedDateChanged(DateTimeOffset? value) => MarkDirty();
+    partial void OnEndedTimeChanged(TimeSpan? value) => MarkDirty();
+    partial void OnStatusChanged(PrintStatus value) => MarkDirty();
+    partial void OnNotesChanged(string? value) => MarkDirty();
+    partial void OnAmsHumidityTextChanged(string? value) => MarkDirty();
+    partial void OnActualRoomTempTextChanged(string? value) => MarkDirty();
+    partial void OnCleanBuildPlateChanged(bool? value) => MarkDirty();
 
     private static string? DescribeStatus(ProjectFileStatus status) => status switch
     {

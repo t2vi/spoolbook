@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Spoolbook.Desktop.Common;
 namespace Spoolbook.Desktop.Features.Prints;
 
 public partial class PrintEditWindow : Window
@@ -11,7 +12,10 @@ public partial class PrintEditWindow : Window
         DataContextChanged += (_, _) =>
         {
             if (DataContext is PrintEditViewModel vm)
+            {
                 vm.Close = () => Close();
+                EditWindowEscape.Attach(this, () => vm.IsDirty, () => vm.SaveCommand.ExecuteAsync(null), () => vm.CancelCommand.Execute(null));
+            }
         };
     }
 

@@ -6,7 +6,9 @@ public class ProfileInput
 {
     public int? SpoolId { get; set; }
     public required string Name { get; set; }
-    public required string NozzleTempC { get; set; }
+    // Convenience for callers that don't go through the generic Fields dict (existing tests,
+    // mainly) — merged into Fields before validation/persistence either way.
+    public string? NozzleTempC { get; set; }
     public string? NozzleTempInitialC { get; set; }
     public ProfileSource? Source { get; set; }
     public SlicerType? SourceSlicer { get; set; }
@@ -40,21 +42,29 @@ public class PrintProfileService
         _db = db;
     }
 
+    // NozzleTempC/NozzleTempInitialC are plain dynamic fields as far as the DB/mapper are
+    // concerned; this just folds ProfileInput's convenience properties into the same Fields
+    // dict the ~140 other settings flow through, so Validate/Apply only need one code path.
+    private static void MergeNozzleFields(ProfileInput input)
+    {
+        if (!string.IsNullOrWhiteSpace(input.NozzleTempC)) input.Fields["NozzleTempC"] = input.NozzleTempC;
+        if (input.NozzleTempInitialC is not null) input.Fields["NozzleTempInitialC"] = input.NozzleTempInitialC;
+    }
+
     private static Dictionary<string, string>? Validate(ProfileInput input)
     {
         var errors = new Dictionary<string, string>();
         if (string.IsNullOrWhiteSpace(input.Name)) errors["Name"] = "Name is required";
-        if (string.IsNullOrWhiteSpace(input.NozzleTempC) || !int.TryParse(input.NozzleTempC, out _))
+        var nozzleTempC = input.Fields.GetValueOrDefault("NozzleTempC");
+        if (string.IsNullOrWhiteSpace(nozzleTempC) || !int.TryParse(nozzleTempC, out _))
             errors["NozzleTempC"] = "Nozzle temp is required";
 
         return errors.Count > 0 ? errors : null;
     }
 
-    private static int? ParseNullableInt(string? raw) =>
-        string.IsNullOrWhiteSpace(raw) ? null : (int.TryParse(raw, out var v) ? v : null);
-
     public async Task<ProfileResult> CreateProfileAsync(int filamentId, ProfileInput input)
     {
+        MergeNozzleFields(input);
         var errors = Validate(input);
         if (errors is not null) return new ProfileResult { Ok = false, Errors = errors };
 
@@ -63,8 +73,6 @@ public class PrintProfileService
             FilamentId = filamentId,
             SpoolId = input.SpoolId,
             Name = input.Name,
-            NozzleTempC = int.Parse(input.NozzleTempC),
-            NozzleTempInitialC = ParseNullableInt(input.NozzleTempInitialC),
             Source = input.Source ?? ProfileSource.Manual,
             SourceSlicer = input.SourceSlicer,
             RawSettingsJson = input.RawSettingsJson,
@@ -93,6 +101,7 @@ public class PrintProfileService
 
     public async Task<ProfileResult> UpdateProfileAsync(int id, ProfileInput input)
     {
+        MergeNozzleFields(input);
         var errors = Validate(input);
         if (errors is not null) return new ProfileResult { Ok = false, Errors = errors };
 
@@ -104,8 +113,6 @@ public class PrintProfileService
 
         profile.SpoolId = input.SpoolId;
         profile.Name = input.Name;
-        profile.NozzleTempC = int.Parse(input.NozzleTempC);
-        profile.NozzleTempInitialC = ParseNullableInt(input.NozzleTempInitialC);
         // Falls back to the existing value when input omits it, so a plain field edit
         // (which doesn't set these on ProfileInput) can't wipe provenance — but linking
         // a preset during this same edit session does carry a value and gets persisted.
@@ -164,7 +171,6 @@ public class PrintProfileService
             FilamentId = existing.FilamentId,
             SpoolId = existing.SpoolId,
             Name = $"{existing.Name} (copy)",
-            NozzleTempC = existing.NozzleTempC,
             Source = existing.Source,
             SourceSlicer = existing.SourceSlicer,
             RawSettingsJson = existing.RawSettingsJson,

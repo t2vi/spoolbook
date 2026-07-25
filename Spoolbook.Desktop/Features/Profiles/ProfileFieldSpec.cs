@@ -38,6 +38,8 @@ public static class ProfileFieldSpec
         }),
         ("Filament", "Print temperature", new[]
         {
+            new FieldDef("NozzleTempInitialC", "Nozzle — Initial layer (°C)"),
+            new FieldDef("NozzleTempC", "Nozzle — Other layers (°C)"),
             new FieldDef("SupertackPlateTempInitialC", "Cool Plate SuperTack — Initial layer (°C)"),
             new FieldDef("SupertackPlateTempC", "Cool Plate SuperTack — Other layers (°C)"),
             new FieldDef("CoolPlateTempInitialC", "Cool Plate — Initial layer (°C)"),

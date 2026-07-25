@@ -37,7 +37,6 @@ public class ProfileFieldGroup
 {
     public required string Title { get; init; }
     public required List<ProfileFieldEntry> Fields { get; init; }
-    public bool IsPrintTemperatureSection => Title == "Print temperature";
 }
 
 public class ProfileFieldTab

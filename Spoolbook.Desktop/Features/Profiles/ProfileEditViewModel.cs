@@ -7,7 +7,7 @@ using Spoolbook.Desktop.Features.BambuImport;
 using Spoolbook.Desktop.Features.Settings.Filaments;
 namespace Spoolbook.Desktop.Features.Profiles;
 
-public partial class ProfileEditViewModel : ViewModelBase
+public partial class ProfileEditViewModel : EditViewModelBase
 {
     private readonly PrintProfileService _profileService;
     private readonly BambuFilamentImportService _importService;
@@ -22,12 +22,6 @@ public partial class ProfileEditViewModel : ViewModelBase
 
     [ObservableProperty]
     private string name = "";
-
-    [ObservableProperty]
-    private string nozzleTempC = "";
-
-    [ObservableProperty]
-    private string? nozzleTempInitialC;
 
     [ObservableProperty]
     private string? notes;
@@ -48,15 +42,10 @@ public partial class ProfileEditViewModel : ViewModelBase
     private int versionNumber = 1;
 
     [ObservableProperty]
-    private bool isDirty;
-
-    [ObservableProperty]
     private ObservableCollection<PrintProfile> versions = new();
 
     [ObservableProperty]
     private bool pendingNewVersion;
-
-    private bool _loaded;
 
     public List<ImportedPreset> UserPresets { get; }
 
@@ -95,8 +84,6 @@ public partial class ProfileEditViewModel : ViewModelBase
             IsEdit = true;
             SelectedFilament = existing.Filament;
             Name = existing.Name;
-            NozzleTempC = existing.NozzleTempC.ToString();
-            NozzleTempInitialC = existing.NozzleTempInitialC?.ToString();
             Notes = existing.Notes;
             _source = existing.Source;
             _sourceSlicer = existing.SourceSlicer;
@@ -115,7 +102,7 @@ public partial class ProfileEditViewModel : ViewModelBase
 
         foreach (var entry in FieldTabs.SelectMany(t => t.Sections).SelectMany(g => g.Fields))
             entry.PropertyChanged += (_, _) => IsDirty = true;
-        _loaded = true;
+        Loaded = true;
 
         _ = LoadVersionsAsync();
     }
@@ -132,14 +119,7 @@ public partial class ProfileEditViewModel : ViewModelBase
         Versions = new ObservableCollection<PrintProfile>(list);
     }
 
-    private void MarkDirty()
-    {
-        if (_loaded) IsDirty = true;
-    }
-
     partial void OnNameChanged(string value) => MarkDirty();
-    partial void OnNozzleTempCChanged(string value) => MarkDirty();
-    partial void OnNozzleTempInitialCChanged(string? value) => MarkDirty();
     partial void OnNotesChanged(string? value) => MarkDirty();
 
     private Dictionary<string, string> CollectFields() =>
@@ -148,8 +128,6 @@ public partial class ProfileEditViewModel : ViewModelBase
     private ProfileInput BuildInput() => new()
     {
         Name = Name,
-        NozzleTempC = NozzleTempC,
-        NozzleTempInitialC = NozzleTempInitialC,
         Notes = string.IsNullOrWhiteSpace(Notes) ? null : Notes,
         Source = _source,
         SourceSlicer = _sourceSlicer,
@@ -164,8 +142,6 @@ public partial class ProfileEditViewModel : ViewModelBase
         if (_sourcePresetPath is null) return;
 
         var fields = CollectFields();
-        fields["NozzleTempC"] = NozzleTempC;
-        if (NozzleTempInitialC is not null) fields["NozzleTempInitialC"] = NozzleTempInitialC;
 
         var result = await _importService.PushToFileAsync(_sourcePresetPath, fields);
         if (!result.Ok) ErrorMessage = $"Saved, but couldn't update the linked file: {result.Error}";
@@ -270,11 +246,6 @@ public partial class ProfileEditViewModel : ViewModelBase
             if (result.Fields!.TryGetValue(entry.Name, out var value))
                 entry.Value = value;
         }
-        if (result.Fields!.TryGetValue("NozzleTempC", out var nozzle))
-            NozzleTempC = nozzle;
-        if (result.Fields!.TryGetValue("NozzleTempInitialC", out var initial))
-            NozzleTempInitialC = initial;
-
         _source = ProfileSource.SlicerImport;
         _sourceSlicer = SlicerType.BambuStudio;
         _rawSettingsJson = result.RawSettingsJson;
@@ -306,11 +277,6 @@ public partial class ProfileEditViewModel : ViewModelBase
             if (result.Fields!.TryGetValue(entry.Name, out var value))
                 entry.Value = value;
         }
-        if (result.Fields!.TryGetValue("NozzleTempC", out var nozzle))
-            NozzleTempC = nozzle;
-        if (result.Fields!.TryGetValue("NozzleTempInitialC", out var initial))
-            NozzleTempInitialC = initial;
-
         _rawSettingsJson = result.RawSettingsJson;
         PendingNewVersion = true;
         IsDirty = true;
