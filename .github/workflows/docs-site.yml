@@ -5,8 +5,9 @@ on:
     branches: [main]
     paths:
       - 'docs-site/**'
-  release:
-    types: [published]
+  workflow_run:
+    workflows: ["Release builds"]
+    types: [completed]
 
 permissions:
   contents: write
@@ -15,6 +16,11 @@ jobs:
   build-deploy:
     name: Build & deploy docs
     runs-on: ubuntu-latest
+    # Release builds upload per-OS assets across several matrix jobs — the Downloads page
+    # fetches the release API at build time, so deploying on `release: published` directly
+    # raced those uploads and could ship with assets missing. Wait for the whole "Release
+    # builds" workflow to finish (and skip if it failed) instead.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     defaults:
       run:
         working-directory: docs-site
