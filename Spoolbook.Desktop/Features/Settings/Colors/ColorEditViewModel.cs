@@ -4,7 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using Spoolbook.Desktop.Common;
 namespace Spoolbook.Desktop.Features.Settings.Colors;
 
-public partial class ColorEditViewModel : ViewModelBase
+public partial class ColorEditViewModel : EditViewModelBase
 {
     private readonly FilamentColorService _colorService;
     private readonly int? _id;
@@ -22,6 +22,9 @@ public partial class ColorEditViewModel : ViewModelBase
     public string PageTitle => IsEdit ? "Edit color" : "Add color";
     public Action? Close { get; set; }
 
+    partial void OnNameChanged(string value) => MarkDirty();
+    partial void OnHexChanged(string value) => MarkDirty();
+
     public ColorEditViewModel(FilamentColorService colorService, FilamentColor? existing)
     {
         _colorService = colorService;
@@ -33,6 +36,8 @@ public partial class ColorEditViewModel : ViewModelBase
             Name = existing.Name;
             Hex = existing.Hex;
         }
+
+        Loaded = true;
     }
 
     [RelayCommand]

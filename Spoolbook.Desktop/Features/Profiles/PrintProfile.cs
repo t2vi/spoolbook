@@ -16,7 +16,7 @@ public class PrintProfile
     public int? PrintSpeedMmS { get; set; }
 
     // Temps — nozzle + all 5 plates, each with an other-layers and initial-layer value.
-    public required int NozzleTempC { get; set; }
+    public int NozzleTempC { get; set; }
     public int? NozzleTempInitialC { get; set; }
     public int? NozzleTempRangeHighC { get; set; }
     public int? NozzleTempRangeLowC { get; set; }

@@ -121,22 +121,6 @@
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
-                                        <Grid Margin="0,4" IsVisible="{Binding IsPrintTemperatureSection}">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="auto" MinWidth="200" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="Nozzle — Initial layer (°C)" VerticalAlignment="Center"/>
-                                            <TextBox Grid.Column="1" Text="{Binding #Root.DataContext.NozzleTempInitialC}"/>
-                                        </Grid>
-                                        <Grid Margin="0,4" IsVisible="{Binding IsPrintTemperatureSection}">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="auto" MinWidth="200" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="Nozzle — Other layers (°C)" VerticalAlignment="Center"/>
-                                            <TextBox Grid.Column="1" Text="{Binding #Root.DataContext.NozzleTempC}"/>
-                                        </Grid>
                                     </StackPanel>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>

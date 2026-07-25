@@ -6,7 +6,7 @@ using Spoolbook.Desktop.Common;
 using Spoolbook.Desktop.Features.Settings.Filaments;
 namespace Spoolbook.Desktop.Features.Spools;
 
-public partial class SpoolEditViewModel : ViewModelBase
+public partial class SpoolEditViewModel : EditViewModelBase
 {
     private readonly SpoolService _service;
     private readonly FilamentService _filamentService;
@@ -48,6 +48,15 @@ public partial class SpoolEditViewModel : ViewModelBase
     public string PageTitle => IsEdit ? "Edit spool" : "Add spool";
     public Action? Close { get; set; }
 
+    partial void OnSelectedFilamentChanged(Filament? value) => MarkDirty();
+    partial void OnLotCodeChanged(string? value) => MarkDirty();
+    partial void OnPurchasedAtChanged(DateTimeOffset? value) => MarkDirty();
+    partial void OnOpenedAtChanged(DateTimeOffset? value) => MarkDirty();
+    partial void OnEmptiedAtChanged(DateTimeOffset? value) => MarkDirty();
+    partial void OnWeightGramsTextChanged(string? value) => MarkDirty();
+    partial void OnSelectedDiameterMmChanged(decimal? value) => MarkDirty();
+    partial void OnNotesChanged(string? value) => MarkDirty();
+
     public SpoolEditViewModel(SpoolService service, FilamentService filamentService, Spool? existing)
     {
         _service = service;
@@ -68,6 +77,7 @@ public partial class SpoolEditViewModel : ViewModelBase
         }
 
         _ = LoadFilamentOptionsAsync();
+        Loaded = true;
     }
 
     private async Task LoadFilamentOptionsAsync()

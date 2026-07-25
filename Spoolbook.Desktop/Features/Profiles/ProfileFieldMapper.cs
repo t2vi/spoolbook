@@ -8,7 +8,7 @@ public static class ProfileFieldMapper
 {
     private static readonly HashSet<string> BaseFieldNames = new()
     {
-        "Id", "FilamentId", "Filament", "SpoolId", "Spool", "Name", "NozzleTempC", "NozzleTempInitialC",
+        "Id", "FilamentId", "Filament", "SpoolId", "Spool", "Name",
         "Source", "SourceSlicer", "RawSettingsJson", "SourcePresetPath", "VersionNumber", "VersionName", "IsCurrentVersion", "Notes", "CreatedAt"
     };
 

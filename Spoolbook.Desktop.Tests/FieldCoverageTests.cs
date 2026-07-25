@@ -18,8 +18,6 @@ public class FieldCoverageTests
             .GetField("KeyMap", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
         var keyMap = (Dictionary<string, string>)mappedFieldsField.GetValue(null)!;
         var mappedFields = keyMap.Values.ToHashSet();
-        mappedFields.Remove("NozzleTempC");
-        mappedFields.Remove("NozzleTempInitialC");
 
         var missing = dynamicFieldNames.Except(mappedFields).ToList();
         var extra = mappedFields.Except(dynamicFieldNames).ToList();

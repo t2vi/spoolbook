@@ -6,7 +6,7 @@ using Spoolbook.Desktop.Common;
 using Spoolbook.Desktop.Features.Settings.Colors;
 namespace Spoolbook.Desktop.Features.Settings.Filaments;
 
-public partial class FilamentEditViewModel : ViewModelBase
+public partial class FilamentEditViewModel : EditViewModelBase
 {
     private readonly FilamentService _filamentService;
     private readonly FilamentColorService _colorService;
@@ -36,7 +36,15 @@ public partial class FilamentEditViewModel : ViewModelBase
     public string? SwatchHex => _colors.FirstOrDefault(c => c.Name == Color)?.Hex;
     public Action? Close { get; set; }
 
-    partial void OnColorChanged(string value) => OnPropertyChanged(nameof(SwatchHex));
+    partial void OnColorChanged(string value)
+    {
+        OnPropertyChanged(nameof(SwatchHex));
+        MarkDirty();
+    }
+
+    partial void OnBrandChanged(string value) => MarkDirty();
+    partial void OnMaterialChanged(string value) => MarkDirty();
+    partial void OnVariantChanged(string? value) => MarkDirty();
 
     public FilamentEditViewModel(FilamentService filamentService, FilamentColorService colorService, Filament? existing)
     {
@@ -54,6 +62,7 @@ public partial class FilamentEditViewModel : ViewModelBase
         }
 
         _ = LoadColorsAsync();
+        Loaded = true;
     }
 
     private async Task LoadColorsAsync()
