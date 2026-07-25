@@ -165,6 +165,11 @@ public class BambuFilamentImportService
         "AdaptiveVolumetricSpeed", "EnableOverhangSpeed", "Soluble", "IsSupport", "EnablePressureAdvance"
     };
 
+    // Bambu's raw JSON stores this with a literal "%" baked into the string (e.g. "100%"), even
+    // though its own editor UI strips it and shows a separate "%" unit label — our profile field
+    // editor already renders a unit suffix for ShrinkPct, so keeping the raw "%" would double it up.
+    private static readonly HashSet<string> PercentSuffixFields = new() { "ShrinkPct" };
+
     // Reverse of KeyMap — our PrintProfile property name -> Bambu's raw JSON key.
     private static readonly Dictionary<string, string> ReverseKeyMap =
         KeyMap.ToDictionary(kv => kv.Value, kv => kv.Key);
@@ -221,7 +226,9 @@ public class BambuFilamentImportService
             var raw = FirstValue(element);
             if (raw is null) continue;
 
-            fields[ourField] = BoolFields.Contains(ourField) ? ToBoolString(raw) : raw;
+            fields[ourField] = BoolFields.Contains(ourField) ? ToBoolString(raw)
+                : PercentSuffixFields.Contains(ourField) ? raw.TrimEnd('%')
+                : raw;
         }
 
         var rawSettingsJson = JsonSerializer.Serialize(
@@ -269,7 +276,9 @@ public class BambuFilamentImportService
             if (string.IsNullOrWhiteSpace(value)) continue;
             if (!ReverseKeyMap.TryGetValue(ourField, out var bambuKey)) continue;
 
-            var raw = BoolFields.Contains(ourField) ? (value == "true" ? "1" : "0") : value;
+            var raw = BoolFields.Contains(ourField) ? (value == "true" ? "1" : "0")
+                : PercentSuffixFields.Contains(ourField) ? value + "%"
+                : value;
 
             if (obj[bambuKey] is JsonArray { Count: > 0 } existingArray)
                 existingArray[0] = JsonValue.Create(raw);

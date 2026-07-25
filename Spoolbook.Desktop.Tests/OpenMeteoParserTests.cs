@@ -1,4 +1,4 @@
-using Spoolbook.Desktop.Features.Prints;
+using Spoolbook.Desktop.Services.Weather;
 namespace Spoolbook.Desktop.Tests;
 
 public class OpenMeteoParserTests

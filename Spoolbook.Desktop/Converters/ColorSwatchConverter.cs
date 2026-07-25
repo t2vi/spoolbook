@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
 using Spoolbook.Desktop.Features.Settings.Colors;
+
 namespace Spoolbook.Desktop.Converters;
 
 public class ColorSwatchConverter : IValueConverter

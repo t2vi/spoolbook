@@ -33,7 +33,7 @@
         <DatePicker SelectedDate="{Binding EmptiedAt}"/>
 
         <TextBlock Text="Weight (grams)"/>
-        <TextBox Text="{Binding WeightGramsText}" PlaceholderText="e.g. 1000"/>
+        <NumericUpDown Value="{Binding WeightGrams}" Minimum="0" Increment="1" FormatString="0" PlaceholderText="e.g. 1000"/>
 
         <TextBlock Text="Diameter (mm)"/>
         <ComboBox ItemsSource="{Binding DiameterOptions}" SelectedItem="{Binding SelectedDiameterMm}" PlaceholderText="Unspecified"/>

@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace Spoolbook.Desktop.Features.Prints;
+namespace Spoolbook.Desktop.Services.Weather;
 
 public static class OpenMeteoParser
 {

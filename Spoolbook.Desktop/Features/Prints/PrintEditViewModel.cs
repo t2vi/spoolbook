@@ -63,10 +63,10 @@ public partial class PrintEditViewModel : EditViewModelBase
     private string? notes;
 
     [ObservableProperty]
-    private string? amsHumidityText;
+    private decimal? amsHumidityPct;
 
     [ObservableProperty]
-    private string? actualRoomTempText;
+    private decimal? actualRoomTempC;
 
     [ObservableProperty]
     private bool? cleanBuildPlate;
@@ -99,8 +99,8 @@ public partial class PrintEditViewModel : EditViewModelBase
             EndedTime = existing.EndedAt.TimeOfDay;
             Status = existing.Status;
             Notes = existing.Notes;
-            AmsHumidityText = existing.AmsHumidityPct?.ToString();
-            ActualRoomTempText = existing.ActualRoomTempC?.ToString();
+            AmsHumidityPct = existing.AmsHumidityPct;
+            ActualRoomTempC = existing.ActualRoomTempC;
             CleanBuildPlate = existing.CleanBuildPlate;
         }
 
@@ -154,8 +154,8 @@ public partial class PrintEditViewModel : EditViewModelBase
     partial void OnEndedTimeChanged(TimeSpan? value) => MarkDirty();
     partial void OnStatusChanged(PrintStatus value) => MarkDirty();
     partial void OnNotesChanged(string? value) => MarkDirty();
-    partial void OnAmsHumidityTextChanged(string? value) => MarkDirty();
-    partial void OnActualRoomTempTextChanged(string? value) => MarkDirty();
+    partial void OnAmsHumidityPctChanged(decimal? value) => MarkDirty();
+    partial void OnActualRoomTempCChanged(decimal? value) => MarkDirty();
     partial void OnCleanBuildPlateChanged(bool? value) => MarkDirty();
 
     private static string? DescribeStatus(ProjectFileStatus status) => status switch
@@ -224,36 +224,14 @@ public partial class PrintEditViewModel : EditViewModelBase
             return;
         }
 
-        int? amsHumidity = null;
-        if (!string.IsNullOrWhiteSpace(AmsHumidityText))
-        {
-            if (!int.TryParse(AmsHumidityText, out var parsed))
-            {
-                ErrorMessage = "AMS humidity must be a whole number.";
-                return;
-            }
-            amsHumidity = parsed;
-        }
-
-        decimal? actualRoomTemp = null;
-        if (!string.IsNullOrWhiteSpace(ActualRoomTempText))
-        {
-            if (!decimal.TryParse(ActualRoomTempText, out var parsedTemp))
-            {
-                ErrorMessage = "Room temp must be a number.";
-                return;
-            }
-            actualRoomTemp = parsedTemp;
-        }
-
         var input = new PrintInput
         {
             StartedAt = StartedDate.Value.Date + StartedTime.Value,
             EndedAt = EndedDate.Value.Date + EndedTime.Value,
             Status = Status,
             Notes = string.IsNullOrWhiteSpace(Notes) ? null : Notes,
-            AmsHumidityPct = amsHumidity,
-            ActualRoomTempC = actualRoomTemp,
+            AmsHumidityPct = AmsHumidityPct.HasValue ? (int)Math.Round(AmsHumidityPct.Value) : null,
+            ActualRoomTempC = ActualRoomTempC,
             CleanBuildPlate = CleanBuildPlate,
             ProjectId = SelectedProject?.Id
         };

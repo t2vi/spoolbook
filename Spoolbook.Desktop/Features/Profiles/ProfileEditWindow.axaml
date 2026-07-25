@@ -2,11 +2,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Spoolbook.Desktop.Features.Profiles"
         xmlns:svc="using:Spoolbook.Desktop.Features.BambuImport"
-        xmlns:models="using:Spoolbook.Desktop.Features.Profiles"
         xmlns:conv="using:Avalonia.Data.Converters"
         xmlns:controls="using:Spoolbook.Desktop.Controls"
-        mc:Ignorable="d"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         x:Class="Spoolbook.Desktop.Features.Profiles.ProfileEditWindow"
         x:DataType="vm:ProfileEditViewModel"
         x:Name="Root"
@@ -113,7 +110,8 @@
                                                         <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center"/>
                                                         <CheckBox Grid.Column="1" IsVisible="{Binding IsBool}" IsChecked="{Binding BoolValue}"/>
                                                         <ComboBox Grid.Column="1" IsVisible="{Binding IsEnum}" ItemsSource="{Binding Options}" SelectedItem="{Binding Value}"/>
-                                                        <controls:TextBoxWithUnit Grid.Column="1" ZIndex="1" IsVisible="{Binding IsPlainText}" Text="{Binding Value}" Unit="{Binding Unit}" />
+                                                        <controls:TextBoxWithUnit Grid.Column="1" ZIndex="1" IsVisible="{Binding IsPlainText}"
+                                                                                   Text="{Binding Value}" Unit="{Binding Unit}" IsNumeric="{Binding IsNumeric}" />
                                                         <TextBox Grid.Column="1" Grid.ColumnSpan="2" IsVisible="{Binding IsTextArea}" Text="{Binding Value}"
                                                                  AcceptsReturn="True" TextWrapping="Wrap" MinHeight="100" MaxHeight="240"
                                                                  VerticalContentAlignment="Top"/>

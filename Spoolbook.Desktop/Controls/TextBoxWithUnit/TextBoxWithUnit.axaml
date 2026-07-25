@@ -1,12 +1,16 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                     xmlns:controls="using:Spoolbook.Desktop.Controls">
+                     xmlns:controls="using:Spoolbook.Desktop.Controls"
+                     xmlns:conv="using:Avalonia.Data.Converters">
+                    
     <ControlTheme x:Key="{x:Type controls:TextBoxWithUnit}" TargetType="controls:TextBoxWithUnit">
+        
         <Setter Property="Template">
             <ControlTemplate TargetType="controls:TextBoxWithUnit">
                 <Border Classes="Highlight" Background="#111">
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBox Grid.Column="0"
+                                 IsVisible="{TemplateBinding IsNumeric, Converter={x:Static conv:BoolConverters.Not}}"
                                  BorderThickness="0"
                                  Background="Transparent"
                                  Text="{Binding Text, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
@@ -20,6 +24,13 @@
                                 <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
                             </TextBox.Resources>
                         </TextBox>
+                        <NumericUpDown Grid.Column="0"
+                                       IsVisible="{TemplateBinding IsNumeric}"
+                                       BorderThickness="0"
+                                       Background="Transparent"
+                                       FormatString="0.####"
+                                       ClipValueToMinMax="False"
+                                       Value="{Binding NumericValue, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" />
                         <TextBlock Grid.Column="1"
                                    VerticalAlignment="Center"
                                    Margin="4,0,8,0"

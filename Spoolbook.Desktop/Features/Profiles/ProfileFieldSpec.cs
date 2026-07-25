@@ -7,7 +7,7 @@ namespace Spoolbook.Desktop.Features.Profiles;
 // ProfileFields.svelte, ported field-for-field.
 public static class ProfileFieldSpec
 {
-    private record FieldDef(string Name, string Label, bool IsBool = false, bool IsTextArea = false, string[]? Options = null, bool HideWhenBlank = false);
+    private record FieldDef(string Name, string Label, bool IsBool = false, bool IsTextArea = false, string[]? Options = null, bool HideWhenBlank = false, bool IsNumeric = false);
 
     private static readonly (string Tab, string Section, FieldDef[] Fields)[] Groups =
     {
@@ -20,36 +20,36 @@ public static class ProfileFieldSpec
             new FieldDef("DefaultColourHex", "Default color", HideWhenBlank: true),
             new FieldDef("DiameterMm", "Diameter (mm)"),
             new FieldDef("DiameterLimitMm", "Diameter limit (mm)"),
-            new FieldDef("AdhesivenessCategory", "Adhesiveness Category"),
+            new FieldDef("AdhesivenessCategory", "Adhesiveness Category", IsNumeric: true),
             new FieldDef("FlowRatio", "Flow ratio"),
             new FieldDef("DensityGCm3", "Density (g/cm³)"),
             new FieldDef("ShrinkPct", "Shrinkage (%)"),
             new FieldDef("VelocityAdaptationFactor", "Velocity Adaptation Factor"),
             new FieldDef("CostPerKg", "Price (money/kg)"),
-            new FieldDef("SofteningTempC", "Softening temperature (°C)"),
-            new FieldDef("Printable", "Filament printable"),
+            new FieldDef("SofteningTempC", "Softening temperature (°C)", IsNumeric: true),
+            new FieldDef("Printable", "Filament printable", IsNumeric: true),
             new FieldDef("ExtruderVariant", "Extruder variant", Options: new[] { "Direct Drive Standard", "Direct Drive High Flow" }),
             new FieldDef("TowerIroningAreaMm2", "Tower ironing area (mm²)"),
             new FieldDef("PrimeVolumeMm3", "Filament prime volume (mm³)"),
             new FieldDef("RammingTravelTimeS", "Travel time after ramming (s)"),
             new FieldDef("RammingTravelTimeNcS", "Travel time after ramming — High Flow (s)"),
-            new FieldDef("NozzleTempRangeLowC", "Recommended nozzle temperature — Min (°C)"),
-            new FieldDef("NozzleTempRangeHighC", "Recommended nozzle temperature — Max (°C)")
+            new FieldDef("NozzleTempRangeLowC", "Recommended nozzle temperature — Min (°C)", IsNumeric: true),
+            new FieldDef("NozzleTempRangeHighC", "Recommended nozzle temperature — Max (°C)", IsNumeric: true)
         }),
         ("Filament", "Print temperature", new[]
         {
-            new FieldDef("NozzleTempInitialC", "Nozzle — Initial layer (°C)"),
-            new FieldDef("NozzleTempC", "Nozzle — Other layers (°C)"),
-            new FieldDef("SupertackPlateTempInitialC", "Cool Plate SuperTack — Initial layer (°C)"),
-            new FieldDef("SupertackPlateTempC", "Cool Plate SuperTack — Other layers (°C)"),
-            new FieldDef("CoolPlateTempInitialC", "Cool Plate — Initial layer (°C)"),
-            new FieldDef("CoolPlateTempC", "Cool Plate — Other layers (°C)"),
-            new FieldDef("EngPlateTempInitialC", "Engineering Plate — Initial layer (°C)"),
-            new FieldDef("EngPlateTempC", "Engineering Plate — Other layers (°C)"),
-            new FieldDef("HotPlateTempInitialC", "Smooth PEI / High Temp Plate — Initial layer (°C)"),
-            new FieldDef("HotPlateTempC", "Smooth PEI / High Temp Plate — Other layers (°C)"),
-            new FieldDef("TexturedPlateTempInitialC", "Textured PEI Plate — Initial layer (°C)"),
-            new FieldDef("TexturedPlateTempC", "Textured PEI Plate — Other layers (°C)")
+            new FieldDef("NozzleTempInitialC", "Nozzle — Initial layer (°C)", IsNumeric: true),
+            new FieldDef("NozzleTempC", "Nozzle — Other layers (°C)", IsNumeric: true),
+            new FieldDef("SupertackPlateTempInitialC", "Cool Plate SuperTack — Initial layer (°C)", IsNumeric: true),
+            new FieldDef("SupertackPlateTempC", "Cool Plate SuperTack — Other layers (°C)", IsNumeric: true),
+            new FieldDef("CoolPlateTempInitialC", "Cool Plate — Initial layer (°C)", IsNumeric: true),
+            new FieldDef("CoolPlateTempC", "Cool Plate — Other layers (°C)", IsNumeric: true),
+            new FieldDef("EngPlateTempInitialC", "Engineering Plate — Initial layer (°C)", IsNumeric: true),
+            new FieldDef("EngPlateTempC", "Engineering Plate — Other layers (°C)", IsNumeric: true),
+            new FieldDef("HotPlateTempInitialC", "Smooth PEI / High Temp Plate — Initial layer (°C)", IsNumeric: true),
+            new FieldDef("HotPlateTempC", "Smooth PEI / High Temp Plate — Other layers (°C)", IsNumeric: true),
+            new FieldDef("TexturedPlateTempInitialC", "Textured PEI Plate — Initial layer (°C)", IsNumeric: true),
+            new FieldDef("TexturedPlateTempC", "Textured PEI Plate — Other layers (°C)", IsNumeric: true)
         }),
         ("Filament", "Volumetric speed / scarf seam", new[]
         {
@@ -64,12 +64,12 @@ public static class ProfileFieldSpec
         }),
         ("Cooling", "Part cooling fan", new[]
         {
-            new FieldDef("CloseFanFirstXLayers", "Initial layer fan — For the first N layers"),
-            new FieldDef("FirstXLayerFanSpeedPct", "Initial layer fan — Fan speed (%)"),
-            new FieldDef("FullFanSpeedLayer", "Linear ramp up to (layers)"),
-            new FieldDef("FanMinSpeedPct", "Min fan speed threshold — Fan speed (%)"),
-            new FieldDef("FanMaxSpeedPct", "Max fan speed threshold — Fan speed (%)"),
-            new FieldDef("FanCoolingLayerTimeS", "Layer time (s)"),
+            new FieldDef("CloseFanFirstXLayers", "Initial layer fan — For the first N layers", IsNumeric: true),
+            new FieldDef("FirstXLayerFanSpeedPct", "Initial layer fan — Fan speed (%)", IsNumeric: true),
+            new FieldDef("FullFanSpeedLayer", "Linear ramp up to (layers)", IsNumeric: true),
+            new FieldDef("FanMinSpeedPct", "Min fan speed threshold — Fan speed (%)", IsNumeric: true),
+            new FieldDef("FanMaxSpeedPct", "Max fan speed threshold — Fan speed (%)", IsNumeric: true),
+            new FieldDef("FanCoolingLayerTimeS", "Layer time (s)", IsNumeric: true),
             new FieldDef("SlowDownForLayerCooling", "Slow printing down for better layer cooling", IsBool: true),
             new FieldDef("NoSlowDownForCoolingOnOutwalls", "Don't slow down outer walls", IsBool: true),
             new FieldDef("CoolingSlowdownLogic", "Cooling slowdown logic"),
@@ -78,7 +78,7 @@ public static class ProfileFieldSpec
             new FieldDef("SlowDownLayerTimeS", "Slow down layer time (s)"),
             new FieldDef("OverhangFanThreshold", "Cooling overhang threshold"),
             new FieldDef("OverhangThresholdParticipatingCooling", "Overhang threshold for participating cooling"),
-            new FieldDef("OverhangFanSpeedPct", "Fan speed for overhangs (%)"),
+            new FieldDef("OverhangFanSpeedPct", "Fan speed for overhangs (%)", IsNumeric: true),
             new FieldDef("PreStartFanTimeS", "Pre start fan time (s)"),
             new FieldDef("EnableOverhangBridgeFan", "Keep fan always on", IsBool: true)
         }),
@@ -156,7 +156,7 @@ public static class ProfileFieldSpec
         ("Notes", "Notes", new[] { new FieldDef("SlicerNotes", "Filament notes", IsTextArea: true) }),
         ("Multi Filament", "Multi Filament", new[]
         {
-            new FieldDef("TowerInterfacePrintTempC", "Purge temperature (°C)"),
+            new FieldDef("TowerInterfacePrintTempC", "Purge temperature (°C)", IsNumeric: true),
             new FieldDef("TowerInterfacePurgeVolumeMm3", "Purge volumetric speed (mm³/s)"),
             new FieldDef("TowerInterfacePreExtrusionDistMm", "Tower interface pre-extrusion distance (mm)"),
             new FieldDef("TowerInterfacePreExtrusionLengthMm", "Tower interface pre-extrusion length (mm)"),
@@ -198,6 +198,7 @@ public static class ProfileFieldSpec
                             Label = label,
                             Unit = unit,
                             IsBool = f.IsBool,
+                            IsNumeric = f.IsNumeric,
                             IsTextArea = f.IsTextArea,
                             Options = f.Options,
                             HideWhenBlank = f.HideWhenBlank,
