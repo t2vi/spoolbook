@@ -21,4 +21,15 @@
             <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
         </Style.Resources>
     </Style>
+
+    <!-- DataGridCell's Fluent template draws the selected/focused-cell outline via
+         Rectangle strokes bound to DataGridCellFocusVisualPrimaryBrush/SecondaryBrush (see
+         PART_CellRoot's "FocusVisual" grid, shown on the ^:focus pseudo-class) — shadow both
+         to transparent so selecting a cell doesn't draw the ring. -->
+    <Style Selector="DataGridCell">
+        <Style.Resources>
+            <SolidColorBrush x:Key="DataGridCellFocusVisualPrimaryBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="DataGridCellFocusVisualSecondaryBrush" Color="Transparent" />
+        </Style.Resources>
+    </Style>
 </Styles>
