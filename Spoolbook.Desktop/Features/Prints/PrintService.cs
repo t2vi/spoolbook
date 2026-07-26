@@ -13,6 +13,7 @@ public class PrintInput
     public decimal? ActualRoomTempC { get; set; }
     public bool? CleanBuildPlate { get; set; }
     public int? ProjectId { get; set; }
+    public string? ProjectPlaterId { get; set; }
 }
 
 public class PrintResult
@@ -60,6 +61,7 @@ public class PrintService
             SpoolId = spoolId,
             PrinterId = printerId,
             ProjectId = input.ProjectId,
+            ProjectPlaterId = input.ProjectPlaterId,
             StartedAt = input.StartedAt,
             EndedAt = input.EndedAt,
             Status = input.Status,
@@ -87,6 +89,7 @@ public class PrintService
 
         print.PrinterId = printerId;
         print.ProjectId = input.ProjectId;
+        print.ProjectPlaterId = input.ProjectPlaterId;
         print.StartedAt = input.StartedAt;
         print.EndedAt = input.EndedAt;
         print.Status = input.Status;

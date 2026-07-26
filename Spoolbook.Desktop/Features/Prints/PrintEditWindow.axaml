@@ -4,83 +4,133 @@
         xmlns:models="using:Spoolbook.Desktop.Features.Profiles"
         xmlns:models2="using:Spoolbook.Desktop.Features.Settings.Printers"
         xmlns:conv="using:Avalonia.Data.Converters"
+        xmlns:local="using:Spoolbook.Desktop.Converters"
         x:Class="Spoolbook.Desktop.Features.Prints.PrintEditWindow"
         x:DataType="vm:PrintEditViewModel"
         Title="{Binding PageTitle}"
-        Width="480" SizeToContent="Height"
+        Width="900" Height="760" MaxHeight="900"
         Background="#26292C"
         WindowStartupLocation="CenterOwner"
-        CanResize="False">
-    <StackPanel Margin="16" Spacing="8">
-        <TextBlock Text="{Binding PageTitle}" FontSize="20" FontWeight="Bold" Margin="0,0,0,8"/>
+        CanResize="True">
+    <Grid RowDefinitions="*,Auto">
+    <ScrollViewer Grid.Row="0">
+    <Grid Margin="16" RowDefinitions="Auto,Auto" ColumnDefinitions="420,440">
+        <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Text="{Binding PageTitle}" FontSize="20" FontWeight="Bold" Margin="0,0,0,8"/>
 
-        <TextBlock Text="Spool"/>
-        <ComboBox ItemsSource="{Binding SpoolOptions}" SelectedItem="{Binding SelectedSpool}" HorizontalAlignment="Stretch"/>
+        <StackPanel Grid.Row="1" Grid.Column="0" Spacing="8">
+            <TextBlock Text="Spool"/>
+            <Border BorderBrush="{Binding SpoolInvalid, Converter={x:Static local:BoolToRedBorderConverter.Instance}}" BorderThickness="2" CornerRadius="4">
+                <ComboBox ItemsSource="{Binding SpoolOptions}" SelectedItem="{Binding SelectedSpool}" HorizontalAlignment="Stretch"/>
+            </Border>
 
-        <TextBlock Text="Profile"/>
-        <ComboBox ItemsSource="{Binding ProfileOptions}" SelectedItem="{Binding SelectedProfile}" HorizontalAlignment="Stretch">
-            <ComboBox.ItemTemplate>
-                <DataTemplate x:DataType="models:PrintProfile">
-                    <TextBlock Text="{Binding Name}"/>
-                </DataTemplate>
-            </ComboBox.ItemTemplate>
-        </ComboBox>
+            <TextBlock Text="Profile"/>
+            <Border BorderBrush="{Binding ProfileInvalid, Converter={x:Static local:BoolToRedBorderConverter.Instance}}" BorderThickness="2" CornerRadius="4">
+                <ComboBox ItemsSource="{Binding ProfileOptions}" SelectedItem="{Binding SelectedProfile}" HorizontalAlignment="Stretch">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="models:PrintProfile">
+                            <TextBlock Text="{Binding Name}"/>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+            </Border>
 
-        <TextBlock Text="Printer"/>
-        <ComboBox ItemsSource="{Binding PrinterOptions}" SelectedItem="{Binding SelectedPrinter}" HorizontalAlignment="Stretch">
-            <ComboBox.ItemTemplate>
-                <DataTemplate x:DataType="models2:Printer">
-                    <TextBlock Text="{Binding Name}"/>
-                </DataTemplate>
-            </ComboBox.ItemTemplate>
-        </ComboBox>
+            <TextBlock Text="Printer"/>
+            <Border BorderBrush="{Binding PrinterInvalid, Converter={x:Static local:BoolToRedBorderConverter.Instance}}" BorderThickness="2" CornerRadius="4">
+                <ComboBox ItemsSource="{Binding PrinterOptions}" SelectedItem="{Binding SelectedPrinter}" HorizontalAlignment="Stretch">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="models2:Printer">
+                            <TextBlock Text="{Binding Name}"/>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+            </Border>
 
-        <TextBlock Text="Project (.3mf)"/>
-        <StackPanel Orientation="Horizontal" Spacing="8">
-            <ComboBox ItemsSource="{Binding ProjectOptions}" SelectedItem="{Binding SelectedProject}" HorizontalAlignment="Stretch" Width="360">
-                <ComboBox.ItemTemplate>
-                    <DataTemplate x:DataType="vm:Project">
-                        <TextBlock Text="{Binding FileName}"/>
-                    </DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
-            <Button Content="Browse..." Click="OnBrowseProjectClick"/>
+            <TextBlock Text="Project (.3mf)"/>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <ComboBox ItemsSource="{Binding ProjectOptions}" SelectedItem="{Binding SelectedProject}" HorizontalAlignment="Stretch" Width="300">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:Project">
+                            <TextBlock Text="{Binding FileName}"/>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <Button Content="Browse..." Click="OnBrowseProjectClick"/>
+            </StackPanel>
+            <TextBlock Text="{Binding ProjectStatusText}" Foreground="Orange" IsVisible="{Binding ProjectStatusText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
+
+            <TextBlock Text="Started"/>
+            <Border BorderBrush="{Binding StartedInvalid, Converter={x:Static local:BoolToRedBorderConverter.Instance}}" BorderThickness="2" CornerRadius="4" Padding="2">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <CalendarDatePicker SelectedDate="{Binding StartedDate}"/>
+                    <TimePicker SelectedTime="{Binding StartedTime}" Width="195"/>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="Ended"/>
+            <Border BorderBrush="{Binding EndedInvalid, Converter={x:Static local:BoolToRedBorderConverter.Instance}}" BorderThickness="2" CornerRadius="4" Padding="2">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <CalendarDatePicker SelectedDate="{Binding EndedDate}"/>
+                    <TimePicker SelectedTime="{Binding EndedTime}" Width="195"/>
+                </StackPanel>
+            </Border>
+
+            <Grid ColumnDefinitions="*,*,*">
+                <StackPanel Grid.Column="0" Spacing="8" Margin="0,0,4,0">
+                    <TextBlock Text="Result"/>
+                    <ComboBox ItemsSource="{Binding StatusOptions}" SelectedItem="{Binding Status}" HorizontalAlignment="Stretch"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="8" Margin="4,0,4,0">
+                    <TextBlock Text="AMS humidity (%)"/>
+                    <NumericUpDown Value="{Binding AmsHumidityPct}" Minimum="0" Maximum="100" Increment="1" FormatString="0" PlaceholderText="e.g. 15"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2" Spacing="8" Margin="4,0,0,0">
+                    <TextBlock Text="Room temp (°C)"/>
+                    <NumericUpDown Value="{Binding ActualRoomTempC}" Increment="0.5" FormatString="0.#" ClipValueToMinMax="False" PlaceholderText="e.g. 19.5"/>
+                </StackPanel>
+            </Grid>
+
+            <CheckBox Content="Clean build plate" IsThreeState="True" IsChecked="{Binding CleanBuildPlate}"/>
+
+            <TextBlock Text="Notes"/>
+            <TextBox Text="{Binding Notes}" AcceptsReturn="True" Height="80" TextWrapping="Wrap"
+                     PlaceholderText="What happened, and anything unusual (room conditions, etc.)"/>
+
+            <TextBlock Text="{Binding ErrorMessage}" Foreground="Red" IsVisible="{Binding ErrorMessage, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
         </StackPanel>
-        <TextBlock Text="{Binding ProjectStatusText}" Foreground="Orange" IsVisible="{Binding ProjectStatusText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
 
-        <TextBlock Text="Started"/>
-        <StackPanel Orientation="Horizontal" Spacing="8">
-            <DatePicker SelectedDate="{Binding StartedDate}"/>
-            <TimePicker SelectedTime="{Binding StartedTime}"/>
+        <StackPanel Grid.Row="1" Grid.Column="1" Width="440" Spacing="8" Margin="16,0,0,0" ClipToBounds="True"
+                    IsVisible="{Binding SelectedProject, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
+            <TextBlock Text="Plate"/>
+
+            <TextBlock Text="Loading plates..." Foreground="Gray" IsVisible="{Binding IsLoadingPlates}"/>
+
+            <Border HorizontalAlignment="Stretch" Height="320" CornerRadius="4" ClipToBounds="True" Background="#1A1D20"
+                    IsVisible="{Binding IsLoadingPlates, Converter={x:Static conv:BoolConverters.Not}}">
+                <Grid>
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4"
+                                IsVisible="{Binding SelectedPlate.ThumbnailBytes, Converter={x:Static conv:ObjectConverters.IsNull}}">
+                        <TextBlock Text="🖼" FontSize="40" HorizontalAlignment="Center" Foreground="#555"/>
+                        <TextBlock Text="No plate preview" Foreground="#555" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                    <Image Source="{Binding SelectedPlate.ThumbnailBytes, Converter={x:Static local:BytesToBitmapConverter.Instance}}" Stretch="Uniform"
+                           IsVisible="{Binding SelectedPlate.ThumbnailBytes, Converter={x:Static conv:ObjectConverters.IsNotNull}}"/>
+                </Grid>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center"
+                        IsVisible="{Binding HasMultiplePlates}">
+                <Button Content="&lt;" Command="{Binding PreviousPlateCommand}" Width="40"/>
+                <TextBlock Text="{Binding PlateIndexText}" VerticalAlignment="Center"/>
+                <Button Content="&gt;" Command="{Binding NextPlateCommand}" Width="40"/>
+            </StackPanel>
         </StackPanel>
+    </Grid>
+    </ScrollViewer>
 
-        <TextBlock Text="Ended"/>
-        <StackPanel Orientation="Horizontal" Spacing="8">
-            <DatePicker SelectedDate="{Binding EndedDate}"/>
-            <TimePicker SelectedTime="{Binding EndedTime}"/>
-        </StackPanel>
-
-        <TextBlock Text="Result"/>
-        <ComboBox ItemsSource="{Binding StatusOptions}" SelectedItem="{Binding Status}" HorizontalAlignment="Stretch"/>
-
-        <TextBlock Text="AMS humidity (%)"/>
-        <NumericUpDown Value="{Binding AmsHumidityPct}" Minimum="0" Maximum="100" Increment="1" FormatString="0" PlaceholderText="e.g. 15"/>
-
-        <TextBlock Text="Actual room temp (°C)"/>
-        <NumericUpDown Value="{Binding ActualRoomTempC}" Increment="0.5" FormatString="0.#" ClipValueToMinMax="False" PlaceholderText="e.g. 19.5, from a thermometer"/>
-
-        <CheckBox Content="Clean build plate" IsThreeState="True" IsChecked="{Binding CleanBuildPlate}"/>
-
-        <TextBlock Text="Notes"/>
-        <TextBox Text="{Binding Notes}" AcceptsReturn="True" Height="80" TextWrapping="Wrap"
-                 PlaceholderText="What happened, and anything unusual (room conditions, etc.)"/>
-
-        <TextBlock Text="{Binding ErrorMessage}" Foreground="Red" IsVisible="{Binding ErrorMessage, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
-
-        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,12,0,0">
-            <Button Content="Delete" Command="{Binding DeleteCommand}" IsVisible="{Binding IsEdit}"/>
-            <Button Content="Cancel" Command="{Binding CancelCommand}"/>
-            <Button Content="Save" Command="{Binding SaveCommand}"/>
-        </StackPanel>
+    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="16,8,16,16">
+        <Button Content="Delete" Command="{Binding DeleteCommand}" IsVisible="{Binding IsEdit}"/>
+        <Button Content="Cancel" Command="{Binding CancelCommand}"/>
+        <Button Content="Save" Command="{Binding SaveCommand}" IsEnabled="{Binding IsLoadingPlates, Converter={x:Static conv:BoolConverters.Not}}"/>
     </StackPanel>
+    </Grid>
 </Window>

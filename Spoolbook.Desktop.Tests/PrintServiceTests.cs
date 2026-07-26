@@ -212,4 +212,43 @@ public class PrintServiceTests
         Assert.True(result.Ok);
         Assert.Empty(await service.ListAsync());
     }
+
+    [Fact]
+    public async Task CreateAsync_StoresProjectPlaterId()
+    {
+        using var db = TestDbFactory.Create();
+        var (profileId, spoolId, printerId) = await SeedAsync(db);
+        var service = new PrintService(db, new FakeWeatherService());
+
+        var result = await service.CreateAsync(profileId, spoolId, printerId, new PrintInput
+        {
+            StartedAt = new DateTime(2026, 1, 1, 8, 0, 0),
+            EndedAt = new DateTime(2026, 1, 1, 10, 0, 0),
+            Status = PrintStatus.Success,
+            ProjectPlaterId = "2"
+        });
+
+        Assert.Equal("2", result.Print!.ProjectPlaterId);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_UpdatesProjectPlaterId()
+    {
+        using var db = TestDbFactory.Create();
+        var (profileId, spoolId, printerId) = await SeedAsync(db);
+        var service = new PrintService(db, new FakeWeatherService());
+        var created = await service.CreateAsync(profileId, spoolId, printerId, new PrintInput
+        {
+            StartedAt = new DateTime(2026, 1, 1, 8, 0, 0), EndedAt = new DateTime(2026, 1, 1, 10, 0, 0), Status = PrintStatus.Success,
+            ProjectPlaterId = "1"
+        });
+
+        var result = await service.UpdateAsync(created.Print!.Id, printerId, new PrintInput
+        {
+            StartedAt = new DateTime(2026, 1, 1, 8, 0, 0), EndedAt = new DateTime(2026, 1, 1, 10, 0, 0), Status = PrintStatus.Success,
+            ProjectPlaterId = "3"
+        });
+
+        Assert.Equal("3", result.Print!.ProjectPlaterId);
+    }
 }

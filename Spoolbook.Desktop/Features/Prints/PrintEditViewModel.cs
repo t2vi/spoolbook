@@ -45,13 +45,28 @@ public partial class PrintEditViewModel : EditViewModelBase
     private string? projectStatusText;
 
     [ObservableProperty]
-    private DateTimeOffset? startedDate;
+    private ObservableCollection<ProjectPlate> plateOptions = new();
+
+    [ObservableProperty]
+    private ProjectPlate? selectedPlate;
+
+    [ObservableProperty]
+    private bool isLoadingPlates;
+
+    public bool HasMultiplePlates => PlateOptions.Count > 1;
+    public string PlateIndexText => SelectedPlate is null ? "" : $"{PlateOptions.IndexOf(SelectedPlate) + 1} / {PlateOptions.Count}";
+
+    private string? _preselectPlaterId;
+    private Task _plateLoadTask = Task.CompletedTask;
+
+    [ObservableProperty]
+    private DateTime? startedDate;
 
     [ObservableProperty]
     private TimeSpan? startedTime;
 
     [ObservableProperty]
-    private DateTimeOffset? endedDate;
+    private DateTime? endedDate;
 
     [ObservableProperty]
     private TimeSpan? endedTime;
@@ -74,6 +89,21 @@ public partial class PrintEditViewModel : EditViewModelBase
     [ObservableProperty]
     private string? errorMessage;
 
+    [ObservableProperty]
+    private bool spoolInvalid;
+
+    [ObservableProperty]
+    private bool profileInvalid;
+
+    [ObservableProperty]
+    private bool printerInvalid;
+
+    [ObservableProperty]
+    private bool startedInvalid;
+
+    [ObservableProperty]
+    private bool endedInvalid;
+
     public static PrintStatus[] StatusOptions { get; } = Enum.GetValues<PrintStatus>();
 
     public bool IsEdit { get; }
@@ -93,15 +123,16 @@ public partial class PrintEditViewModel : EditViewModelBase
             _id = existing.Id;
             IsEdit = true;
             SelectedSpool = existing.Spool;
-            StartedDate = new DateTimeOffset(existing.StartedAt.Date, TimeSpan.Zero);
+            StartedDate = existing.StartedAt.Date;
             StartedTime = existing.StartedAt.TimeOfDay;
-            EndedDate = new DateTimeOffset(existing.EndedAt.Date, TimeSpan.Zero);
+            EndedDate = existing.EndedAt.Date;
             EndedTime = existing.EndedAt.TimeOfDay;
             Status = existing.Status;
             Notes = existing.Notes;
             AmsHumidityPct = existing.AmsHumidityPct;
             ActualRoomTempC = existing.ActualRoomTempC;
             CleanBuildPlate = existing.CleanBuildPlate;
+            _preselectPlaterId = existing.ProjectPlaterId;
         }
 
         _ = InitializeOptionsAsync(existing);
@@ -116,6 +147,7 @@ public partial class PrintEditViewModel : EditViewModelBase
             LoadSpoolOptionsAsync(existing?.Profile),
             LoadPrinterOptionsAsync(existing?.Printer),
             LoadProjectOptionsAsync(existing?.Project));
+        await _plateLoadTask;
         Loaded = true;
     }
 
@@ -136,22 +168,116 @@ public partial class PrintEditViewModel : EditViewModelBase
 
     partial void OnSelectedSpoolChanged(Spool? value)
     {
-        if (value is not null) _ = LoadProfileOptionsAsync(value.FilamentId, null);
+        if (value is not null)
+        {
+            SpoolInvalid = false;
+            _ = LoadProfileOptionsAsync(value.FilamentId, null);
+        }
         MarkDirty();
     }
 
     partial void OnSelectedProjectChanged(Project? value)
     {
         ProjectStatusText = value is null ? null : DescribeStatus(ProjectService.GetFileStatus(value));
+        _plateLoadTask = LoadPlatesAsync(value);
         MarkDirty();
     }
 
-    partial void OnSelectedProfileChanged(PrintProfile? value) => MarkDirty();
-    partial void OnSelectedPrinterChanged(Printer? value) => MarkDirty();
-    partial void OnStartedDateChanged(DateTimeOffset? value) => MarkDirty();
-    partial void OnStartedTimeChanged(TimeSpan? value) => MarkDirty();
-    partial void OnEndedDateChanged(DateTimeOffset? value) => MarkDirty();
-    partial void OnEndedTimeChanged(TimeSpan? value) => MarkDirty();
+    partial void OnSelectedPlateChanged(ProjectPlate? value)
+    {
+        OnPropertyChanged(nameof(PlateIndexText));
+        PreviousPlateCommand.NotifyCanExecuteChanged();
+        NextPlateCommand.NotifyCanExecuteChanged();
+        MarkDirty();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanGoPreviousPlate))]
+    private void PreviousPlate()
+    {
+        var index = SelectedPlate is null ? -1 : PlateOptions.IndexOf(SelectedPlate);
+        if (index > 0) SelectedPlate = PlateOptions[index - 1];
+    }
+
+    private bool CanGoPreviousPlate() => SelectedPlate is not null && PlateOptions.IndexOf(SelectedPlate) > 0;
+
+    [RelayCommand(CanExecute = nameof(CanGoNextPlate))]
+    private void NextPlate()
+    {
+        var index = SelectedPlate is null ? -1 : PlateOptions.IndexOf(SelectedPlate);
+        if (index >= 0 && index < PlateOptions.Count - 1) SelectedPlate = PlateOptions[index + 1];
+    }
+
+    private bool CanGoNextPlate() => SelectedPlate is not null && PlateOptions.IndexOf(SelectedPlate) < PlateOptions.Count - 1;
+
+    private async Task LoadPlatesAsync(Project? project)
+    {
+        if (project is null || ProjectService.GetFileStatus(project) == ProjectFileStatus.Missing)
+        {
+            PlateOptions = new ObservableCollection<ProjectPlate>();
+            SelectedPlate = null;
+            return;
+        }
+
+        IsLoadingPlates = true;
+        List<ProjectPlate> plates;
+        try
+        {
+            plates = await Task.Run(() => ProjectService.ReadPlates(project.FilePath));
+        }
+        catch (Exception)
+        {
+            plates = [];
+        }
+        finally
+        {
+            IsLoadingPlates = false;
+        }
+
+        PlateOptions = new ObservableCollection<ProjectPlate>(plates);
+        OnPropertyChanged(nameof(HasMultiplePlates));
+
+        var preselectId = _preselectPlaterId;
+        _preselectPlaterId = null;
+        SelectedPlate = preselectId is not null
+            ? PlateOptions.FirstOrDefault(p => p.PlaterId == preselectId)
+            : PlateOptions.FirstOrDefault();
+    }
+
+    partial void OnSelectedProfileChanged(PrintProfile? value)
+    {
+        if (value is not null) ProfileInvalid = false;
+        MarkDirty();
+    }
+
+    partial void OnSelectedPrinterChanged(Printer? value)
+    {
+        if (value is not null) PrinterInvalid = false;
+        MarkDirty();
+    }
+
+    partial void OnStartedDateChanged(DateTime? value)
+    {
+        if (value is not null && StartedTime is not null) StartedInvalid = false;
+        MarkDirty();
+    }
+
+    partial void OnStartedTimeChanged(TimeSpan? value)
+    {
+        if (StartedDate is not null && value is not null) StartedInvalid = false;
+        MarkDirty();
+    }
+
+    partial void OnEndedDateChanged(DateTime? value)
+    {
+        if (value is not null && EndedTime is not null) EndedInvalid = false;
+        MarkDirty();
+    }
+
+    partial void OnEndedTimeChanged(TimeSpan? value)
+    {
+        if (EndedDate is not null && value is not null) EndedInvalid = false;
+        MarkDirty();
+    }
     partial void OnStatusChanged(PrintStatus value) => MarkDirty();
     partial void OnNotesChanged(string? value) => MarkDirty();
     partial void OnAmsHumidityPctChanged(decimal? value) => MarkDirty();
@@ -203,6 +329,18 @@ public partial class PrintEditViewModel : EditViewModelBase
     [RelayCommand]
     private async Task SaveAsync()
     {
+        if (IsLoadingPlates)
+        {
+            ErrorMessage = "Still loading plate thumbnails — wait for that to finish.";
+            return;
+        }
+
+        SpoolInvalid = SelectedSpool is null;
+        ProfileInvalid = SelectedProfile is null;
+        PrinterInvalid = SelectedPrinter is null;
+        StartedInvalid = StartedDate is null || StartedTime is null;
+        EndedInvalid = EndedDate is null || EndedTime is null;
+
         if (SelectedSpool is null)
         {
             ErrorMessage = "Pick a spool.";
@@ -233,7 +371,8 @@ public partial class PrintEditViewModel : EditViewModelBase
             AmsHumidityPct = AmsHumidityPct.HasValue ? (int)Math.Round(AmsHumidityPct.Value) : null,
             ActualRoomTempC = ActualRoomTempC,
             CleanBuildPlate = CleanBuildPlate,
-            ProjectId = SelectedProject?.Id
+            ProjectId = SelectedProject?.Id,
+            ProjectPlaterId = SelectedProject is not null ? SelectedPlate?.PlaterId : null
         };
 
         var result = _id.HasValue
