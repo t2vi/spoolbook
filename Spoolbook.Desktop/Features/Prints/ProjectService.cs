@@ -1,8 +1,17 @@
+using System.IO.Compression;
+using System.Xml.Linq;
 using Microsoft.EntityFrameworkCore;
 using Spoolbook.Desktop.Data;
 namespace Spoolbook.Desktop.Features.Prints;
 
 public enum ProjectFileStatus { Ok, Missing, Changed }
+
+public class ProjectPlate
+{
+    public required string PlaterId { get; init; }
+    public string? PlaterName { get; init; }
+    public byte[]? ThumbnailBytes { get; init; }
+}
 
 public class ProjectResult
 {
@@ -66,5 +75,48 @@ public class ProjectService
         return info.LastWriteTimeUtc == project.LastKnownWriteTimeUtc && info.Length == project.LastKnownFileSizeBytes
             ? ProjectFileStatus.Ok
             : ProjectFileStatus.Changed;
+    }
+
+    // Reads plates fresh from the .3mf zip on every call — no cached copy, matching the
+    // stat-based (not content-hashed) drift detection above (ADR-0015/0016).
+    public static List<ProjectPlate> ReadPlates(string filePath)
+    {
+        using var archive = ZipFile.OpenRead(filePath);
+        var configEntry = archive.GetEntry("Metadata/model_settings.config");
+        if (configEntry is null) return [];
+
+        using var configStream = configEntry.Open();
+        var doc = XDocument.Load(configStream);
+
+        var plates = new List<ProjectPlate>();
+        foreach (var plateEl in doc.Root?.Elements("plate") ?? [])
+        {
+            string? Meta(string key) => plateEl.Elements("metadata")
+                .FirstOrDefault(m => (string?)m.Attribute("key") == key)?.Attribute("value")?.Value;
+
+            var platerId = Meta("plater_id");
+            if (platerId is null) continue;
+
+            byte[]? thumbnailBytes = null;
+            var thumbnailFile = Meta("thumbnail_file");
+            var thumbnailEntry = thumbnailFile is not null ? archive.GetEntry(thumbnailFile) : null;
+            if (thumbnailEntry is not null)
+            {
+                using var thumbnailStream = thumbnailEntry.Open();
+                using var ms = new MemoryStream();
+                thumbnailStream.CopyTo(ms);
+                thumbnailBytes = ms.ToArray();
+            }
+
+            var platerName = Meta("plater_name");
+            plates.Add(new ProjectPlate
+            {
+                PlaterId = platerId,
+                PlaterName = string.IsNullOrEmpty(platerName) ? null : platerName,
+                ThumbnailBytes = thumbnailBytes
+            });
+        }
+
+        return plates;
     }
 }

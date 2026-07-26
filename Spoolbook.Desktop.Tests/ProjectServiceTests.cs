@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using Spoolbook.Desktop.Data;
 using Spoolbook.Desktop.Features.Prints;
 using Spoolbook.Desktop.Features.Settings.Filaments;
@@ -172,6 +173,91 @@ public class ProjectServiceTests
         };
 
         Assert.Equal(ProjectFileStatus.Changed, ProjectService.GetFileStatus(project));
+        File.Delete(path);
+    }
+
+    private static string CreateTemp3mf(params (string PlaterId, string? PlaterName, bool HasThumbnail)[] plates)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"spoolbook-test-{Guid.NewGuid():N}.3mf");
+        using (var archive = ZipFile.Open(path, ZipArchiveMode.Create))
+        {
+            var config = new System.Text.StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<config>\n");
+            foreach (var plate in plates)
+            {
+                config.Append("  <plate>\n");
+                config.Append($"    <metadata key=\"plater_id\" value=\"{plate.PlaterId}\"/>\n");
+                config.Append($"    <metadata key=\"plater_name\" value=\"{plate.PlaterName}\"/>\n");
+                if (plate.HasThumbnail)
+                    config.Append($"    <metadata key=\"thumbnail_file\" value=\"Metadata/plate_{plate.PlaterId}.png\"/>\n");
+                config.Append("  </plate>\n");
+            }
+            config.Append("</config>\n");
+
+            var configEntry = archive.CreateEntry("Metadata/model_settings.config");
+            using (var writer = new StreamWriter(configEntry.Open()))
+                writer.Write(config.ToString());
+
+            foreach (var plate in plates.Where(p => p.HasThumbnail))
+            {
+                var thumbEntry = archive.CreateEntry($"Metadata/plate_{plate.PlaterId}.png");
+                using var thumbStream = thumbEntry.Open();
+                thumbStream.Write([1, 2, 3, 4]);
+            }
+        }
+        return path;
+    }
+
+    [Fact]
+    public void ReadPlates_ParsesSinglePlateWithThumbnail()
+    {
+        var path = CreateTemp3mf(("1", "", true));
+
+        var plates = ProjectService.ReadPlates(path);
+
+        Assert.Single(plates);
+        Assert.Equal("1", plates[0].PlaterId);
+        Assert.Null(plates[0].PlaterName);
+        Assert.Equal(new byte[] { 1, 2, 3, 4 }, plates[0].ThumbnailBytes);
+        File.Delete(path);
+    }
+
+    [Fact]
+    public void ReadPlates_ParsesMultiplePlatesInOrder()
+    {
+        var path = CreateTemp3mf(("1", "Front", true), ("2", "Back", true));
+
+        var plates = ProjectService.ReadPlates(path);
+
+        Assert.Equal(2, plates.Count);
+        Assert.Equal("1", plates[0].PlaterId);
+        Assert.Equal("Front", plates[0].PlaterName);
+        Assert.Equal("2", plates[1].PlaterId);
+        Assert.Equal("Back", plates[1].PlaterName);
+        File.Delete(path);
+    }
+
+    [Fact]
+    public void ReadPlates_MissingThumbnailFile_ReturnsNullBytes()
+    {
+        var path = CreateTemp3mf(("1", "Only", false));
+
+        var plates = ProjectService.ReadPlates(path);
+
+        Assert.Single(plates);
+        Assert.Null(plates[0].ThumbnailBytes);
+        File.Delete(path);
+    }
+
+    [Fact]
+    public void ReadPlates_NoModelSettingsConfig_ReturnsEmpty()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"spoolbook-test-{Guid.NewGuid():N}.3mf");
+        using (var archive = ZipFile.Open(path, ZipArchiveMode.Create))
+            archive.CreateEntry("Metadata/placeholder.txt");
+
+        var plates = ProjectService.ReadPlates(path);
+
+        Assert.Empty(plates);
         File.Delete(path);
     }
 }

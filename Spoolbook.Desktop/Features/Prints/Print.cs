@@ -17,6 +17,7 @@ public class Print
     public Printer? Printer { get; set; }
     public int? ProjectId { get; set; }
     public Project? Project { get; set; }
+    public string? ProjectPlaterId { get; set; }
     public DateTime StartedAt { get; set; }
     public DateTime EndedAt { get; set; }
     public PrintStatus Status { get; set; }

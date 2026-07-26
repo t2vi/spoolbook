@@ -64,7 +64,7 @@
                 </DataGridTextColumn>
                 <DataGridTextColumn Header="Ambient" Width="Auto">
                     <DataGridTextColumn.Binding>
-                        <MultiBinding StringFormat="{}{0}°C / {1}%">
+                        <MultiBinding StringFormat="{}{0:0.#}°C / {1:0.#}%">
                             <Binding Path="AmbientTempC"/>
                             <Binding Path="AmbientHumidityPct"/>
                         </MultiBinding>
