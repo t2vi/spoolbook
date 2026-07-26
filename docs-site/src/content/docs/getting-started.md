@@ -24,4 +24,6 @@ catalog and begins syncing fresh data automatically in the background (throttled
 3. Go to **Profiles**, create a Print Profile for it, or import one directly from Bambu Studio.
 4. After a print, log it under **Prints** — the exact settings from the Profile version you used
    are locked in permanently, so editing the Profile later (e.g. a seasonal temperature tweak)
-   never rewrites what a past print recorded.
+   never rewrites what a past print recorded. Optionally attach the `.3mf` project file you sliced
+   — spoolbook reads the plate thumbnail straight out of it, and if the file has more than one
+   build-plate layout you can pick which one this Print corresponds to.
