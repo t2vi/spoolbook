@@ -111,6 +111,13 @@
             <TextBox Text="{Binding Notes}" AcceptsReturn="True" Height="80" TextWrapping="Wrap"
                      PlaceholderText="What happened, and anything unusual (room conditions, etc.)"/>
 
+            <Border IsVisible="{Binding ShowJobMatchChip}" Background="#2E4E1E" CornerRadius="4" Padding="8">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{Binding MatchedJobLabel}" TextWrapping="Wrap" VerticalAlignment="Center" Width="280"/>
+                    <Button Content="Dismiss" Command="{Binding DismissJobMatchCommand}"/>
+                </StackPanel>
+            </Border>
+
             <TextBlock Text="{Binding ErrorMessage}" Foreground="Red" IsVisible="{Binding ErrorMessage, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
         </StackPanel>
 
