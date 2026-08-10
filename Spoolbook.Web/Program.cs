@@ -32,6 +32,7 @@ builder.Services.AddScoped<SpoolService>();
 builder.Services.AddScoped<PrintProfileService>();
 builder.Services.AddScoped<ProfileInventoryService>();
 builder.Services.AddScoped<PrintService>();
+builder.Services.AddScoped<PrintInventoryService>();
 builder.Services.AddScoped<PrinterService>();
 builder.Services.AddScoped<PrinterTelemetryService>();
 builder.Services.AddScoped<ProjectService>();

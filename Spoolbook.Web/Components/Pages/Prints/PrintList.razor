@@ -1,0 +1,122 @@
+@page "/prints"
+@using Microsoft.AspNetCore.Components.Authorization
+@using Spoolbook.Desktop.Features.Prints
+@inject PrintInventoryService InventoryService
+@inject PrintService PrintService
+@inject NavigationManager Nav
+
+<PageTitle>Prints</PageTitle>
+
+<h1>Prints</h1>
+
+<AuthorizeView>
+    <Authorized><a href="/prints/new">+ Log a print</a></Authorized>
+    <NotAuthorized><a href="@LoginUrl">Sign in to edit</a></NotAuthorized>
+</AuthorizeView>
+
+<div style="display:flex; gap:8px; margin:12px 0;">
+    <select @bind="statusFilter" @bind:after="ApplyFiltersAsync">
+        <option value="">All statuses</option>
+        @foreach (var s in Enum.GetValues<PrintStatus>())
+        {
+            <option value="@s">@s</option>
+        }
+    </select>
+</div>
+
+@if (result is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr><th>Started</th><th>Filament</th><th>Profile</th><th>Printer</th><th>Status</th><th></th></tr>
+        </thead>
+        <tbody>
+            @foreach (var p in result.Prints)
+            {
+                <tr>
+                    <td>@p.StartedAt.ToLocalTime().ToString("g")</td>
+                    <td>@p.Spool?.Filament?.Brand @p.Spool?.Filament?.Material — @p.Spool?.Filament?.Color</td>
+                    <td>@p.Profile?.Name</td>
+                    <td>@p.Printer?.Name</td>
+                    <td>@p.Status</td>
+                    <td>
+                        <AuthorizeView>
+                            <Authorized>
+                                <a href="@($"/prints/edit/{p.Id}")">Edit</a>
+                                &nbsp;
+                                <button @onclick="@(() => DeleteAsync(p.Id))">Delete</button>
+                            </Authorized>
+                        </AuthorizeView>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <p>Page @result.Page of @result.TotalPages (@result.Total total)</p>
+    <button disabled="@(page <= 1)" @onclick="@(() => ChangePageAsync(page - 1))">Previous</button>
+    <button disabled="@(page >= result.TotalPages)" @onclick="@(() => ChangePageAsync(page + 1))">Next</button>
+}
+
+@if (errorMessage is not null)
+{
+    <p style="color:red">@errorMessage</p>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private PrintInventoryResult? result;
+    private string statusFilter = "";
+    private int page = 1;
+    private string? errorMessage;
+    private string LoginUrl => $"/login?returnUrl={Uri.EscapeDataString(Nav.ToBaseRelativePath(Nav.Uri))}";
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        result = await InventoryService.ListAsync(new PrintInventoryQuery
+        {
+            Status = string.IsNullOrEmpty(statusFilter) ? null : Enum.Parse<PrintStatus>(statusFilter),
+            Page = page,
+            PageSize = 20
+        });
+    }
+
+    private Task ApplyFiltersAsync()
+    {
+        page = 1;
+        return LoadAsync();
+    }
+
+    private Task ChangePageAsync(int newPage)
+    {
+        page = newPage;
+        return LoadAsync();
+    }
+
+    private async Task DeleteAsync(int id)
+    {
+        var authState = AuthStateTask is not null ? await AuthStateTask : null;
+        if (authState?.User.Identity?.IsAuthenticated != true)
+        {
+            errorMessage = "Sign in to delete.";
+            return;
+        }
+
+        var deleteResult = await PrintService.DeleteAsync(id);
+        if (!deleteResult.Ok)
+        {
+            errorMessage = deleteResult.Error;
+            return;
+        }
+        errorMessage = null;
+        await LoadAsync();
+    }
+}
