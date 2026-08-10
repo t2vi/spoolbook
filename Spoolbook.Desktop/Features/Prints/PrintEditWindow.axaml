@@ -89,6 +89,22 @@
                 </StackPanel>
             </Grid>
 
+            <StackPanel Spacing="4" IsVisible="{Binding ShowFailureModes}">
+                <TextBlock Text="Failure modes"/>
+                <ItemsControl ItemsSource="{Binding FailureModeOptions}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:FailureModeOption">
+                            <CheckBox Content="{Binding Label}" IsChecked="{Binding IsSelected}" Margin="0,0,12,4"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
             <CheckBox Content="Clean build plate" IsThreeState="True" IsChecked="{Binding CleanBuildPlate}"/>
 
             <TextBlock Text="Notes"/>

@@ -15,6 +15,7 @@ public class SpoolbookDbContext : DbContext
     public DbSet<Spool> Spools => Set<Spool>();
     public DbSet<PrintProfile> PrintProfiles => Set<PrintProfile>();
     public DbSet<Print> Prints => Set<Print>();
+    public DbSet<PrintFailureMode> PrintFailureModes => Set<PrintFailureMode>();
     public DbSet<AppSettings> AppSettings => Set<AppSettings>();
     public DbSet<Printer> Printers => Set<Printer>();
     public DbSet<Project> Projects => Set<Project>();
@@ -72,6 +73,12 @@ public class SpoolbookDbContext : DbContext
             .WithMany()
             .HasForeignKey(p => p.ProjectId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<PrintFailureMode>()
+            .HasOne(pfm => pfm.Print)
+            .WithMany(p => p.FailureModes)
+            .HasForeignKey(pfm => pfm.PrintId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 
     private static readonly (string Name, string Hex)[] KnownColors =

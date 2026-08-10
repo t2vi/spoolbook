@@ -14,6 +14,7 @@ public class PrintInput
     public bool? CleanBuildPlate { get; set; }
     public int? ProjectId { get; set; }
     public string? ProjectPlaterId { get; set; }
+    public List<FailureMode> FailureModes { get; set; } = [];
 }
 
 public class PrintResult
@@ -40,6 +41,7 @@ public class PrintService
             .Include(p => p.Spool).ThenInclude(s => s!.Filament)
             .Include(p => p.Printer)
             .Include(p => p.Project)
+            .Include(p => p.FailureModes)
             .OrderByDescending(p => p.StartedAt)
             .ToListAsync();
 
@@ -49,10 +51,14 @@ public class PrintService
             .Include(p => p.Spool).ThenInclude(s => s!.Filament)
             .Include(p => p.Printer)
             .Include(p => p.Project)
+            .Include(p => p.FailureModes)
             .FirstOrDefaultAsync(p => p.Id == id);
 
     public async Task<PrintResult> CreateAsync(int profileId, int spoolId, int printerId, PrintInput input)
     {
+        if (input.FailureModes.Count > 0 && input.Status == PrintStatus.Success)
+            return new PrintResult { Ok = false, Error = "failure_modes_require_failed_or_partial" };
+
         var (tempC, humidityPct) = await _weatherService.GetAmbientAsync(input.StartedAt, input.EndedAt);
 
         var print = new Print
@@ -71,7 +77,8 @@ public class PrintService
             CleanBuildPlate = input.CleanBuildPlate,
             AmbientTempC = tempC,
             AmbientHumidityPct = humidityPct,
-            AmbientSource = tempC is not null ? AmbientSource.WeatherApi : null
+            AmbientSource = tempC is not null ? AmbientSource.WeatherApi : null,
+            FailureModes = input.FailureModes.Distinct().Select(m => new PrintFailureMode { Mode = m }).ToList()
         };
 
         _db.Prints.Add(print);
@@ -82,7 +89,10 @@ public class PrintService
 
     public async Task<PrintResult> UpdateAsync(int id, int printerId, PrintInput input)
     {
-        var print = await _db.Prints.FindAsync(id);
+        if (input.FailureModes.Count > 0 && input.Status == PrintStatus.Success)
+            return new PrintResult { Ok = false, Error = "failure_modes_require_failed_or_partial" };
+
+        var print = await _db.Prints.Include(p => p.FailureModes).FirstOrDefaultAsync(p => p.Id == id);
         if (print is null) throw new InvalidOperationException("Print not found");
 
         var (tempC, humidityPct) = await _weatherService.GetAmbientAsync(input.StartedAt, input.EndedAt);
@@ -100,6 +110,9 @@ public class PrintService
         print.AmbientTempC = tempC;
         print.AmbientHumidityPct = humidityPct;
         print.AmbientSource = tempC is not null ? AmbientSource.WeatherApi : null;
+
+        _db.PrintFailureModes.RemoveRange(print.FailureModes);
+        print.FailureModes = input.FailureModes.Distinct().Select(m => new PrintFailureMode { Mode = m }).ToList();
 
         await _db.SaveChangesAsync();
 

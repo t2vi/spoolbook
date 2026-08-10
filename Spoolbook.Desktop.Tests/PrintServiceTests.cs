@@ -251,4 +251,109 @@ public class PrintServiceTests
 
         Assert.Equal("3", result.Print!.ProjectPlaterId);
     }
+
+    [Fact]
+    public async Task CreateAsync_StoresFailureModesForFailedPrint()
+    {
+        using var db = TestDbFactory.Create();
+        var (profileId, spoolId, printerId) = await SeedAsync(db);
+        var service = new PrintService(db, new FakeWeatherService());
+
+        var result = await service.CreateAsync(profileId, spoolId, printerId, new PrintInput
+        {
+            StartedAt = new DateTime(2026, 1, 1, 8, 0, 0), EndedAt = new DateTime(2026, 1, 1, 10, 0, 0),
+            Status = PrintStatus.Failed,
+            FailureModes = [FailureMode.Stringing, FailureMode.LayerAdhesion]
+        });
+
+        Assert.True(result.Ok);
+        Assert.Equal(2, result.Print!.FailureModes.Count);
+        Assert.Contains(result.Print.FailureModes, f => f.Mode == FailureMode.Stringing);
+        Assert.Contains(result.Print.FailureModes, f => f.Mode == FailureMode.LayerAdhesion);
+    }
+
+    [Fact]
+    public async Task CreateAsync_StoresFailureModesForPartialPrint()
+    {
+        using var db = TestDbFactory.Create();
+        var (profileId, spoolId, printerId) = await SeedAsync(db);
+        var service = new PrintService(db, new FakeWeatherService());
+
+        var result = await service.CreateAsync(profileId, spoolId, printerId, new PrintInput
+        {
+            StartedAt = new DateTime(2026, 1, 1, 8, 0, 0), EndedAt = new DateTime(2026, 1, 1, 10, 0, 0),
+            Status = PrintStatus.Partial,
+            FailureModes = [FailureMode.Warping]
+        });
+
+        Assert.True(result.Ok);
+        Assert.Single(result.Print!.FailureModes);
+    }
+
+    [Fact]
+    public async Task CreateAsync_RejectsFailureModesWhenStatusIsSuccess()
+    {
+        using var db = TestDbFactory.Create();
+        var (profileId, spoolId, printerId) = await SeedAsync(db);
+        var service = new PrintService(db, new FakeWeatherService());
+
+        var result = await service.CreateAsync(profileId, spoolId, printerId, new PrintInput
+        {
+            StartedAt = new DateTime(2026, 1, 1, 8, 0, 0), EndedAt = new DateTime(2026, 1, 1, 10, 0, 0),
+            Status = PrintStatus.Success,
+            FailureModes = [FailureMode.Stringing]
+        });
+
+        Assert.False(result.Ok);
+        Assert.Equal("failure_modes_require_failed_or_partial", result.Error);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ReplacesFailureModes()
+    {
+        using var db = TestDbFactory.Create();
+        var (profileId, spoolId, printerId) = await SeedAsync(db);
+        var service = new PrintService(db, new FakeWeatherService());
+        var created = await service.CreateAsync(profileId, spoolId, printerId, new PrintInput
+        {
+            StartedAt = new DateTime(2026, 1, 1, 8, 0, 0), EndedAt = new DateTime(2026, 1, 1, 10, 0, 0),
+            Status = PrintStatus.Failed,
+            FailureModes = [FailureMode.Stringing]
+        });
+
+        var result = await service.UpdateAsync(created.Print!.Id, printerId, new PrintInput
+        {
+            StartedAt = new DateTime(2026, 1, 1, 8, 0, 0), EndedAt = new DateTime(2026, 1, 1, 10, 0, 0),
+            Status = PrintStatus.Partial,
+            FailureModes = [FailureMode.Warping, FailureMode.Clog]
+        });
+
+        Assert.True(result.Ok);
+        Assert.Equal(2, result.Print!.FailureModes.Count);
+        Assert.DoesNotContain(result.Print.FailureModes, f => f.Mode == FailureMode.Stringing);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_RejectsFailureModesWhenStatusIsSuccess()
+    {
+        using var db = TestDbFactory.Create();
+        var (profileId, spoolId, printerId) = await SeedAsync(db);
+        var service = new PrintService(db, new FakeWeatherService());
+        var created = await service.CreateAsync(profileId, spoolId, printerId, new PrintInput
+        {
+            StartedAt = new DateTime(2026, 1, 1, 8, 0, 0), EndedAt = new DateTime(2026, 1, 1, 10, 0, 0),
+            Status = PrintStatus.Failed,
+            FailureModes = [FailureMode.Stringing]
+        });
+
+        var result = await service.UpdateAsync(created.Print!.Id, printerId, new PrintInput
+        {
+            StartedAt = new DateTime(2026, 1, 1, 8, 0, 0), EndedAt = new DateTime(2026, 1, 1, 10, 0, 0),
+            Status = PrintStatus.Success,
+            FailureModes = [FailureMode.Stringing]
+        });
+
+        Assert.False(result.Ok);
+        Assert.Equal("failure_modes_require_failed_or_partial", result.Error);
+    }
 }

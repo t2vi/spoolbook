@@ -29,4 +29,5 @@ public class Print
     public decimal? ActualRoomTempC { get; set; }
     public bool? CleanBuildPlate { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public List<PrintFailureMode> FailureModes { get; set; } = [];
 }
