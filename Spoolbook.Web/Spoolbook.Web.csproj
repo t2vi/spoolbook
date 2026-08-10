@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Referenced directly rather than extracted into a shared class library — namespaces
+         stay identical either way, so this is the smaller diff. Pulls in Avalonia as a
+         transitive (unused-by-Web) dependency; worth splitting out only once that bloat
+         actually matters, e.g. when Docker image size is a real decision (docs/adr/0018). -->
+    <ProjectReference Include="..\Spoolbook.Desktop\Spoolbook.Desktop.csproj" />
+  </ItemGroup>
+
+</Project>

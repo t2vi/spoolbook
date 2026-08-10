@@ -1,4 +1,5 @@
 <Solution>
   <Project Path="Spoolbook.Desktop.Tests/Spoolbook.Desktop.Tests.csproj" />
   <Project Path="Spoolbook.Desktop/Spoolbook.Desktop.csproj" />
+  <Project Path="Spoolbook.Web/Spoolbook.Web.csproj" />
 </Solution>

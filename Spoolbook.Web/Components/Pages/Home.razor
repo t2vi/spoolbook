@@ -1,0 +1,33 @@
+@page "/"
+@using Spoolbook.Desktop.Features.Settings.Filaments
+@inject FilamentService FilamentService
+
+<PageTitle>Spoolbook</PageTitle>
+
+<h1>Spoolbook</h1>
+
+@* Tracer for docs/adr/0018 — proves the Blazor Server host shares the same DbContext,
+   entities, and SQLite file as the Avalonia desktop app, not a separate data store. *@
+@if (filaments is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <p>@filaments.Count filaments in the catalog (same database the desktop app uses).</p>
+    <ul>
+        @foreach (var f in filaments.Take(20))
+        {
+            <li>@f.Brand @f.Material @f.Variant — @f.Color</li>
+        }
+    </ul>
+}
+
+@code {
+    private List<Filament>? filaments;
+
+    protected override async Task OnInitializedAsync()
+    {
+        filaments = await FilamentService.ListAsync();
+    }
+}
