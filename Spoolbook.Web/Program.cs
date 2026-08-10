@@ -58,6 +58,29 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
     scope.ServiceProvider.GetRequiredService<SpoolbookDbContext>().Database.Migrate();
 
+// Throttled to once/24h via AppSettings.LastFilamentSyncAt, same as the desktop app's
+// App.axaml.cs — silent on failure, the Filaments page's manual sync button surfaces errors
+// for an explicit attempt.
+using (var scope = app.Services.CreateScope())
+{
+    var appSettingsService = scope.ServiceProvider.GetRequiredService<AppSettingsService>();
+    var appSettings = await appSettingsService.GetAsync();
+    if (appSettings.LastFilamentSyncAt is null || DateTime.UtcNow - appSettings.LastFilamentSyncAt.Value > TimeSpan.FromHours(24))
+    {
+        _ = Task.Run(async () =>
+        {
+            using var syncScope = app.Services.CreateScope();
+            var filamentService = syncScope.ServiceProvider.GetRequiredService<FilamentService>();
+            var settingsService = syncScope.ServiceProvider.GetRequiredService<AppSettingsService>();
+            var additionalSources = await settingsService.GetAdditionalFilamentSourceUrlsAsync();
+            var result = await new FilamentCatalogSyncService().FetchAsync(additionalSources);
+            if (!result.Ok) return;
+            await filamentService.ImportManyAsync(result.Entries);
+            await settingsService.RecordFilamentSyncAsync();
+        });
+    }
+}
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
