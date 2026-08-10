@@ -25,3 +25,6 @@ skills-lock.json
 
 # Local .app bundle build output
 dist/
+
+# Tailwind standalone CLI binary (platform-specific, ~40MB — fetch via Spoolbook.Web/build-css.sh)
+Spoolbook.Web/.tailwind/

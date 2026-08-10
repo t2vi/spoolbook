@@ -1,18 +1,21 @@
 ﻿@inherits LayoutComponentBase
 
-<nav style="display:flex; gap:12px; padding:8px 16px; border-bottom:1px solid #444;">
-    <a href="/">Dashboard</a>
-    <a href="/filaments">Filaments</a>
-    <a href="/spools">Spools</a>
-    <a href="/profiles">Profiles</a>
-    <a href="/prints">Prints</a>
-    <a href="/printers">Printers</a>
-    <a href="/recommend">Recommend</a>
-</nav>
+<div class="min-h-screen bg-slate-50">
+    <nav class="flex items-center gap-1 bg-slate-900 px-6 py-3 text-sm font-medium text-slate-200">
+        <span class="mr-4 text-base font-semibold text-white">Spoolbook</span>
+        <a href="/" class="rounded-md px-3 py-1.5 hover:bg-slate-800 hover:text-white">Dashboard</a>
+        <a href="/filaments" class="rounded-md px-3 py-1.5 hover:bg-slate-800 hover:text-white">Filaments</a>
+        <a href="/spools" class="rounded-md px-3 py-1.5 hover:bg-slate-800 hover:text-white">Spools</a>
+        <a href="/profiles" class="rounded-md px-3 py-1.5 hover:bg-slate-800 hover:text-white">Profiles</a>
+        <a href="/prints" class="rounded-md px-3 py-1.5 hover:bg-slate-800 hover:text-white">Prints</a>
+        <a href="/printers" class="rounded-md px-3 py-1.5 hover:bg-slate-800 hover:text-white">Printers</a>
+        <a href="/recommend" class="rounded-md px-3 py-1.5 hover:bg-slate-800 hover:text-white">Recommend</a>
+    </nav>
 
-<main style="padding:16px;">
-    @Body
-</main>
+    <main class="mx-auto max-w-6xl px-6 py-8">
+        @Body
+    </main>
+</div>
 
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.

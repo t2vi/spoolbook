@@ -6,50 +6,56 @@
 
 <PageTitle>Spools</PageTitle>
 
-<h1>Spools</h1>
+<h1 class="mb-6 text-2xl font-semibold text-slate-900">Spools</h1>
 
-<AuthorizeView>
-    <Authorized><a href="/spools/new">+ Add spool</a></Authorized>
-    <NotAuthorized><a href="@LoginUrl">Sign in to edit</a></NotAuthorized>
-</AuthorizeView>
+<div class="mb-4">
+    <AuthorizeView>
+        <Authorized><a href="/spools/new" class="inline-flex items-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">+ Add spool</a></Authorized>
+        <NotAuthorized><a href="@LoginUrl" class="text-sm text-slate-500 underline hover:text-slate-700">Sign in to edit</a></NotAuthorized>
+    </AuthorizeView>
+</div>
 
 @if (spools is null)
 {
-    <p>Loading…</p>
+    <p class="text-slate-500">Loading…</p>
 }
 else
 {
-    <table>
-        <thead>
-            <tr><th>Filament</th><th>Lot code</th><th>Purchased</th><th>Opened</th><th>Emptied</th><th></th></tr>
-        </thead>
-        <tbody>
-            @foreach (var s in spools)
-            {
+    <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <table class="w-full text-left text-sm">
+            <thead class="bg-slate-50 text-xs font-medium uppercase text-slate-500">
                 <tr>
-                    <td>@s.Filament?.Brand @s.Filament?.Material @s.Filament?.Variant — @s.Filament?.Color</td>
-                    <td>@s.LotCode</td>
-                    <td>@s.PurchasedAt</td>
-                    <td>@s.OpenedAt</td>
-                    <td>@s.EmptiedAt</td>
-                    <td>
-                        <AuthorizeView>
-                            <Authorized>
-                                <a href="@($"/spools/edit/{s.Id}")">Edit</a>
-                                &nbsp;
-                                <button @onclick="@(() => DeleteAsync(s.Id))">Delete</button>
-                            </Authorized>
-                        </AuthorizeView>
-                    </td>
+                    <th class="px-4 py-3">Filament</th><th class="px-4 py-3">Lot code</th><th class="px-4 py-3">Purchased</th>
+                    <th class="px-4 py-3">Opened</th><th class="px-4 py-3">Emptied</th><th class="px-4 py-3"></th>
                 </tr>
-            }
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                @foreach (var s in spools)
+                {
+                    <tr class="border-t border-slate-100 hover:bg-slate-50">
+                        <td class="px-4 py-3 text-slate-700">@s.Filament?.Brand @s.Filament?.Material @s.Filament?.Variant — @s.Filament?.Color</td>
+                        <td class="px-4 py-3 text-slate-700">@s.LotCode</td>
+                        <td class="px-4 py-3 text-slate-700">@s.PurchasedAt</td>
+                        <td class="px-4 py-3 text-slate-700">@s.OpenedAt</td>
+                        <td class="px-4 py-3 text-slate-700">@s.EmptiedAt</td>
+                        <td class="px-4 py-3">
+                            <AuthorizeView>
+                                <Authorized>
+                                    <a href="@($"/spools/edit/{s.Id}")" class="text-slate-600 hover:text-slate-900 hover:underline">Edit</a>
+                                    <button @onclick="@(() => DeleteAsync(s.Id))" class="ml-3 text-red-600 hover:text-red-800 hover:underline">Delete</button>
+                                </Authorized>
+                            </AuthorizeView>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
 }
 
 @if (errorMessage is not null)
 {
-    <p style="color:red">@errorMessage</p>
+    <p class="mt-3 text-sm text-red-600">@errorMessage</p>
 }
 
 @code {

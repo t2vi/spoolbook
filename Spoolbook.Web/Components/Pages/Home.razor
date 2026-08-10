@@ -4,68 +4,68 @@
 
 <PageTitle>Spoolbook</PageTitle>
 
-<h1>Spoolbook</h1>
+<h1 class="mb-6 text-2xl font-semibold text-slate-900">Dashboard</h1>
 
 @if (metrics is null)
 {
-    <p>Loading…</p>
+    <p class="text-slate-500">Loading…</p>
 }
 else
 {
-    <div style="display:flex; gap:24px; margin-bottom:24px;">
-        <div>
-            <div style="font-size:2em;">@metrics.FilamentCount</div>
-            <div>Filaments</div>
+    <div class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="text-3xl font-semibold text-slate-900">@metrics.FilamentCount</div>
+            <div class="text-sm text-slate-500">Filaments</div>
         </div>
-        <div>
-            <div style="font-size:2em;">@metrics.SpoolsByStatus.Sum(c => c.Count)</div>
-            <div>Spools</div>
+        <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="text-3xl font-semibold text-slate-900">@metrics.SpoolsByStatus.Sum(c => c.Count)</div>
+            <div class="text-sm text-slate-500">Spools</div>
         </div>
-        <div>
-            <div style="font-size:2em;">@metrics.PrintsByStatus.Sum(c => c.Count)</div>
-            <div>Prints logged</div>
+        <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="text-3xl font-semibold text-slate-900">@metrics.PrintsByStatus.Sum(c => c.Count)</div>
+            <div class="text-sm text-slate-500">Prints logged</div>
         </div>
     </div>
 
     @if (metrics.LastFilamentSyncAt is not null)
     {
-        <p>Filament catalog last synced @metrics.LastFilamentSyncAt.Value.ToLocalTime().ToString("g")</p>
+        <p class="mb-6 text-sm text-slate-500">Filament catalog last synced @metrics.LastFilamentSyncAt.Value.ToLocalTime().ToString("g")</p>
     }
 
-    <div style="display:flex; gap:48px; flex-wrap:wrap;">
-        <div>
-            <h3>Spools by status</h3>
-            <ul>
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 class="mb-3 text-sm font-semibold text-slate-900">Spools by status</h3>
+            <ul class="space-y-1 text-sm text-slate-600">
                 @foreach (var c in metrics.SpoolsByStatus)
                 {
-                    <li>@c.Label: @c.Count</li>
+                    <li class="flex justify-between"><span>@c.Label</span><span class="font-medium text-slate-900">@c.Count</span></li>
                 }
             </ul>
         </div>
-        <div>
-            <h3>Prints by outcome</h3>
-            <ul>
+        <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 class="mb-3 text-sm font-semibold text-slate-900">Prints by outcome</h3>
+            <ul class="space-y-1 text-sm text-slate-600">
                 @foreach (var c in metrics.PrintsByStatus)
                 {
-                    <li>@c.Label: @c.Count</li>
+                    <li class="flex justify-between"><span>@c.Label</span><span class="font-medium text-slate-900">@c.Count</span></li>
                 }
             </ul>
         </div>
-        <div>
-            <h3>Filaments by brand (top 10)</h3>
-            <ul>
+        <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 class="mb-3 text-sm font-semibold text-slate-900">Filaments by brand (top 10)</h3>
+            <ul class="space-y-1 text-sm text-slate-600">
                 @foreach (var c in metrics.FilamentsByBrand.Take(10))
                 {
-                    <li>@c.Label: @c.Count</li>
+                    <li class="flex justify-between"><span>@c.Label</span><span class="font-medium text-slate-900">@c.Count</span></li>
                 }
             </ul>
         </div>
-        <div>
-            <h3>Filaments by material (top 10)</h3>
-            <ul>
+        <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 class="mb-3 text-sm font-semibold text-slate-900">Filaments by material (top 10)</h3>
+            <ul class="space-y-1 text-sm text-slate-600">
                 @foreach (var c in metrics.FilamentsByMaterial.Take(10))
                 {
-                    <li>@c.Label: @c.Count</li>
+                    <li class="flex justify-between"><span>@c.Label</span><span class="font-medium text-slate-900">@c.Count</span></li>
                 }
             </ul>
         </div>

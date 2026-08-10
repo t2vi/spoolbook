@@ -3,38 +3,55 @@
 @attribute [Authorize]
 @using Microsoft.AspNetCore.Authorization
 @using Spoolbook.Desktop.Features.Settings.Filaments
+@using Spoolbook.Desktop.Features.Settings.Colors
 @inject FilamentService FilamentService
+@inject FilamentColorService ColorService
 @inject NavigationManager Nav
 
 <PageTitle>@(Id is null ? "Add filament" : "Edit filament")</PageTitle>
 
-<h1>@(Id is null ? "Add filament" : "Edit filament")</h1>
+<h1 class="mb-6 text-2xl font-semibold text-slate-900">@(Id is null ? "Add filament" : "Edit filament")</h1>
 
-<EditForm Model="input" OnValidSubmit="SaveAsync">
-    <div>
-        <label>Brand</label>
-        <input @bind="input.Brand" />
+<EditForm Model="input" OnValidSubmit="SaveAsync" class="max-w-lg space-y-4">
+    <div class="flex flex-col gap-1">
+        <label class="text-sm font-medium text-slate-700">Brand</label>
+        <input @bind="input.Brand" class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
     </div>
-    <div>
-        <label>Material</label>
-        <input @bind="input.Material" />
+    <div class="flex flex-col gap-1">
+        <label class="text-sm font-medium text-slate-700">Material</label>
+        <input @bind="input.Material" class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
     </div>
-    <div>
-        <label>Variant</label>
-        <input @bind="input.Variant" />
+    <div class="flex flex-col gap-1">
+        <label class="text-sm font-medium text-slate-700">Variant</label>
+        <input @bind="input.Variant" class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
     </div>
-    <div>
-        <label>Color</label>
-        <input @bind="input.Color" />
+    <div class="flex flex-col gap-1">
+        <label class="text-sm font-medium text-slate-700">Color</label>
+        <div class="flex items-center gap-2">
+            <input @bind="input.Color" list="color-options"
+                   class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
+            <datalist id="color-options">
+                @foreach (var c in colors)
+                {
+                    <option value="@c.Name" />
+                }
+            </datalist>
+            @if (SwatchHex is not null)
+            {
+                <span class="inline-block h-5 w-5 shrink-0 rounded border border-slate-300" style="background:@SwatchHex;"></span>
+            }
+        </div>
     </div>
 
     @if (errorMessage is not null)
     {
-        <p style="color:red">@errorMessage</p>
+        <p class="text-sm text-red-600">@errorMessage</p>
     }
 
-    <button type="submit">Save</button>
-    <a href="/filaments">Cancel</a>
+    <div class="flex items-center gap-3 pt-2">
+        <button type="submit" class="inline-flex items-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">Save</button>
+        <a href="/filaments" class="text-sm text-slate-500 hover:text-slate-700">Cancel</a>
+    </div>
 </EditForm>
 
 @code {
@@ -43,9 +60,13 @@
 
     private FilamentInput input = new() { Brand = "", Material = "", Color = "" };
     private string? errorMessage;
+    private List<FilamentColor> colors = [];
+    private string? SwatchHex => colors.FirstOrDefault(c => c.Name == input.Color)?.Hexes.FirstOrDefault();
 
     protected override async Task OnInitializedAsync()
     {
+        colors = await ColorService.ListAsync();
+
         if (Id is null) return;
 
         var existing = (await FilamentService.ListAsync()).FirstOrDefault(f => f.Id == Id);
