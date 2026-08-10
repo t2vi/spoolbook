@@ -1,0 +1,88 @@
+@page "/spools"
+@using Microsoft.AspNetCore.Components.Authorization
+@using Spoolbook.Desktop.Features.Spools
+@inject SpoolService SpoolService
+@inject NavigationManager Nav
+
+<PageTitle>Spools</PageTitle>
+
+<h1>Spools</h1>
+
+<AuthorizeView>
+    <Authorized><a href="/spools/new">+ Add spool</a></Authorized>
+    <NotAuthorized><a href="@LoginUrl">Sign in to edit</a></NotAuthorized>
+</AuthorizeView>
+
+@if (spools is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr><th>Filament</th><th>Lot code</th><th>Purchased</th><th>Opened</th><th>Emptied</th><th></th></tr>
+        </thead>
+        <tbody>
+            @foreach (var s in spools)
+            {
+                <tr>
+                    <td>@s.Filament?.Brand @s.Filament?.Material @s.Filament?.Variant — @s.Filament?.Color</td>
+                    <td>@s.LotCode</td>
+                    <td>@s.PurchasedAt</td>
+                    <td>@s.OpenedAt</td>
+                    <td>@s.EmptiedAt</td>
+                    <td>
+                        <AuthorizeView>
+                            <Authorized>
+                                <a href="@($"/spools/edit/{s.Id}")">Edit</a>
+                                &nbsp;
+                                <button @onclick="@(() => DeleteAsync(s.Id))">Delete</button>
+                            </Authorized>
+                        </AuthorizeView>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (errorMessage is not null)
+{
+    <p style="color:red">@errorMessage</p>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private List<Spool>? spools;
+    private string? errorMessage;
+    private string LoginUrl => $"/login?returnUrl={Uri.EscapeDataString(Nav.ToBaseRelativePath(Nav.Uri))}";
+
+    protected override async Task OnInitializedAsync() => spools = await SpoolService.ListAllAsync();
+
+    private async Task DeleteAsync(int id)
+    {
+        var authState = AuthStateTask is not null ? await AuthStateTask : null;
+        if (authState?.User.Identity?.IsAuthenticated != true)
+        {
+            errorMessage = "Sign in to delete.";
+            return;
+        }
+
+        var result = await SpoolService.DeleteSpoolAsync(id);
+        if (!result.Ok)
+        {
+            errorMessage = result.Error switch
+            {
+                "has_profiles" => "Can't delete — a Print Profile references this spool.",
+                "has_prints" => "Can't delete — a Print references this spool.",
+                _ => result.Error
+            };
+            return;
+        }
+        errorMessage = null;
+        spools = await SpoolService.ListAllAsync();
+    }
+}

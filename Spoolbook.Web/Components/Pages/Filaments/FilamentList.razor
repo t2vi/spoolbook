@@ -1,0 +1,120 @@
+@page "/filaments"
+@using Microsoft.AspNetCore.Components.Authorization
+@using Spoolbook.Desktop.Features.Settings.Filaments
+@inject FilamentService FilamentService
+@inject NavigationManager Nav
+
+<PageTitle>Filaments</PageTitle>
+
+<h1>Filaments</h1>
+
+<div style="display:flex; gap:8px; margin-bottom:12px;">
+    <input @bind="brandFilter" @bind:event="oninput" @onkeyup="@(async e => await ApplyFiltersAsync())" placeholder="Filter by brand" />
+    <input @bind="materialFilter" @bind:event="oninput" @onkeyup="@(async e => await ApplyFiltersAsync())" placeholder="Filter by material" />
+    <AuthorizeView>
+        <Authorized><a href="/filaments/new">+ Add filament</a></Authorized>
+        <NotAuthorized><a href="@LoginUrl">Sign in to edit</a></NotAuthorized>
+    </AuthorizeView>
+</div>
+
+@if (result is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr><th>Brand</th><th>Material</th><th>Variant</th><th>Color</th><th></th></tr>
+        </thead>
+        <tbody>
+            @foreach (var f in result.Entries)
+            {
+                <tr>
+                    <td>@f.Brand</td>
+                    <td>@f.Material</td>
+                    <td>@f.Variant</td>
+                    <td>@f.Color</td>
+                    <td>
+                        <AuthorizeView>
+                            <Authorized>
+                                <a href="@($"/filaments/edit/{f.Id}")">Edit</a>
+                                &nbsp;
+                                <button @onclick="@(() => DeleteAsync(f.Id))">Delete</button>
+                            </Authorized>
+                        </AuthorizeView>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <p>Page @result.Page of @result.TotalPages (@result.Total total)</p>
+    <button disabled="@(page <= 1)" @onclick="@(() => ChangePageAsync(page - 1))">Previous</button>
+    <button disabled="@(page >= result.TotalPages)" @onclick="@(() => ChangePageAsync(page + 1))">Next</button>
+}
+
+@if (errorMessage is not null)
+{
+    <p style="color:red">@errorMessage</p>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private FilamentSearchResult? result;
+    private string? brandFilter;
+    private string? materialFilter;
+    private int page = 1;
+    private string? errorMessage;
+    private string LoginUrl => $"/login?returnUrl={Uri.EscapeDataString(Nav.ToBaseRelativePath(Nav.Uri))}";
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        result = await FilamentService.SearchAsync(new FilamentQuery
+        {
+            Brand = string.IsNullOrWhiteSpace(brandFilter) ? null : brandFilter,
+            Material = string.IsNullOrWhiteSpace(materialFilter) ? null : materialFilter,
+            Page = page,
+            PageSize = 20
+        });
+    }
+
+    private Task ApplyFiltersAsync()
+    {
+        page = 1;
+        return LoadAsync();
+    }
+
+    private Task ChangePageAsync(int newPage)
+    {
+        page = newPage;
+        return LoadAsync();
+    }
+
+    // AuthorizeView above only hides the button — this is the actual security boundary,
+    // since a route's [Authorize] doesn't cover an in-page event handler like this one.
+    private async Task DeleteAsync(int id)
+    {
+        var authState = AuthStateTask is not null ? await AuthStateTask : null;
+        if (authState?.User.Identity?.IsAuthenticated != true)
+        {
+            errorMessage = "Sign in to delete.";
+            return;
+        }
+
+        var deleteResult = await FilamentService.DeleteAsync(id);
+        if (!deleteResult.Ok)
+        {
+            errorMessage = deleteResult.Error == "has_spools"
+                ? "Can't delete — spools reference this filament."
+                : deleteResult.Error;
+            return;
+        }
+        errorMessage = null;
+        await LoadAsync();
+    }
+}
