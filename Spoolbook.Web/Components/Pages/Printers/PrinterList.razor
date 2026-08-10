@@ -1,0 +1,85 @@
+@page "/printers"
+@using Microsoft.AspNetCore.Components.Authorization
+@using Spoolbook.Desktop.Features.Settings.Printers
+@inject PrinterService PrinterService
+@inject NavigationManager Nav
+
+<PageTitle>Printers</PageTitle>
+
+<h1>Printers</h1>
+
+<AuthorizeView>
+    <Authorized><a href="/printers/new">+ Add printer</a></Authorized>
+    <NotAuthorized><a href="@LoginUrl">Sign in to edit</a></NotAuthorized>
+</AuthorizeView>
+
+@if (printers is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr><th>Name</th><th>Model</th><th>IP</th><th></th></tr>
+        </thead>
+        <tbody>
+            @foreach (var p in printers)
+            {
+                <tr>
+                    <td>@p.Name</td>
+                    <td>@p.Model</td>
+                    <td>@p.IpAddress</td>
+                    <td>
+                        <AuthorizeView>
+                            <Authorized>
+                                <a href="@($"/printers/edit/{p.Id}")">Edit</a>
+                                &nbsp;
+                                <button @onclick="@(() => DeleteAsync(p.Id))">Delete</button>
+                            </Authorized>
+                        </AuthorizeView>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (errorMessage is not null)
+{
+    <p style="color:red">@errorMessage</p>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private List<Printer>? printers;
+    private string? errorMessage;
+    private string LoginUrl => $"/login?returnUrl={Uri.EscapeDataString(Nav.ToBaseRelativePath(Nav.Uri))}";
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync() => printers = await PrinterService.ListAsync();
+
+    private async Task DeleteAsync(int id)
+    {
+        var authState = AuthStateTask is not null ? await AuthStateTask : null;
+        if (authState?.User.Identity?.IsAuthenticated != true)
+        {
+            errorMessage = "Sign in to delete.";
+            return;
+        }
+
+        var deleteResult = await PrinterService.DeleteAsync(id);
+        if (!deleteResult.Ok)
+        {
+            errorMessage = deleteResult.Error == "has_prints"
+                ? "Can't delete — prints reference this printer."
+                : deleteResult.Error;
+            return;
+        }
+        errorMessage = null;
+        await LoadAsync();
+    }
+}
