@@ -16,6 +16,8 @@ public class SpoolbookDbContext : DbContext
     public DbSet<PrintProfile> PrintProfiles => Set<PrintProfile>();
     public DbSet<Print> Prints => Set<Print>();
     public DbSet<PrintFailureMode> PrintFailureModes => Set<PrintFailureMode>();
+    public DbSet<PrinterJob> PrinterJobs => Set<PrinterJob>();
+    public DbSet<PrinterReading> PrinterReadings => Set<PrinterReading>();
     public DbSet<AppSettings> AppSettings => Set<AppSettings>();
     public DbSet<Printer> Printers => Set<Printer>();
     public DbSet<Project> Projects => Set<Project>();
@@ -78,6 +80,24 @@ public class SpoolbookDbContext : DbContext
             .HasOne(pfm => pfm.Print)
             .WithMany(p => p.FailureModes)
             .HasForeignKey(pfm => pfm.PrintId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<PrinterJob>()
+            .HasOne(j => j.Printer)
+            .WithMany()
+            .HasForeignKey(j => j.PrinterId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<PrinterJob>()
+            .HasOne(j => j.Print)
+            .WithMany()
+            .HasForeignKey(j => j.PrintId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<PrinterReading>()
+            .HasOne(r => r.PrinterJob)
+            .WithMany(j => j.Readings)
+            .HasForeignKey(r => r.PrinterJobId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 
