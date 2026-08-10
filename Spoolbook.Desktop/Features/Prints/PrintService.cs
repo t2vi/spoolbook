@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Spoolbook.Desktop.Data;
+using Spoolbook.Desktop.Features.Profiles;
 using Spoolbook.Desktop.Services.Weather;
 namespace Spoolbook.Desktop.Features.Prints;
 
@@ -117,6 +118,41 @@ public class PrintService
         await _db.SaveChangesAsync();
 
         return new PrintResult { Ok = true, Print = print };
+    }
+
+    // Ranked by Status (Success > Partial > Failed), ties broken by closest ambient match —
+    // ActualRoomTempC when logged, falling back to the auto-fetched AmbientTempC otherwise
+    // (docs/adr — Failure Mode session, "best profile for a Project" recommendation).
+    public async Task<PrintProfile?> RecommendProfileForProjectAsync(int projectId, decimal? currentTempC)
+    {
+        var candidates = await _db.Prints
+            .Include(p => p.Profile)
+            .Where(p => p.ProjectId == projectId)
+            .ToListAsync();
+
+        if (candidates.Count == 0) return null;
+
+        return candidates
+            .OrderBy(p => StatusRank(p.Status))
+            .ThenBy(p => TempDistance(p, currentTempC))
+            .ThenByDescending(p => p.StartedAt)
+            .First()
+            .Profile;
+    }
+
+    private static int StatusRank(PrintStatus status) => status switch
+    {
+        PrintStatus.Success => 0,
+        PrintStatus.Partial => 1,
+        PrintStatus.Failed => 2,
+        _ => 3
+    };
+
+    private static decimal TempDistance(Print print, decimal? currentTempC)
+    {
+        var effectiveTempC = print.ActualRoomTempC ?? print.AmbientTempC;
+        if (currentTempC is null || effectiveTempC is null) return decimal.MaxValue;
+        return Math.Abs(effectiveTempC.Value - currentTempC.Value);
     }
 
     public async Task<PrintResult> DeleteAsync(int id)

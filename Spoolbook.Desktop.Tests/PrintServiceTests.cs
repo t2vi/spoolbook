@@ -356,4 +356,129 @@ public class PrintServiceTests
         Assert.False(result.Ok);
         Assert.Equal("failure_modes_require_failed_or_partial", result.Error);
     }
+
+    private static async Task<Project> SeedProjectAsync(SpoolbookDbContext db)
+    {
+        var projectService = new ProjectService(db);
+        var path = Path.Combine(Path.GetTempPath(), $"spoolbook-test-{Guid.NewGuid():N}.3mf");
+        File.WriteAllText(path, "3mf-bytes");
+        var result = await projectService.UpsertByPathAsync(path);
+        return result.Project!;
+    }
+
+    [Fact]
+    public async Task RecommendProfileForProjectAsync_PrefersSuccessOverPartialOverFailed()
+    {
+        using var db = TestDbFactory.Create();
+        var (profileId, spoolId, printerId) = await SeedAsync(db);
+        var filamentId = (await db.PrintProfiles.FindAsync(profileId))!.FilamentId;
+        var profileService = new PrintProfileService(db);
+        var successProfile = await profileService.CreateProfileAsync(filamentId, new ProfileInput { Name = "Success profile", NozzleTempC = "235" });
+        var service = new PrintService(db, new FakeWeatherService());
+        var project = await SeedProjectAsync(db);
+
+        await service.CreateAsync(profileId, spoolId, printerId, new PrintInput
+        {
+            StartedAt = new DateTime(2026, 1, 1, 8, 0, 0), EndedAt = new DateTime(2026, 1, 1, 10, 0, 0),
+            Status = PrintStatus.Failed, ProjectId = project.Id
+        });
+        await service.CreateAsync(successProfile.Profile!.Id, spoolId, printerId, new PrintInput
+        {
+            StartedAt = new DateTime(2026, 1, 2, 8, 0, 0), EndedAt = new DateTime(2026, 1, 2, 10, 0, 0),
+            Status = PrintStatus.Success, ProjectId = project.Id
+        });
+
+        var recommended = await service.RecommendProfileForProjectAsync(project.Id, currentTempC: null);
+
+        Assert.Equal(successProfile.Profile.Id, recommended!.Id);
+    }
+
+    [Fact]
+    public async Task RecommendProfileForProjectAsync_TiesBrokenByClosestActualRoomTemp()
+    {
+        using var db = TestDbFactory.Create();
+        var (profileId, spoolId, printerId) = await SeedAsync(db);
+        var filamentId = (await db.PrintProfiles.FindAsync(profileId))!.FilamentId;
+        var profileService = new PrintProfileService(db);
+        var coldProfile = await profileService.CreateProfileAsync(filamentId, new ProfileInput { Name = "Cold", NozzleTempC = "230" });
+        var hotProfile = await profileService.CreateProfileAsync(filamentId, new ProfileInput { Name = "Hot", NozzleTempC = "240" });
+        var service = new PrintService(db, new FakeWeatherService());
+        var project = await SeedProjectAsync(db);
+
+        await service.CreateAsync(coldProfile.Profile!.Id, spoolId, printerId, new PrintInput
+        {
+            StartedAt = new DateTime(2026, 1, 1, 8, 0, 0), EndedAt = new DateTime(2026, 1, 1, 10, 0, 0),
+            Status = PrintStatus.Success, ProjectId = project.Id, ActualRoomTempC = 15m
+        });
+        await service.CreateAsync(hotProfile.Profile!.Id, spoolId, printerId, new PrintInput
+        {
+            StartedAt = new DateTime(2026, 1, 2, 8, 0, 0), EndedAt = new DateTime(2026, 1, 2, 10, 0, 0),
+            Status = PrintStatus.Success, ProjectId = project.Id, ActualRoomTempC = 25m
+        });
+
+        var recommended = await service.RecommendProfileForProjectAsync(project.Id, currentTempC: 23m);
+
+        Assert.Equal(hotProfile.Profile.Id, recommended!.Id);
+    }
+
+    [Fact]
+    public async Task RecommendProfileForProjectAsync_FallsBackToAmbientTempWhenRoomTempMissing()
+    {
+        using var db = TestDbFactory.Create();
+        var (profileId, spoolId, printerId) = await SeedAsync(db);
+        var filamentId = (await db.PrintProfiles.FindAsync(profileId))!.FilamentId;
+        var profileService = new PrintProfileService(db);
+        var profileA = await profileService.CreateProfileAsync(filamentId, new ProfileInput { Name = "A", NozzleTempC = "230" });
+        var profileB = await profileService.CreateProfileAsync(filamentId, new ProfileInput { Name = "B", NozzleTempC = "240" });
+        var service = new PrintService(db, new FakeWeatherService { Result = (12m, 50m) });
+        var project = await SeedProjectAsync(db);
+
+        // No ActualRoomTempC -> falls back to fetched AmbientTempC (12), which matches currentTempC exactly.
+        await service.CreateAsync(profileA.Profile!.Id, spoolId, printerId, new PrintInput
+        {
+            StartedAt = new DateTime(2026, 1, 1, 8, 0, 0), EndedAt = new DateTime(2026, 1, 1, 10, 0, 0),
+            Status = PrintStatus.Success, ProjectId = project.Id
+        });
+        await service.CreateAsync(profileB.Profile!.Id, spoolId, printerId, new PrintInput
+        {
+            StartedAt = new DateTime(2026, 1, 2, 8, 0, 0), EndedAt = new DateTime(2026, 1, 2, 10, 0, 0),
+            Status = PrintStatus.Success, ProjectId = project.Id, ActualRoomTempC = 30m
+        });
+
+        var recommended = await service.RecommendProfileForProjectAsync(project.Id, currentTempC: 12m);
+
+        Assert.Equal(profileA.Profile.Id, recommended!.Id);
+    }
+
+    [Fact]
+    public async Task RecommendProfileForProjectAsync_ReturnsNullWhenNoPrintsForProject()
+    {
+        using var db = TestDbFactory.Create();
+        var service = new PrintService(db, new FakeWeatherService());
+        var project = await SeedProjectAsync(db);
+
+        var recommended = await service.RecommendProfileForProjectAsync(project.Id, currentTempC: 20m);
+
+        Assert.Null(recommended);
+    }
+
+    [Fact]
+    public async Task RecommendProfileForProjectAsync_IgnoresPrintsForOtherProjects()
+    {
+        using var db = TestDbFactory.Create();
+        var (profileId, spoolId, printerId) = await SeedAsync(db);
+        var service = new PrintService(db, new FakeWeatherService());
+        var targetProject = await SeedProjectAsync(db);
+        var otherProject = await SeedProjectAsync(db);
+
+        await service.CreateAsync(profileId, spoolId, printerId, new PrintInput
+        {
+            StartedAt = new DateTime(2026, 1, 1, 8, 0, 0), EndedAt = new DateTime(2026, 1, 1, 10, 0, 0),
+            Status = PrintStatus.Success, ProjectId = otherProject.Id
+        });
+
+        var recommended = await service.RecommendProfileForProjectAsync(targetProject.Id, currentTempC: 20m);
+
+        Assert.Null(recommended);
+    }
 }
