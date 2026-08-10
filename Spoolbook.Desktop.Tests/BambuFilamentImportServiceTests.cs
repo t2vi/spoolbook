@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text.Json;
 using Spoolbook.Desktop.Features.BambuImport;
 namespace Spoolbook.Desktop.Tests;
@@ -21,6 +22,20 @@ public class BambuFilamentImportServiceTests : IDisposable
     {
         var path = Path.Combine(_root, "leaf.json");
         File.WriteAllText(path, json);
+        return path;
+    }
+
+    // Mirrors a real Bambu Studio .3mf: a zip with Metadata/project_settings.config holding the
+    // fully flattened, already-resolved settings (no "inherits" chain — Bambu bakes it in at slice time).
+    private string WriteThreeMf(string projectSettingsJson, string entryName = "Metadata/project_settings.config")
+    {
+        var path = Path.Combine(_root, "project.3mf");
+        using (var archive = ZipFile.Open(path, ZipArchiveMode.Create))
+        {
+            var entry = archive.CreateEntry(entryName);
+            using var writer = new StreamWriter(entry.Open());
+            writer.Write(projectSettingsJson);
+        }
         return path;
     }
 
@@ -126,5 +141,65 @@ public class BambuFilamentImportServiceTests : IDisposable
 
         Assert.False(result.Ok);
         Assert.Equal("invalid_json", result.Error);
+    }
+
+    [Fact]
+    public async Task ImportFromThreeMfAsync_ReadsFlattenedProjectSettings_NoInheritsWalking()
+    {
+        var path = WriteThreeMf("""
+        {
+            "nozzle_temperature": ["245", "240"],
+            "filament_retraction_length": ["1", "0.4"],
+            "hot_plate_temp_initial_layer": ["70"]
+        }
+        """);
+
+        var result = await _service.ImportFromThreeMfAsync(path);
+
+        Assert.True(result.Ok);
+        Assert.Equal("245", result.Fields!["NozzleTempC"]);
+        Assert.Equal("1", result.Fields!["RetractionMm"]);
+        Assert.Equal("70", result.Fields!["HotPlateTempInitialC"]);
+    }
+
+    [Fact]
+    public async Task ImportFromThreeMfAsync_ReturnsErrorWhenProjectSettingsConfigMissing()
+    {
+        var path = Path.Combine(_root, "empty.3mf");
+        using (ZipFile.Open(path, ZipArchiveMode.Create)) { }
+
+        var result = await _service.ImportFromThreeMfAsync(path);
+
+        Assert.False(result.Ok);
+        Assert.Equal("no_project_settings", result.Error);
+    }
+
+    [Fact]
+    public async Task ImportFromThreeMfAsync_ReturnsErrorForCorruptZip()
+    {
+        var path = Path.Combine(_root, "corrupt.3mf");
+        File.WriteAllText(path, "not a zip");
+
+        var result = await _service.ImportFromThreeMfAsync(path);
+
+        Assert.False(result.Ok);
+        Assert.Equal("invalid_3mf", result.Error);
+    }
+
+    [Fact]
+    public async Task ImportFromThreeMfAsync_AppliesSameBoolAndPercentConversionsAsRawPresetImport()
+    {
+        var path = WriteThreeMf("""
+        {
+            "filament_shrink": ["99%"],
+            "filament_soluble": ["1"]
+        }
+        """);
+
+        var result = await _service.ImportFromThreeMfAsync(path);
+
+        Assert.True(result.Ok);
+        Assert.Equal("99", result.Fields!["ShrinkPct"]);
+        Assert.Equal("true", result.Fields!["Soluble"]);
     }
 }

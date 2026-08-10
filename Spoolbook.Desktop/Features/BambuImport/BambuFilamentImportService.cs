@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 namespace Spoolbook.Desktop.Features.BambuImport;
@@ -218,18 +219,7 @@ public class BambuFilamentImportService
             : Path.GetFileNameWithoutExtension(filePath);
 
         var merged = await _resolver.ResolveAsync(leafJson);
-
-        var fields = new Dictionary<string, string>();
-        foreach (var (bambuKey, ourField) in KeyMap)
-        {
-            if (!merged.TryGetValue(bambuKey, out var element)) continue;
-            var raw = FirstValue(element);
-            if (raw is null) continue;
-
-            fields[ourField] = BoolFields.Contains(ourField) ? ToBoolString(raw)
-                : PercentSuffixFields.Contains(ourField) ? raw.TrimEnd('%')
-                : raw;
-        }
+        var fields = ExtractFields(merged);
 
         var rawSettingsJson = JsonSerializer.Serialize(
             merged.ToDictionary(kv => kv.Key, kv => kv.Value.Clone()));
@@ -296,6 +286,77 @@ public class BambuFilamentImportService
         }
 
         return new PushResult { Ok = true };
+    }
+
+    // Reads an uploaded .3mf's baked Metadata/project_settings.config directly — Bambu Studio
+    // resolves the whole inherits chain at slice time, so unlike ImportAsync above, there's no
+    // preset chain left to walk (see docs/adr/0018-homelab-pivot-blazor-lan-3mf-import.md).
+    public async Task<ImportResult> ImportFromThreeMfAsync(string threeMfPath)
+    {
+        ZipArchive archive;
+        try
+        {
+            archive = ZipFile.OpenRead(threeMfPath);
+        }
+        catch (InvalidDataException)
+        {
+            return new ImportResult { Ok = false, Error = "invalid_3mf" };
+        }
+        catch (IOException ex)
+        {
+            return new ImportResult { Ok = false, Error = $"Couldn't read file: {ex.Message}" };
+        }
+
+        using (archive)
+        {
+            var entry = archive.GetEntry("Metadata/project_settings.config");
+            if (entry is null)
+                return new ImportResult { Ok = false, Error = "no_project_settings" };
+
+            string json;
+            using (var reader = new StreamReader(entry.Open()))
+                json = await reader.ReadToEndAsync();
+
+            JsonDocument doc;
+            try
+            {
+                doc = JsonDocument.Parse(json);
+            }
+            catch (JsonException)
+            {
+                return new ImportResult { Ok = false, Error = "invalid_json" };
+            }
+
+            using (doc)
+            {
+                var merged = doc.RootElement.EnumerateObject()
+                    .ToDictionary(p => p.Name, p => p.Value.Clone());
+
+                return new ImportResult
+                {
+                    Ok = true,
+                    SuggestedName = Path.GetFileNameWithoutExtension(threeMfPath),
+                    Fields = ExtractFields(merged),
+                    RawSettingsJson = json
+                };
+            }
+        }
+    }
+
+    private static Dictionary<string, string> ExtractFields(Dictionary<string, JsonElement> merged)
+    {
+        var fields = new Dictionary<string, string>();
+        foreach (var (bambuKey, ourField) in KeyMap)
+        {
+            if (!merged.TryGetValue(bambuKey, out var element)) continue;
+            var raw = FirstValue(element);
+            if (raw is null) continue;
+
+            fields[ourField] = BoolFields.Contains(ourField) ? ToBoolString(raw)
+                : PercentSuffixFields.Contains(ourField) ? raw.TrimEnd('%')
+                : raw;
+        }
+        return fields;
     }
 
     private static string? FirstValue(JsonElement element)
