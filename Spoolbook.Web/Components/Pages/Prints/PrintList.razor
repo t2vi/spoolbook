@@ -7,15 +7,15 @@
 
 <PageTitle>Prints</PageTitle>
 
-<h1>Prints</h1>
+<h1 class="mb-6 text-2xl font-semibold text-slate-900">Prints</h1>
 
-<AuthorizeView>
-    <Authorized><a href="/prints/new">+ Log a print</a></Authorized>
-    <NotAuthorized><a href="@LoginUrl">Sign in to edit</a></NotAuthorized>
-</AuthorizeView>
-
-<div style="display:flex; gap:8px; margin:12px 0;">
-    <select @bind="statusFilter" @bind:after="ApplyFiltersAsync">
+<div class="mb-4 flex flex-wrap items-center gap-3">
+    <AuthorizeView>
+        <Authorized><a href="/prints/new" class="inline-flex items-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">+ Log a print</a></Authorized>
+        <NotAuthorized><a href="@LoginUrl" class="text-sm text-slate-500 underline hover:text-slate-700">Sign in to edit</a></NotAuthorized>
+    </AuthorizeView>
+    <select @bind="statusFilter" @bind:after="ApplyFiltersAsync"
+            class="rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500">
         <option value="">All statuses</option>
         @foreach (var s in Enum.GetValues<PrintStatus>())
         {
@@ -26,45 +26,52 @@
 
 @if (result is null)
 {
-    <p>Loading…</p>
+    <p class="text-slate-500">Loading…</p>
 }
 else
 {
-    <table>
-        <thead>
-            <tr><th>Started</th><th>Filament</th><th>Profile</th><th>Printer</th><th>Status</th><th></th></tr>
-        </thead>
-        <tbody>
-            @foreach (var p in result.Prints)
-            {
-                <tr>
-                    <td>@p.StartedAt.ToLocalTime().ToString("g")</td>
-                    <td>@p.Spool?.Filament?.Brand @p.Spool?.Filament?.Material — @p.Spool?.Filament?.Color</td>
-                    <td>@p.Profile?.Name</td>
-                    <td>@p.Printer?.Name</td>
-                    <td>@p.Status</td>
-                    <td>
-                        <AuthorizeView>
-                            <Authorized>
-                                <a href="@($"/prints/edit/{p.Id}")">Edit</a>
-                                &nbsp;
-                                <button @onclick="@(() => DeleteAsync(p.Id))">Delete</button>
-                            </Authorized>
-                        </AuthorizeView>
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <table class="w-full text-left text-sm">
+            <thead class="bg-slate-50 text-xs font-medium uppercase text-slate-500">
+                <tr><th class="px-4 py-3">Started</th><th class="px-4 py-3">Filament</th><th class="px-4 py-3">Profile</th><th class="px-4 py-3">Printer</th><th class="px-4 py-3">Status</th><th class="px-4 py-3"></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var p in result.Prints)
+                {
+                    <tr class="border-t border-slate-100 hover:bg-slate-50">
+                        <td class="px-4 py-3 text-slate-700">@p.StartedAt.ToLocalTime().ToString("g")</td>
+                        <td class="px-4 py-3 text-slate-700">@p.Spool?.Filament?.Brand @p.Spool?.Filament?.Material — @p.Spool?.Filament?.Color</td>
+                        <td class="px-4 py-3 text-slate-700">@p.Profile?.Name</td>
+                        <td class="px-4 py-3 text-slate-700">@p.Printer?.Name</td>
+                        <td class="px-4 py-3">
+                            <span class="@StatusBadgeClass(p.Status)">@p.Status</span>
+                        </td>
+                        <td class="px-4 py-3">
+                            <AuthorizeView>
+                                <Authorized>
+                                    <a href="@($"/prints/edit/{p.Id}")" class="text-slate-600 hover:text-slate-900 hover:underline">Edit</a>
+                                    <button @onclick="@(() => DeleteAsync(p.Id))" class="ml-3 text-red-600 hover:text-red-800 hover:underline">Delete</button>
+                                </Authorized>
+                            </AuthorizeView>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
 
-    <p>Page @result.Page of @result.TotalPages (@result.Total total)</p>
-    <button disabled="@(page <= 1)" @onclick="@(() => ChangePageAsync(page - 1))">Previous</button>
-    <button disabled="@(page >= result.TotalPages)" @onclick="@(() => ChangePageAsync(page + 1))">Next</button>
+    <div class="mt-4 flex items-center gap-3 text-sm text-slate-600">
+        <span>Page @result.Page of @result.TotalPages (@result.Total total)</span>
+        <button disabled="@(page <= 1)" @onclick="@(() => ChangePageAsync(page - 1))"
+                class="rounded-md border border-slate-300 px-3 py-1.5 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
+        <button disabled="@(page >= result.TotalPages)" @onclick="@(() => ChangePageAsync(page + 1))"
+                class="rounded-md border border-slate-300 px-3 py-1.5 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+    </div>
 }
 
 @if (errorMessage is not null)
 {
-    <p style="color:red">@errorMessage</p>
+    <p class="mt-3 text-sm text-red-600">@errorMessage</p>
 }
 
 @code {
@@ -118,5 +125,17 @@ else
         }
         errorMessage = null;
         await LoadAsync();
+    }
+
+    private static string StatusBadgeClass(PrintStatus status)
+    {
+        const string baseClasses = "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium";
+        return status switch
+        {
+            PrintStatus.Success => $"{baseClasses} bg-green-100 text-green-800",
+            PrintStatus.Partial => $"{baseClasses} bg-amber-100 text-amber-800",
+            PrintStatus.Failed => $"{baseClasses} bg-red-100 text-red-800",
+            _ => $"{baseClasses} bg-slate-100 text-slate-700"
+        };
     }
 }

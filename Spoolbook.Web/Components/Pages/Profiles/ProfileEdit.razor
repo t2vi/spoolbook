@@ -12,82 +12,88 @@
 
 <PageTitle>@(Id is null ? "Add profile" : "Edit profile")</PageTitle>
 
-<h1>@(Id is null ? "Add profile" : "Edit profile")</h1>
+<h1 class="mb-6 text-2xl font-semibold text-slate-900">@(Id is null ? "Add profile" : "Edit profile")</h1>
 
-@if (Id is null)
-{
-    <div>
-        <label>Filament</label>
-        <select @bind="selectedFilamentId">
-            <option value="0">-- pick a filament --</option>
-            @foreach (var f in filaments)
+<div class="max-w-2xl space-y-4">
+    @if (Id is null)
+    {
+        <div class="flex flex-col gap-1">
+            <label class="text-sm font-medium text-slate-700">Filament</label>
+            <select @bind="selectedFilamentId" class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500">
+                <option value="0">-- pick a filament --</option>
+                @foreach (var f in filaments)
+                {
+                    <option value="@f.Id">@f.Brand @f.Material @f.Variant — @f.Color</option>
+                }
+            </select>
+        </div>
+
+        <div class="flex flex-col gap-1">
+            <label class="text-sm font-medium text-slate-700">Import from a sliced .3mf (optional)</label>
+            <InputFile OnChange="OnThreeMfSelectedAsync" class="text-sm text-slate-700" />
+            @if (importMessage is not null)
             {
-                <option value="@f.Id">@f.Brand @f.Material @f.Variant — @f.Color</option>
+                <p class="text-sm text-slate-600">@importMessage</p>
             }
-        </select>
+        </div>
+    }
+
+    <div class="flex flex-col gap-1">
+        <label class="text-sm font-medium text-slate-700">Name</label>
+        <input @bind="name" class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
     </div>
 
-    <div style="margin-top:12px;">
-        <label>Import from a sliced .3mf (optional)</label>
-        <InputFile OnChange="OnThreeMfSelectedAsync" />
-        @if (importMessage is not null)
-        {
-            <p>@importMessage</p>
-        }
+    @* Most-commonly-tuned subset, not all ~140 PrintProfile fields — anything else the .3mf import
+       matched still gets applied via the full Fields dict on save, just not shown for editing here. *@
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div class="flex flex-col gap-1">
+            <label class="text-sm font-medium text-slate-700">Nozzle temp (°C)</label>
+            <input @bind='Fields["NozzleTempC"]' class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
+        </div>
+        <div class="flex flex-col gap-1">
+            <label class="text-sm font-medium text-slate-700">Nozzle temp, first layer (°C)</label>
+            <input @bind='Fields["NozzleTempInitialC"]' class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
+        </div>
+        <div class="flex flex-col gap-1">
+            <label class="text-sm font-medium text-slate-700">Hot plate temp (°C)</label>
+            <input @bind='Fields["HotPlateTempC"]' class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
+        </div>
+        <div class="flex flex-col gap-1">
+            <label class="text-sm font-medium text-slate-700">Hot plate temp, first layer (°C)</label>
+            <input @bind='Fields["HotPlateTempInitialC"]' class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
+        </div>
+        <div class="flex flex-col gap-1">
+            <label class="text-sm font-medium text-slate-700">Retraction (mm)</label>
+            <input @bind='Fields["RetractionMm"]' class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
+        </div>
+        <div class="flex flex-col gap-1">
+            <label class="text-sm font-medium text-slate-700">Retraction speed (mm/s)</label>
+            <input @bind='Fields["RetractionSpeedMmS"]' class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
+        </div>
+        <div class="flex flex-col gap-1">
+            <label class="text-sm font-medium text-slate-700">Fan min speed (%)</label>
+            <input @bind='Fields["FanMinSpeedPct"]' class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
+        </div>
+        <div class="flex flex-col gap-1">
+            <label class="text-sm font-medium text-slate-700">Fan max speed (%)</label>
+            <input @bind='Fields["FanMaxSpeedPct"]' class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
+        </div>
+        <div class="flex flex-col gap-1">
+            <label class="text-sm font-medium text-slate-700">Flow ratio</label>
+            <input @bind='Fields["FlowRatio"]' class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
+        </div>
     </div>
-}
 
-<div style="margin-top:12px;">
-    <label>Name</label>
-    <input @bind="name" />
-</div>
+    @if (errorMessage is not null)
+    {
+        <p class="text-sm text-red-600">@errorMessage</p>
+    }
 
-@* Most-commonly-tuned subset, not all ~140 PrintProfile fields — anything else the .3mf import
-   matched still gets applied via the full Fields dict on save, just not shown for editing here. *@
-<div>
-    <label>Nozzle temp (°C)</label>
-    <input @bind='Fields["NozzleTempC"]' />
+    <div class="flex items-center gap-3 pt-2">
+        <button @onclick="SaveAsync" class="inline-flex items-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">Save</button>
+        <a href="/profiles" class="text-sm text-slate-500 hover:text-slate-700">Cancel</a>
+    </div>
 </div>
-<div>
-    <label>Nozzle temp, first layer (°C)</label>
-    <input @bind='Fields["NozzleTempInitialC"]' />
-</div>
-<div>
-    <label>Hot plate temp (°C)</label>
-    <input @bind='Fields["HotPlateTempC"]' />
-</div>
-<div>
-    <label>Hot plate temp, first layer (°C)</label>
-    <input @bind='Fields["HotPlateTempInitialC"]' />
-</div>
-<div>
-    <label>Retraction (mm)</label>
-    <input @bind='Fields["RetractionMm"]' />
-</div>
-<div>
-    <label>Retraction speed (mm/s)</label>
-    <input @bind='Fields["RetractionSpeedMmS"]' />
-</div>
-<div>
-    <label>Fan min speed (%)</label>
-    <input @bind='Fields["FanMinSpeedPct"]' />
-</div>
-<div>
-    <label>Fan max speed (%)</label>
-    <input @bind='Fields["FanMaxSpeedPct"]' />
-</div>
-<div>
-    <label>Flow ratio</label>
-    <input @bind='Fields["FlowRatio"]' />
-</div>
-
-@if (errorMessage is not null)
-{
-    <p style="color:red">@errorMessage</p>
-}
-
-<button @onclick="SaveAsync">Save</button>
-<a href="/profiles">Cancel</a>
 
 @code {
     [Parameter]
