@@ -3,7 +3,9 @@
 @attribute [Authorize]
 @using Microsoft.AspNetCore.Authorization
 @using Spoolbook.Desktop.Features.Settings.Filaments
+@using Spoolbook.Desktop.Features.Settings.Colors
 @inject FilamentService FilamentService
+@inject FilamentColorService ColorService
 @inject NavigationManager Nav
 
 <PageTitle>@(Id is null ? "Add filament" : "Edit filament")</PageTitle>
@@ -25,7 +27,17 @@
     </div>
     <div>
         <label>Color</label>
-        <input @bind="input.Color" />
+        <input @bind="input.Color" list="color-options" />
+        <datalist id="color-options">
+            @foreach (var c in colors)
+            {
+                <option value="@c.Name" />
+            }
+        </datalist>
+        @if (SwatchHex is not null)
+        {
+            <span style="display:inline-block;width:16px;height:16px;margin-left:8px;vertical-align:middle;border:1px solid #888;background:@SwatchHex;"></span>
+        }
     </div>
 
     @if (errorMessage is not null)
@@ -43,9 +55,13 @@
 
     private FilamentInput input = new() { Brand = "", Material = "", Color = "" };
     private string? errorMessage;
+    private List<FilamentColor> colors = [];
+    private string? SwatchHex => colors.FirstOrDefault(c => c.Name == input.Color)?.Hexes.FirstOrDefault();
 
     protected override async Task OnInitializedAsync()
     {
+        colors = await ColorService.ListAsync();
+
         if (Id is null) return;
 
         var existing = (await FilamentService.ListAsync()).FirstOrDefault(f => f.Id == Id);
