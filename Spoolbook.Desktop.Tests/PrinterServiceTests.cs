@@ -30,6 +30,40 @@ public class PrinterServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_StoresMqttConnectionFields()
+    {
+        using var db = TestDbFactory.Create();
+        var service = new PrinterService(db);
+
+        var result = await service.CreateAsync(new PrinterInput
+        {
+            Name = "Garage P2S",
+            IpAddress = "192.168.1.50",
+            AccessCode = "12345678",
+            SerialNumber = "01P00A000000000"
+        });
+
+        Assert.True(result.Ok);
+        Assert.Equal("192.168.1.50", result.Printer!.IpAddress);
+        Assert.Equal("12345678", result.Printer.AccessCode);
+        Assert.Equal("01P00A000000000", result.Printer.SerialNumber);
+    }
+
+    [Fact]
+    public async Task CreateAsync_MqttConnectionFieldsAreOptional()
+    {
+        using var db = TestDbFactory.Create();
+        var service = new PrinterService(db);
+
+        var result = await service.CreateAsync(new PrinterInput { Name = "Garage P2S" });
+
+        Assert.True(result.Ok);
+        Assert.Null(result.Printer!.IpAddress);
+        Assert.Null(result.Printer.AccessCode);
+        Assert.Null(result.Printer.SerialNumber);
+    }
+
+    [Fact]
     public async Task CreateAsync_RejectsDuplicateName()
     {
         using var db = TestDbFactory.Create();

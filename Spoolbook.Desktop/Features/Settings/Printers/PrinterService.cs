@@ -6,6 +6,9 @@ public class PrinterInput
 {
     public required string Name { get; set; }
     public string? Model { get; set; }
+    public string? IpAddress { get; set; }
+    public string? AccessCode { get; set; }
+    public string? SerialNumber { get; set; }
 }
 
 public class PrinterResult
@@ -35,7 +38,14 @@ public class PrinterService
         if (await _db.Printers.AnyAsync(p => p.Name == input.Name))
             return new PrinterResult { Ok = false, Error = "duplicate" };
 
-        var printer = new Printer { Name = input.Name, Model = input.Model };
+        var printer = new Printer
+        {
+            Name = input.Name,
+            Model = input.Model,
+            IpAddress = input.IpAddress,
+            AccessCode = input.AccessCode,
+            SerialNumber = input.SerialNumber
+        };
         _db.Printers.Add(printer);
         await _db.SaveChangesAsync();
 
@@ -55,6 +65,9 @@ public class PrinterService
 
         printer.Name = input.Name;
         printer.Model = input.Model;
+        printer.IpAddress = input.IpAddress;
+        printer.AccessCode = input.AccessCode;
+        printer.SerialNumber = input.SerialNumber;
         await _db.SaveChangesAsync();
 
         return new PrinterResult { Ok = true, Printer = printer };
