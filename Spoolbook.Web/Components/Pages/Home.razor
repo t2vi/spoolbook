@@ -1,33 +1,79 @@
 @page "/"
-@using Spoolbook.Desktop.Features.Settings.Filaments
-@inject FilamentService FilamentService
+@using Spoolbook.Desktop.Features.Dashboard
+@inject DashboardMetricsService MetricsService
 
 <PageTitle>Spoolbook</PageTitle>
 
 <h1>Spoolbook</h1>
 
-@* Tracer for docs/adr/0018 — proves the Blazor Server host shares the same DbContext,
-   entities, and SQLite file as the Avalonia desktop app, not a separate data store. *@
-@if (filaments is null)
+@if (metrics is null)
 {
     <p>Loading…</p>
 }
 else
 {
-    <p>@filaments.Count filaments in the catalog (same database the desktop app uses).</p>
-    <ul>
-        @foreach (var f in filaments.Take(20))
-        {
-            <li>@f.Brand @f.Material @f.Variant — @f.Color</li>
-        }
-    </ul>
+    <div style="display:flex; gap:24px; margin-bottom:24px;">
+        <div>
+            <div style="font-size:2em;">@metrics.FilamentCount</div>
+            <div>Filaments</div>
+        </div>
+        <div>
+            <div style="font-size:2em;">@metrics.SpoolsByStatus.Sum(c => c.Count)</div>
+            <div>Spools</div>
+        </div>
+        <div>
+            <div style="font-size:2em;">@metrics.PrintsByStatus.Sum(c => c.Count)</div>
+            <div>Prints logged</div>
+        </div>
+    </div>
+
+    @if (metrics.LastFilamentSyncAt is not null)
+    {
+        <p>Filament catalog last synced @metrics.LastFilamentSyncAt.Value.ToLocalTime().ToString("g")</p>
+    }
+
+    <div style="display:flex; gap:48px; flex-wrap:wrap;">
+        <div>
+            <h3>Spools by status</h3>
+            <ul>
+                @foreach (var c in metrics.SpoolsByStatus)
+                {
+                    <li>@c.Label: @c.Count</li>
+                }
+            </ul>
+        </div>
+        <div>
+            <h3>Prints by outcome</h3>
+            <ul>
+                @foreach (var c in metrics.PrintsByStatus)
+                {
+                    <li>@c.Label: @c.Count</li>
+                }
+            </ul>
+        </div>
+        <div>
+            <h3>Filaments by brand (top 10)</h3>
+            <ul>
+                @foreach (var c in metrics.FilamentsByBrand.Take(10))
+                {
+                    <li>@c.Label: @c.Count</li>
+                }
+            </ul>
+        </div>
+        <div>
+            <h3>Filaments by material (top 10)</h3>
+            <ul>
+                @foreach (var c in metrics.FilamentsByMaterial.Take(10))
+                {
+                    <li>@c.Label: @c.Count</li>
+                }
+            </ul>
+        </div>
+    </div>
 }
 
 @code {
-    private List<Filament>? filaments;
+    private DashboardMetrics? metrics;
 
-    protected override async Task OnInitializedAsync()
-    {
-        filaments = await FilamentService.ListAsync();
-    }
+    protected override async Task OnInitializedAsync() => metrics = await MetricsService.GetMetricsAsync();
 }
