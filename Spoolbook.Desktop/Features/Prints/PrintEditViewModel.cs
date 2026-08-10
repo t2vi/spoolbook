@@ -8,6 +8,22 @@ using Spoolbook.Desktop.Features.Spools;
 using Spoolbook.Desktop.Features.Settings.Printers;
 namespace Spoolbook.Desktop.Features.Prints;
 
+public partial class FailureModeOption(FailureMode mode) : ObservableObject
+{
+    public FailureMode Mode { get; } = mode;
+    public string Label => Mode switch
+    {
+        FailureMode.LayerAdhesion => "Layer Adhesion",
+        FailureMode.UnderExtrusion => "Under-extrusion",
+        FailureMode.OverExtrusion => "Over-extrusion",
+        FailureMode.LayerShift => "Layer Shift",
+        _ => Mode.ToString()
+    };
+
+    [ObservableProperty]
+    private bool isSelected;
+}
+
 public partial class PrintEditViewModel : EditViewModelBase
 {
     private readonly PrintService _printService;
@@ -106,6 +122,11 @@ public partial class PrintEditViewModel : EditViewModelBase
 
     public static PrintStatus[] StatusOptions { get; } = Enum.GetValues<PrintStatus>();
 
+    public ObservableCollection<FailureModeOption> FailureModeOptions { get; } =
+        new(Enum.GetValues<FailureMode>().Select(m => new FailureModeOption(m)));
+
+    public bool ShowFailureModes => Status is PrintStatus.Failed or PrintStatus.Partial;
+
     public bool IsEdit { get; }
     public string PageTitle => IsEdit ? "Edit print" : "Add print";
     public Action? Close { get; set; }
@@ -133,6 +154,10 @@ public partial class PrintEditViewModel : EditViewModelBase
             ActualRoomTempC = existing.ActualRoomTempC;
             CleanBuildPlate = existing.CleanBuildPlate;
             _preselectPlaterId = existing.ProjectPlaterId;
+
+            var selectedModes = existing.FailureModes.Select(f => f.Mode).ToHashSet();
+            foreach (var option in FailureModeOptions)
+                option.IsSelected = selectedModes.Contains(option.Mode);
         }
 
         _ = InitializeOptionsAsync(existing);
@@ -278,7 +303,14 @@ public partial class PrintEditViewModel : EditViewModelBase
         if (EndedDate is not null && value is not null) EndedInvalid = false;
         MarkDirty();
     }
-    partial void OnStatusChanged(PrintStatus value) => MarkDirty();
+    partial void OnStatusChanged(PrintStatus value)
+    {
+        OnPropertyChanged(nameof(ShowFailureModes));
+        if (!ShowFailureModes)
+            foreach (var option in FailureModeOptions)
+                option.IsSelected = false;
+        MarkDirty();
+    }
     partial void OnNotesChanged(string? value) => MarkDirty();
     partial void OnAmsHumidityPctChanged(decimal? value) => MarkDirty();
     partial void OnActualRoomTempCChanged(decimal? value) => MarkDirty();
@@ -372,7 +404,8 @@ public partial class PrintEditViewModel : EditViewModelBase
             ActualRoomTempC = ActualRoomTempC,
             CleanBuildPlate = CleanBuildPlate,
             ProjectId = SelectedProject?.Id,
-            ProjectPlaterId = SelectedProject is not null ? SelectedPlate?.PlaterId : null
+            ProjectPlaterId = SelectedProject is not null ? SelectedPlate?.PlaterId : null,
+            FailureModes = FailureModeOptions.Where(o => o.IsSelected).Select(o => o.Mode).ToList()
         };
 
         var result = _id.HasValue
