@@ -1,6 +1,15 @@
 ﻿@inherits LayoutComponentBase
 
-@Body
+<nav style="display:flex; gap:12px; padding:8px 16px; border-bottom:1px solid #444;">
+    <a href="/">Dashboard</a>
+    <a href="/filaments">Filaments</a>
+    <a href="/spools">Spools</a>
+    <a href="/profiles">Profiles</a>
+</nav>
+
+<main style="padding:16px;">
+    @Body
+</main>
 
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.

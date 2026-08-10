@@ -1,0 +1,86 @@
+@page "/profiles"
+@using Microsoft.AspNetCore.Components.Authorization
+@using Spoolbook.Desktop.Features.Profiles
+@inject ProfileInventoryService InventoryService
+@inject PrintProfileService ProfileService
+@inject NavigationManager Nav
+
+<PageTitle>Print Profiles</PageTitle>
+
+<h1>Print Profiles</h1>
+
+<AuthorizeView>
+    <Authorized><a href="/profiles/new">+ Add profile</a></Authorized>
+    <NotAuthorized><a href="@LoginUrl">Sign in to edit</a></NotAuthorized>
+</AuthorizeView>
+
+@if (result is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr><th>Name</th><th>Filament</th><th>Nozzle temp</th><th>Source</th><th></th></tr>
+        </thead>
+        <tbody>
+            @foreach (var p in result.Profiles)
+            {
+                <tr>
+                    <td>@p.Name</td>
+                    <td>@p.Filament?.Brand @p.Filament?.Material @p.Filament?.Variant — @p.Filament?.Color</td>
+                    <td>@(p.NozzleTempC)°C</td>
+                    <td>@p.Source</td>
+                    <td>
+                        <AuthorizeView>
+                            <Authorized>
+                                <a href="@($"/profiles/edit/{p.Id}")">Edit</a>
+                                &nbsp;
+                                <button @onclick="@(() => DeleteAsync(p.Id))">Delete</button>
+                            </Authorized>
+                        </AuthorizeView>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (errorMessage is not null)
+{
+    <p style="color:red">@errorMessage</p>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private ProfileInventoryResult? result;
+    private string? errorMessage;
+    private string LoginUrl => $"/login?returnUrl={Uri.EscapeDataString(Nav.ToBaseRelativePath(Nav.Uri))}";
+
+    protected override async Task OnInitializedAsync() =>
+        result = await InventoryService.ListAsync(new ProfileInventoryQuery());
+
+    private async Task DeleteAsync(int id)
+    {
+        var authState = AuthStateTask is not null ? await AuthStateTask : null;
+        if (authState?.User.Identity?.IsAuthenticated != true)
+        {
+            errorMessage = "Sign in to delete.";
+            return;
+        }
+
+        var deleteResult = await ProfileService.DeleteProfileAsync(id);
+        if (!deleteResult.Ok)
+        {
+            errorMessage = deleteResult.Error == "has_prints"
+                ? "Can't delete — a Print references this profile version."
+                : deleteResult.Error;
+            return;
+        }
+        errorMessage = null;
+        result = await InventoryService.ListAsync(new ProfileInventoryQuery());
+    }
+}
