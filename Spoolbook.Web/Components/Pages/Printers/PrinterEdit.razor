@@ -1,0 +1,84 @@
+@page "/printers/new"
+@page "/printers/edit/{Id:int}"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using Spoolbook.Desktop.Features.Settings.Printers
+@inject PrinterService PrinterService
+@inject NavigationManager Nav
+
+<PageTitle>@(Id is null ? "Add printer" : "Edit printer")</PageTitle>
+
+<h1>@(Id is null ? "Add printer" : "Edit printer")</h1>
+
+<EditForm Model="input" OnValidSubmit="SaveAsync">
+    <div>
+        <label>Name</label>
+        <input @bind="input.Name" />
+    </div>
+    <div>
+        <label>Model</label>
+        <input @bind="input.Model" />
+    </div>
+
+    <h3>Live telemetry (optional)</h3>
+    <div>
+        <label>IP address</label>
+        <input @bind="input.IpAddress" />
+    </div>
+    <div>
+        <label>Access code</label>
+        <input @bind="input.AccessCode" />
+    </div>
+    <div>
+        <label>Serial number</label>
+        <input @bind="input.SerialNumber" />
+    </div>
+
+    @if (errorMessage is not null)
+    {
+        <p style="color:red">@errorMessage</p>
+    }
+
+    <button type="submit">Save</button>
+    <a href="/printers">Cancel</a>
+</EditForm>
+
+@code {
+    [Parameter]
+    public int? Id { get; set; }
+
+    private PrinterInput input = new() { Name = "" };
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Id is null) return;
+
+        var existing = (await PrinterService.ListAsync()).FirstOrDefault(p => p.Id == Id);
+        if (existing is null) return;
+
+        input = new PrinterInput
+        {
+            Name = existing.Name,
+            Model = existing.Model,
+            IpAddress = existing.IpAddress,
+            AccessCode = existing.AccessCode,
+            SerialNumber = existing.SerialNumber
+        };
+    }
+
+    private async Task SaveAsync()
+    {
+        var result = Id.HasValue
+            ? await PrinterService.UpdateAsync(Id.Value, input)
+            : await PrinterService.CreateAsync(input);
+
+        if (!result.Ok)
+        {
+            errorMessage = result.Error == "duplicate" ? "A printer with this name already exists." : result.Error;
+            return;
+        }
+
+        Nav.NavigateTo("/printers");
+    }
+}
