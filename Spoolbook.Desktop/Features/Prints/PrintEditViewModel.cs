@@ -31,6 +31,7 @@ public partial class PrintEditViewModel : EditViewModelBase
     private readonly PrintProfileService _profileService;
     private readonly PrinterService _printerService;
     private readonly ProjectService _projectService;
+    private readonly PrinterTelemetryService _telemetryService;
     private readonly int? _id;
 
     [ObservableProperty]
@@ -127,17 +128,27 @@ public partial class PrintEditViewModel : EditViewModelBase
 
     public bool ShowFailureModes => Status is PrintStatus.Failed or PrintStatus.Partial;
 
+    [ObservableProperty]
+    private PrinterJob? matchedJob;
+
+    [ObservableProperty]
+    private bool matchDismissed;
+
+    public bool ShowJobMatchChip => MatchedJob is not null && !MatchDismissed;
+    public string? MatchedJobLabel => MatchedJob is null ? null : $"Live telemetry found a job started {MatchedJob.StartedAt:t} — attach it to this print?";
+
     public bool IsEdit { get; }
     public string PageTitle => IsEdit ? "Edit print" : "Add print";
     public Action? Close { get; set; }
 
-    public PrintEditViewModel(PrintService printService, SpoolService spoolService, PrintProfileService profileService, PrinterService printerService, ProjectService projectService, Print? existing)
+    public PrintEditViewModel(PrintService printService, SpoolService spoolService, PrintProfileService profileService, PrinterService printerService, ProjectService projectService, PrinterTelemetryService telemetryService, Print? existing)
     {
         _printService = printService;
         _spoolService = spoolService;
         _profileService = profileService;
         _printerService = printerService;
         _projectService = projectService;
+        _telemetryService = telemetryService;
 
         if (existing is not null)
         {
@@ -277,20 +288,48 @@ public partial class PrintEditViewModel : EditViewModelBase
     partial void OnSelectedPrinterChanged(Printer? value)
     {
         if (value is not null) PrinterInvalid = false;
+        _ = RefreshJobMatchAsync();
         MarkDirty();
     }
 
     partial void OnStartedDateChanged(DateTime? value)
     {
         if (value is not null && StartedTime is not null) StartedInvalid = false;
+        _ = RefreshJobMatchAsync();
         MarkDirty();
     }
 
     partial void OnStartedTimeChanged(TimeSpan? value)
     {
         if (StartedDate is not null && value is not null) StartedInvalid = false;
+        _ = RefreshJobMatchAsync();
         MarkDirty();
     }
+
+    partial void OnMatchedJobChanged(PrinterJob? value)
+    {
+        OnPropertyChanged(nameof(ShowJobMatchChip));
+        OnPropertyChanged(nameof(MatchedJobLabel));
+    }
+
+    partial void OnMatchDismissedChanged(bool value) => OnPropertyChanged(nameof(ShowJobMatchChip));
+
+    // Only offered when logging a new print — an existing Print's Job (if any) was already
+    // decided at creation time, so re-matching on edit would just be noise.
+    private async Task RefreshJobMatchAsync()
+    {
+        if (IsEdit || SelectedPrinter is null || StartedDate is null || StartedTime is null)
+        {
+            MatchedJob = null;
+            return;
+        }
+
+        MatchDismissed = false;
+        MatchedJob = await _telemetryService.FindMatchForPrintAsync(SelectedPrinter.Id, StartedDate.Value.Date + StartedTime.Value);
+    }
+
+    [RelayCommand]
+    private void DismissJobMatch() => MatchDismissed = true;
 
     partial void OnEndedDateChanged(DateTime? value)
     {
@@ -417,6 +456,9 @@ public partial class PrintEditViewModel : EditViewModelBase
             ErrorMessage = result.Error;
             return;
         }
+
+        if (!_id.HasValue && MatchedJob is not null && !MatchDismissed)
+            await _telemetryService.AttachJobToPrintAsync(MatchedJob.Id, result.Print!.Id);
 
         Close?.Invoke();
     }
