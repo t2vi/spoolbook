@@ -35,7 +35,37 @@ public class PrinterMqttHostedService : BackgroundService
         }
 
         var connectTasks = printers.Select(p => ConnectAndSubscribeAsync(p, stoppingToken));
-        await Task.WhenAll(connectTasks);
+        await Task.WhenAll(connectTasks.Append(PurgeStaleJobsLoopAsync(stoppingToken)));
+    }
+
+    // ADR-0017's 7-day unattached-Job retention — was defined on PrinterTelemetryService but
+    // never actually invoked anywhere until now. Runs once at startup, then daily, alongside
+    // the printer connections rather than as a separate hosted service, since it's small and
+    // has the same "runs for the app's lifetime" shape.
+    private async Task PurgeStaleJobsLoopAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var telemetryService = scope.ServiceProvider.GetRequiredService<PrinterTelemetryService>();
+                await telemetryService.PurgeUnattachedJobsOlderThanAsync(DateTime.UtcNow.AddDays(-7));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Stale printer job purge failed");
+            }
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromHours(24), stoppingToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+        }
     }
 
     private async Task ConnectAndSubscribeAsync(Printer printer, CancellationToken stoppingToken)
