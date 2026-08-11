@@ -32,7 +32,10 @@ public class ProjectService
     public async Task<List<Project>> ListAsync() =>
         await _db.Projects.OrderBy(p => p.FileName).ToListAsync();
 
-    public async Task<ProjectResult> UpsertByPathAsync(string filePath)
+    // displayName overrides the on-disk filename — needed for Web uploads, which store the
+    // file under a content-hash-derived path (see Spoolbook.Web's ProjectUploadService) and
+    // would otherwise show that hash instead of the name the user actually uploaded.
+    public async Task<ProjectResult> UpsertByPathAsync(string filePath, string? displayName = null)
     {
         var info = new FileInfo(filePath);
         if (!info.Exists)
@@ -41,7 +44,7 @@ public class ProjectService
         var project = await _db.Projects.FirstOrDefaultAsync(p => p.FilePath == filePath);
         if (project is null)
         {
-            project = new Project { FilePath = filePath, FileName = info.Name };
+            project = new Project { FilePath = filePath, FileName = displayName ?? info.Name };
             _db.Projects.Add(project);
         }
 

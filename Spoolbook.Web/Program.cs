@@ -14,6 +14,7 @@ using Spoolbook.Desktop.Features.Settings.Printers;
 using Spoolbook.Desktop.Features.Spools;
 using Spoolbook.Desktop.Services.Weather;
 using Spoolbook.Web.Components;
+using Spoolbook.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -36,6 +37,7 @@ builder.Services.AddScoped<PrintInventoryService>();
 builder.Services.AddScoped<PrinterService>();
 builder.Services.AddScoped<PrinterTelemetryService>();
 builder.Services.AddScoped<ProjectService>();
+builder.Services.AddScoped<ProjectUploadService>();
 builder.Services.AddScoped<AppSettingsService>();
 builder.Services.AddScoped<DashboardMetricsService>();
 builder.Services.AddScoped<BambuFilamentImportService>(_ => new BambuFilamentImportService(

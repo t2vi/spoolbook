@@ -6,21 +6,53 @@
 @using Spoolbook.Desktop.Features.Settings.Printers
 @using Spoolbook.Desktop.Features.Spools
 @using Spoolbook.Desktop.Features.Prints
+@using Spoolbook.Web.Services
 @inject PrintService PrintService
 @inject SpoolService SpoolService
 @inject PrintProfileService ProfileService
 @inject PrinterService PrinterService
+@inject ProjectService ProjectService
+@inject ProjectUploadService ProjectUploadService
 @inject NavigationManager Nav
 
 <PageTitle>@(Id is null ? "Log a print" : "Edit print")</PageTitle>
 
 <h1 class="mb-6 text-2xl font-semibold text-slate-900">@(Id is null ? "Log a print" : "Edit print")</h1>
 
-@* Project/plate attachment deliberately not built here yet — ProjectService.UpsertByPathAsync
-   takes a local filesystem path (ADR-0015: linked, not copied), which only makes sense while
-   Blazor Server runs on the same machine as the desktop app. Revisit once/if that stops holding. *@
-
 <div class="max-w-lg space-y-4">
+    <div class="flex flex-col gap-1">
+        <label class="text-sm font-medium text-slate-700">Project (optional)</label>
+        <select @bind="selectedProjectId" @bind:after="OnProjectChangedAsync"
+                class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500">
+            <option value="0">-- none --</option>
+            @foreach (var p in projects)
+            {
+                <option value="@p.Id">@p.FileName</option>
+            }
+        </select>
+        <div class="mt-1 flex items-center gap-2">
+            <InputFile OnChange="OnThreeMfSelectedAsync" class="text-sm text-slate-700" />
+            @if (uploading)
+            {
+                <span class="text-xs text-slate-500">Uploading…</span>
+            }
+        </div>
+        @if (uploadError is not null)
+        {
+            <p class="text-xs text-red-600">@uploadError</p>
+        }
+        @if (plates.Count > 0)
+        {
+            <label class="mt-2 text-sm font-medium text-slate-700">Plate</label>
+            <select @bind="selectedPlaterId" class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500">
+                @foreach (var plate in plates)
+                {
+                    <option value="@plate.PlaterId">@(plate.PlaterName ?? $"Plate {plate.PlaterId}")</option>
+                }
+            </select>
+        }
+    </div>
+
     <div class="flex flex-col gap-1">
         <label class="text-sm font-medium text-slate-700">Spool</label>
         <select @bind="selectedSpoolId" @bind:after="OnSpoolChangedAsync"
@@ -129,9 +161,15 @@
     private List<Spool> spools = [];
     private List<PrintProfile> profiles = [];
     private List<Printer> printers = [];
+    private List<Project> projects = [];
+    private List<ProjectPlate> plates = [];
     private int selectedSpoolId;
     private int selectedProfileId;
     private int selectedPrinterId;
+    private int selectedProjectId;
+    private string? selectedPlaterId;
+    private bool uploading;
+    private string? uploadError;
     private DateTime? startedAt;
     private DateTime? endedAt;
     private PrintStatus status = PrintStatus.Success;
@@ -146,6 +184,7 @@
     {
         spools = await SpoolService.ListAllAsync();
         printers = await PrinterService.ListAsync();
+        projects = await ProjectService.ListAsync();
 
         if (Id is null) return;
 
@@ -170,6 +209,13 @@
                 profiles.Add(existing.Profile);
         }
         selectedProfileId = existing.ProfileId;
+
+        if (existing.Project is not null)
+        {
+            selectedProjectId = existing.Project.Id;
+            selectedPlaterId = existing.ProjectPlaterId;
+            plates = ProjectService.ReadPlates(existing.Project.FilePath);
+        }
     }
 
     private async Task OnSpoolChangedAsync()
@@ -177,6 +223,44 @@
         selectedProfileId = 0;
         var spool = spools.FirstOrDefault(s => s.Id == selectedSpoolId);
         profiles = spool is null ? [] : await ProfileService.ListProfilesForFilamentAsync(spool.FilamentId);
+    }
+
+    private Task OnProjectChangedAsync()
+    {
+        var project = projects.FirstOrDefault(p => p.Id == selectedProjectId);
+        plates = project is null ? [] : ProjectService.ReadPlates(project.FilePath);
+        selectedPlaterId = plates.FirstOrDefault()?.PlaterId;
+        return Task.CompletedTask;
+    }
+
+    private async Task OnThreeMfSelectedAsync(InputFileChangeEventArgs e)
+    {
+        uploading = true;
+        uploadError = null;
+        StateHasChanged();
+
+        try
+        {
+            await using var stream = e.File.OpenReadStream(maxAllowedSize: 100 * 1024 * 1024);
+            var result = await ProjectUploadService.SaveAndUpsertAsync(stream, e.File.Name);
+            if (!result.Ok)
+            {
+                uploadError = $"Upload failed: {result.Error}";
+                return;
+            }
+
+            var project = result.Project!;
+            if (!projects.Any(p => p.Id == project.Id))
+                projects.Add(project);
+
+            selectedProjectId = project.Id;
+            plates = ProjectService.ReadPlates(project.FilePath);
+            selectedPlaterId = plates.FirstOrDefault()?.PlaterId;
+        }
+        finally
+        {
+            uploading = false;
+        }
     }
 
     private void ToggleFailureMode(FailureMode mode, bool isChecked)
@@ -210,7 +294,9 @@
             AmsHumidityPct = amsHumidityPct,
             ActualRoomTempC = actualRoomTempC,
             CleanBuildPlate = cleanBuildPlate,
-            FailureModes = selectedFailureModes.ToList()
+            FailureModes = selectedFailureModes.ToList(),
+            ProjectId = selectedProjectId == 0 ? null : selectedProjectId,
+            ProjectPlaterId = selectedProjectId == 0 ? null : selectedPlaterId
         };
 
         var result = Id.HasValue
