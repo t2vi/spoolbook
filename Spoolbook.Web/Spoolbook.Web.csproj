@@ -15,4 +15,8 @@
     <ProjectReference Include="..\Spoolbook.Desktop\Spoolbook.Desktop.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="MQTTnet" Version="5.2.0.1603" />
+  </ItemGroup>
+
 </Project>
