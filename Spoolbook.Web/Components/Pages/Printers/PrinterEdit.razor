@@ -3,7 +3,9 @@
 @attribute [Authorize]
 @using Microsoft.AspNetCore.Authorization
 @using Spoolbook.Desktop.Features.Settings.Printers
+@using Spoolbook.Web.Services
 @inject PrinterService PrinterService
+@inject PrinterConnectionTestService ConnectionTestService
 @inject NavigationManager Nav
 
 <PageTitle>@(Id is null ? "Add printer" : "Edit printer")</PageTitle>
@@ -34,6 +36,19 @@
         <input @bind="input.SerialNumber" class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
     </div>
 
+    <div class="flex items-center gap-3">
+        <button type="button" @onclick="TestConnectionAsync" disabled="@testing"
+                class="inline-flex items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+            @(testing ? "Testing…" : "Test connection")
+        </button>
+        @if (testResult is not null)
+        {
+            <span class="text-sm @(testResult.Ok ? "text-green-700" : "text-red-600")">
+                @(testResult.Ok ? "Connected successfully." : $"Failed: {testResult.Error}")
+            </span>
+        }
+    </div>
+
     @if (errorMessage is not null)
     {
         <p class="text-sm text-red-600">@errorMessage</p>
@@ -51,6 +66,8 @@
 
     private PrinterInput input = new() { Name = "" };
     private string? errorMessage;
+    private bool testing;
+    private PrinterConnectionTestResult? testResult;
 
     protected override async Task OnInitializedAsync()
     {
@@ -67,6 +84,22 @@
             AccessCode = existing.AccessCode,
             SerialNumber = existing.SerialNumber
         };
+    }
+
+    private async Task TestConnectionAsync()
+    {
+        if (string.IsNullOrWhiteSpace(input.IpAddress) || string.IsNullOrWhiteSpace(input.AccessCode))
+        {
+            testResult = new PrinterConnectionTestResult { Ok = false, Error = "Enter an IP address and access code first." };
+            return;
+        }
+
+        testing = true;
+        testResult = null;
+        StateHasChanged();
+
+        testResult = await ConnectionTestService.TestAsync(input.IpAddress, input.AccessCode);
+        testing = false;
     }
 
     private async Task SaveAsync()
