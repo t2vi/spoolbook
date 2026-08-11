@@ -13,6 +13,7 @@
 @inject PrinterService PrinterService
 @inject ProjectService ProjectService
 @inject ProjectUploadService ProjectUploadService
+@inject PrinterTelemetryService TelemetryService
 @inject NavigationManager Nav
 
 <PageTitle>@(Id is null ? "Log a print" : "Edit print")</PageTitle>
@@ -78,7 +79,8 @@
 
     <div class="flex flex-col gap-1">
         <label class="text-sm font-medium text-slate-700">Printer</label>
-        <select @bind="selectedPrinterId" class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500">
+        <select @bind="selectedPrinterId" @bind:after="RefreshJobMatchAsync"
+                class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500">
             <option value="0">-- pick a printer --</option>
             @foreach (var pr in printers)
             {
@@ -87,9 +89,17 @@
         </select>
     </div>
 
+    @if (matchedJob is not null && !matchDismissed)
+    {
+        <div class="flex items-center justify-between rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+            <span>Live telemetry found a job started @matchedJob.StartedAt.ToLocalTime().ToString("t") — attach it to this print?</span>
+            <button type="button" @onclick="@(() => matchDismissed = true)" class="ml-3 shrink-0 text-green-700 hover:text-green-900">Dismiss</button>
+        </div>
+    }
+
     <div class="flex flex-col gap-1">
         <label class="text-sm font-medium text-slate-700">Started</label>
-        <input type="datetime-local" @bind="startedAt" class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
+        <input type="datetime-local" @bind="startedAt" @bind:after="RefreshJobMatchAsync" class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
     </div>
     <div class="flex flex-col gap-1">
         <label class="text-sm font-medium text-slate-700">Ended</label>
@@ -170,6 +180,8 @@
     private string? selectedPlaterId;
     private bool uploading;
     private string? uploadError;
+    private PrinterJob? matchedJob;
+    private bool matchDismissed;
     private DateTime? startedAt;
     private DateTime? endedAt;
     private PrintStatus status = PrintStatus.Success;
@@ -263,6 +275,20 @@
         }
     }
 
+    // Only offered when logging a new print — an existing Print's Job (if any) was already
+    // decided at creation time, so re-matching on edit would just be noise.
+    private async Task RefreshJobMatchAsync()
+    {
+        if (Id.HasValue || selectedPrinterId == 0 || startedAt is null)
+        {
+            matchedJob = null;
+            return;
+        }
+
+        matchDismissed = false;
+        matchedJob = await TelemetryService.FindMatchForPrintAsync(selectedPrinterId, startedAt.Value);
+    }
+
     private void ToggleFailureMode(FailureMode mode, bool isChecked)
     {
         if (isChecked) selectedFailureModes.Add(mode);
@@ -308,6 +334,9 @@
             errorMessage = result.Error;
             return;
         }
+
+        if (!Id.HasValue && matchedJob is not null && !matchDismissed)
+            await TelemetryService.AttachJobToPrintAsync(matchedJob.Id, result.Print!.Id);
 
         Nav.NavigateTo("/prints");
     }
