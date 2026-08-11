@@ -32,6 +32,20 @@ public class ProjectServiceTests
     }
 
     [Fact]
+    public async Task UpsertByPathAsync_UsesDisplayNameWhenProvided()
+    {
+        using var db = TestDbFactory.Create();
+        var service = new ProjectService(db);
+        var path = CreateTempFile();
+
+        var result = await service.UpsertByPathAsync(path, "My Original Upload.3mf");
+
+        Assert.True(result.Ok);
+        Assert.Equal("My Original Upload.3mf", result.Project!.FileName);
+        File.Delete(path);
+    }
+
+    [Fact]
     public async Task UpsertByPathAsync_ReusesExistingProjectForSamePath()
     {
         using var db = TestDbFactory.Create();
