@@ -1,0 +1,58 @@
+@page "/settings"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using Spoolbook.Desktop.Features.Settings.Filaments
+@using Spoolbook.Desktop.Features.Settings.General
+@inject AppSettingsService AppSettingsService
+
+<PageTitle>Settings</PageTitle>
+
+<h1 class="mb-6 text-2xl font-semibold text-slate-900">Settings</h1>
+
+<div class="max-w-lg space-y-6">
+    <div class="flex flex-col gap-1">
+        <label class="text-sm font-medium text-slate-700">Additional filament catalog sources</label>
+        <p class="text-xs text-slate-500">One URL per line. Fetched alongside the default catalog on every sync.</p>
+        <textarea @bind="additionalUrls" placeholder="https://example.com/my-catalog.json"
+                  class="min-h-[100px] rounded-md border border-slate-300 px-3 py-2 font-mono text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"></textarea>
+    </div>
+
+    <button @onclick="SaveAsync" class="inline-flex items-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">Save</button>
+    @if (savedMessage is not null)
+    {
+        <span class="ml-3 text-sm text-slate-600">@savedMessage</span>
+    }
+
+    <div class="border-t border-slate-200 pt-6 text-sm text-slate-600">
+        <div class="flex justify-between py-1"><span>Default catalog source</span><span class="text-slate-900">@FilamentCatalogSyncService.CatalogUrl</span></div>
+        <div class="flex justify-between py-1"><span>Catalog last synced</span><span class="text-slate-900">@(lastSyncedAt?.ToString("yyyy-MM-dd HH:mm") ?? "never")</span></div>
+    </div>
+</div>
+
+@code {
+    private string? additionalUrls;
+    private DateTime? lastSyncedAt;
+    private string? savedMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var settings = await AppSettingsService.GetAsync();
+        additionalUrls = settings.AdditionalFilamentSourceUrls;
+        lastSyncedAt = settings.LastFilamentSyncAt;
+    }
+
+    private async Task SaveAsync()
+    {
+        // Bambu*Dir fields are desktop-only (local filesystem paths on whichever machine runs
+        // the Avalonia app) — preserve them as-is so saving from Web doesn't wipe out a
+        // desktop user's configured paths, since both apps share the same AppSettings row.
+        var current = await AppSettingsService.GetAsync();
+        await AppSettingsService.SaveAsync(new AppSettingsInput
+        {
+            BambuUserPresetsDir = current.BambuUserPresetsDir,
+            BambuSystemProfilesDir = current.BambuSystemProfilesDir,
+            AdditionalFilamentSourceUrls = additionalUrls
+        });
+        savedMessage = "Saved.";
+    }
+}
