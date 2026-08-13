@@ -42,6 +42,14 @@
         {
             <p class="text-xs text-red-600">@uploadError</p>
         }
+        @if (versionCandidate is not null)
+        {
+            <div class="mt-1 flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                <span>Looks like a new version of "@versionCandidate.FileName" — link it?</span>
+                <button type="button" @onclick="LinkVersionAsync" class="rounded border border-slate-300 bg-white px-2 py-1 font-medium hover:bg-slate-100">Link</button>
+                <button type="button" @onclick="@(() => versionCandidate = null)" class="text-slate-500 hover:text-slate-700">Not now</button>
+            </div>
+        }
         @if (plates.Count > 0)
         {
             <label class="mt-2 text-sm font-medium text-slate-700">Plate</label>
@@ -190,6 +198,7 @@
     private string? selectedPlaterId;
     private bool uploading;
     private string? uploadError;
+    private Project? versionCandidate;
     private PrinterJob? matchedJob;
     private bool matchDismissed;
     private DateTime? startedAt;
@@ -261,6 +270,7 @@
     {
         uploading = true;
         uploadError = null;
+        versionCandidate = null;
         StateHasChanged();
 
         try
@@ -280,11 +290,24 @@
             selectedProjectId = project.Id;
             plates = ProjectService.ReadPlates(project.FilePath);
             selectedPlaterId = plates.FirstOrDefault()?.PlaterId;
+
+            // Only worth suggesting a version link for a genuinely new upload — re-uploading an
+            // identical file just dedupes to the existing row (docs/adr/0020), nothing to link.
+            if (result.Created)
+                versionCandidate = await ProjectService.FindVersionCandidateAsync(project.MeshHash, project.FileName, excludeProjectId: project.Id);
         }
         finally
         {
             uploading = false;
         }
+    }
+
+    private async Task LinkVersionAsync()
+    {
+        if (versionCandidate is null) return;
+
+        await ProjectService.LinkAsNewVersionAsync(selectedProjectId, versionCandidate.Id);
+        versionCandidate = null;
     }
 
     // Only offered when logging a new print — an existing Print's Job (if any) was already
