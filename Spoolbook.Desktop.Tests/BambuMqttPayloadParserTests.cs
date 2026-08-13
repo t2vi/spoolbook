@@ -38,6 +38,65 @@ public class BambuMqttPayloadParserTests
         Assert.Equal(8, result.Reading.ProgressPct);
     }
 
+    // Community-documented Bambu AMS schema (not yet verified against a captured payload from
+    // this user's own P2S, unlike the payload above) — confirm field names against a live
+    // capture before shipping AMS UI on top of this.
+    private const string RunningStatusWithFullAmsJson = """
+    {
+        "print": {
+            "gcode_state": "RUNNING",
+            "task_id": "1725",
+            "nozzle_temper": 240.0,
+            "bed_temper": 70.0,
+            "mc_percent": 8,
+            "ams": {
+                "tray_now": "0",
+                "ams": [
+                    {
+                        "id": "0",
+                        "humidity": "5",
+                        "tray": [
+                            { "id": "0", "tray_type": "PLA", "tray_color": "FFFFFFFF", "remain": 72 },
+                            { "id": "1", "tray_type": "PETG", "tray_color": "1A1A1AFF", "remain": 40 },
+                            { "id": "2", "tray_type": "", "tray_color": "", "remain": -1 },
+                            { "id": "3", "tray_type": "ABS", "tray_color": "FF0000FF", "remain": 15 }
+                        ]
+                    }
+                ]
+            }
+        }
+    }
+    """;
+
+    [Fact]
+    public void Parse_ExtractsFullAmsInventory_WhenPresent()
+    {
+        var result = BambuMqttPayloadParser.Parse(RunningStatusWithFullAmsJson);
+
+        Assert.NotNull(result);
+        var unit = Assert.Single(result!.AmsUnits);
+        Assert.Equal("0", unit.UnitId);
+        Assert.Equal(5, unit.HumidityLevel);
+        Assert.Equal(4, unit.Trays.Count);
+
+        Assert.Equal("PLA", unit.Trays[0].MaterialType);
+        Assert.Equal("FFFFFFFF", unit.Trays[0].ColorHex);
+        Assert.Equal(72, unit.Trays[0].RemainPercent);
+
+        Assert.Null(unit.Trays[2].MaterialType);
+        Assert.Null(unit.Trays[2].ColorHex);
+        Assert.Null(unit.Trays[2].RemainPercent);
+    }
+
+    [Fact]
+    public void Parse_ReturnsEmptyAmsUnits_WhenAmsArrayAbsent()
+    {
+        var result = BambuMqttPayloadParser.Parse(RunningStatusJson);
+
+        Assert.NotNull(result);
+        Assert.Empty(result!.AmsUnits);
+    }
+
     [Fact]
     public void Parse_LeavesChamberTempNull_WhenFieldAbsent()
     {
