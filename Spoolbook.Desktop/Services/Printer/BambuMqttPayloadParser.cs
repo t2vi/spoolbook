@@ -8,6 +8,24 @@ public class BambuTelemetryMessage
     public required string GcodeState { get; init; }
     public string? TaskId { get; init; }
     public required ReadingInput Reading { get; init; }
+    public List<AmsUnitReading> AmsUnits { get; init; } = [];
+}
+
+// Live-only AMS snapshot — deliberately not persisted onto Reading/PrinterReading (docs/adr/0022):
+// the point is a live status view, not a per-tray time series in print history.
+public class AmsUnitReading
+{
+    public required string UnitId { get; init; }
+    public int? HumidityLevel { get; init; }
+    public List<AmsTrayReading> Trays { get; init; } = [];
+}
+
+public class AmsTrayReading
+{
+    public required string SlotId { get; init; }
+    public string? MaterialType { get; init; }
+    public string? ColorHex { get; init; }
+    public int? RemainPercent { get; init; }
 }
 
 // Parses Bambu Lab's LAN MQTT "report" topic payload (device/{serial}/report) — pure JSON-in,
@@ -32,8 +50,18 @@ public static class BambuMqttPayloadParser
             if (!TryGetString(print, "gcode_state", out var gcodeState)) return null;
 
             string? amsSlot = null;
-            if (print.TryGetProperty("ams", out var ams) && TryGetString(ams, "tray_now", out var trayNow))
-                amsSlot = trayNow;
+            var amsUnits = new List<AmsUnitReading>();
+            if (print.TryGetProperty("ams", out var ams))
+            {
+                if (TryGetString(ams, "tray_now", out var trayNow))
+                    amsSlot = trayNow;
+
+                if (ams.TryGetProperty("ams", out var amsArray) && amsArray.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var unitEl in amsArray.EnumerateArray())
+                        amsUnits.Add(ParseAmsUnit(unitEl));
+                }
+            }
 
             return new BambuTelemetryMessage
             {
@@ -46,13 +74,45 @@ public static class BambuMqttPayloadParser
                     ChamberTempC = TryGetDecimal(print, "chamber_temper"),
                     AmsSlot = amsSlot,
                     ProgressPct = TryGetInt(print, "mc_percent")
-                }
+                },
+                AmsUnits = amsUnits
             };
         }
         catch (JsonException)
         {
             return null;
         }
+    }
+
+    private static AmsUnitReading ParseAmsUnit(JsonElement unitEl)
+    {
+        var trays = new List<AmsTrayReading>();
+        if (unitEl.TryGetProperty("tray", out var trayArray) && trayArray.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var trayEl in trayArray.EnumerateArray())
+            {
+                var materialType = TryGetString(trayEl, "tray_type", out var mt) && mt.Length > 0 ? mt : null;
+                var colorHex = TryGetString(trayEl, "tray_color", out var ch) && ch.Length > 0 ? ch : null;
+                var remain = TryGetInt(trayEl, "remain");
+
+                trays.Add(new AmsTrayReading
+                {
+                    SlotId = TryGetString(trayEl, "id", out var trayId) ? trayId : "",
+                    MaterialType = materialType,
+                    ColorHex = colorHex,
+                    // -1 is Bambu's "unknown" sentinel (untagged spool / no RFID read yet)
+                    RemainPercent = remain is null or -1 ? null : remain
+                });
+            }
+        }
+
+        return new AmsUnitReading
+        {
+            UnitId = TryGetString(unitEl, "id", out var unitId) ? unitId : "",
+            // Bambu reports humidity as a string digit, not a number, unlike most other fields here
+            HumidityLevel = TryGetString(unitEl, "humidity", out var humidity) && int.TryParse(humidity, out var humidityLevel) ? humidityLevel : null,
+            Trays = trays
+        };
     }
 
     private static bool TryGetString(JsonElement obj, string name, out string value)

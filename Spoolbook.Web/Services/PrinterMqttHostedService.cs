@@ -13,12 +13,14 @@ public class PrinterMqttHostedService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<PrinterMqttHostedService> _logger;
+    private readonly PrinterLiveStatusStore _liveStatusStore;
     private readonly Dictionary<int, string?> _activeTaskIdByPrinter = new();
 
-    public PrinterMqttHostedService(IServiceScopeFactory scopeFactory, ILogger<PrinterMqttHostedService> logger)
+    public PrinterMqttHostedService(IServiceScopeFactory scopeFactory, ILogger<PrinterMqttHostedService> logger, PrinterLiveStatusStore liveStatusStore)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _liveStatusStore = liveStatusStore;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -102,6 +104,7 @@ public class PrinterMqttHostedService : BackgroundService
                             .WithTopicFilter($"device/{printer.SerialNumber}/report")
                             .Build(),
                         stoppingToken);
+                    _liveStatusStore.SetClient(printer.Id, client);
                     _logger.LogInformation("Connected to printer {Name} telemetry", printer.Name);
                 }
                 await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
@@ -112,11 +115,13 @@ public class PrinterMqttHostedService : BackgroundService
             }
             catch (Exception ex)
             {
+                _liveStatusStore.SetClient(printer.Id, null);
                 _logger.LogWarning(ex, "Printer {Name} MQTT connection lost, retrying", printer.Name);
                 await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
             }
         }
 
+        _liveStatusStore.SetClient(printer.Id, null);
         if (client.IsConnected)
             await client.DisconnectAsync(cancellationToken: CancellationToken.None);
     }
@@ -125,6 +130,9 @@ public class PrinterMqttHostedService : BackgroundService
     {
         var message = BambuMqttPayloadParser.Parse(payload);
         if (message is null) return;
+
+        if (message.AmsUnits.Count > 0)
+            _liveStatusStore.SetAmsUnits(printerId, message.AmsUnits);
 
         using var scope = _scopeFactory.CreateScope();
         var telemetryService = scope.ServiceProvider.GetRequiredService<PrinterTelemetryService>();

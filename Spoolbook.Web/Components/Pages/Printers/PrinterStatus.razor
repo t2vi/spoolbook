@@ -1,0 +1,145 @@
+@page "/printers/{Id:int}/status"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using Spoolbook.Desktop.Features.Settings.Printers
+@using Spoolbook.Desktop.Services.Printer
+@using Spoolbook.Web.Services
+@implements IDisposable
+@inject PrinterService PrinterService
+@inject PrinterControlService ControlService
+@inject PrinterLiveStatusStore LiveStatusStore
+
+<PageTitle>@(printer?.Name ?? "Printer") status</PageTitle>
+
+@if (printer is null)
+{
+    <p class="text-slate-500">Loading…</p>
+}
+else
+{
+    <h1 class="mb-1 text-2xl font-semibold text-slate-900">@printer.Name</h1>
+    <p class="mb-6 text-sm @(connected ? "text-green-700" : "text-slate-500")">@(connected ? "Connected" : "Not connected")</p>
+
+    <div class="mb-6 flex items-center gap-3">
+        <button @onclick='() => SendAsync("pause")' disabled="@(!connected || sending)"
+                class="inline-flex items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">Pause</button>
+        <button @onclick='() => SendAsync("resume")' disabled="@(!connected || sending)"
+                class="inline-flex items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">Resume</button>
+        <button @onclick='() => SendAsync("stop")' disabled="@(!connected || sending)"
+                class="inline-flex items-center rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50">Stop</button>
+    </div>
+
+    @if (controlError is not null)
+    {
+        <p class="mb-6 text-sm text-red-600">@controlError</p>
+    }
+
+    <h2 class="mb-3 text-lg font-semibold text-slate-900">AMS</h2>
+    @if (amsUnits.Count == 0)
+    {
+        <p class="text-sm text-slate-500">No AMS data yet — waiting for the printer to report, or none installed.</p>
+    }
+    else
+    {
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            @foreach (var unit in amsUnits)
+            {
+                <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                    <div class="mb-2 flex items-center justify-between">
+                        <span class="text-sm font-medium text-slate-700">AMS @unit.UnitId</span>
+                        @if (unit.HumidityLevel is not null)
+                        {
+                            <span class="text-xs text-slate-500">Humidity level @unit.HumidityLevel</span>
+                        }
+                    </div>
+                    <ul class="space-y-1 text-sm">
+                        @foreach (var tray in unit.Trays)
+                        {
+                            <li class="flex items-center justify-between">
+                                <span class="flex items-center gap-2">
+                                    @if (tray.ColorHex is not null)
+                                    {
+                                        <span class="inline-block h-3 w-3 rounded-full border border-slate-300" style="background-color:#@(tray.ColorHex.Length >= 6 ? tray.ColorHex[..6] : "cccccc")"></span>
+                                    }
+                                    <span class="@(tray.MaterialType is null ? "text-slate-400" : "text-slate-900")">@(tray.MaterialType ?? "Empty")</span>
+                                </span>
+                                <span class="text-slate-500">@(tray.RemainPercent is not null ? $"{tray.RemainPercent}%" : "—")</span>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private Printer? printer;
+    private bool connected;
+    private bool sending;
+    private string? controlError;
+    private List<AmsUnitReading> amsUnits = [];
+    private PeriodicTimer? timer;
+    private CancellationTokenSource? cts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        printer = (await PrinterService.ListAsync()).FirstOrDefault(p => p.Id == Id);
+        RefreshLiveState();
+
+        cts = new CancellationTokenSource();
+        timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        _ = PollAsync(cts.Token);
+    }
+
+    private async Task PollAsync(CancellationToken token)
+    {
+        try
+        {
+            while (await timer!.WaitForNextTickAsync(token))
+            {
+                RefreshLiveState();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private void RefreshLiveState()
+    {
+        connected = LiveStatusStore.GetConnectedClient(Id) is not null;
+        amsUnits = LiveStatusStore.GetAmsUnits(Id);
+    }
+
+    private async Task SendAsync(string command)
+    {
+        if (printer?.SerialNumber is null) return;
+
+        sending = true;
+        controlError = null;
+        StateHasChanged();
+
+        var result = command switch
+        {
+            "pause" => await ControlService.PauseAsync(Id, printer.SerialNumber),
+            "resume" => await ControlService.ResumeAsync(Id, printer.SerialNumber),
+            "stop" => await ControlService.StopAsync(Id, printer.SerialNumber),
+            _ => throw new ArgumentOutOfRangeException(nameof(command))
+        };
+
+        if (!result.Ok)
+            controlError = result.Error;
+
+        sending = false;
+    }
+
+    public void Dispose()
+    {
+        cts?.Cancel();
+        cts?.Dispose();
+        timer?.Dispose();
+    }
+}
