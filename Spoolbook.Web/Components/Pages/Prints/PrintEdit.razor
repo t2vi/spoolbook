@@ -51,6 +51,16 @@
                     <option value="@plate.PlaterId">@(plate.PlaterName ?? $"Plate {plate.PlaterId}")</option>
                 }
             </select>
+            <div class="mt-1 flex h-48 items-center justify-center overflow-hidden rounded-md bg-slate-900">
+                @if (SelectedPlate?.ThumbnailBytes is { } thumb)
+                {
+                    <img src="data:image/png;base64,@Convert.ToBase64String(thumb)" class="h-full w-full object-contain" alt="Plate preview" />
+                }
+                else
+                {
+                    <span class="text-sm text-slate-500">No plate preview</span>
+                }
+            </div>
         }
     </div>
 
@@ -191,6 +201,8 @@
     private bool? cleanBuildPlate;
     private string? notes;
     private string? errorMessage;
+
+    private ProjectPlate? SelectedPlate => plates.FirstOrDefault(p => p.PlaterId == selectedPlaterId);
 
     protected override async Task OnInitializedAsync()
     {
