@@ -274,4 +274,158 @@ public class ProjectServiceTests
         Assert.Empty(plates);
         File.Delete(path);
     }
+
+    private static string CreateTemp3mfWithMesh(byte[] meshBytes)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"spoolbook-test-{Guid.NewGuid():N}.3mf");
+        using (var archive = ZipFile.Open(path, ZipArchiveMode.Create))
+        {
+            var meshEntry = archive.CreateEntry("3D/3dmodel.model");
+            using (var meshStream = meshEntry.Open())
+                meshStream.Write(meshBytes);
+
+            // A second re-slice of the "same" geometry commonly rewrites settings but not the
+            // mesh — this entry stands in for that, its content shouldn't affect the mesh hash.
+            var configEntry = archive.CreateEntry("Metadata/project_settings.config");
+            using (var configStream = configEntry.Open())
+                configStream.Write(System.Text.Encoding.UTF8.GetBytes(Guid.NewGuid().ToString()));
+        }
+        return path;
+    }
+
+    [Fact]
+    public void ComputeMeshHash_SameMeshBytes_ProducesSameHash()
+    {
+        var meshBytes = "same-geometry"u8.ToArray();
+        var pathA = CreateTemp3mfWithMesh(meshBytes);
+        var pathB = CreateTemp3mfWithMesh(meshBytes);
+
+        var hashA = ProjectService.ComputeMeshHash(pathA);
+        var hashB = ProjectService.ComputeMeshHash(pathB);
+
+        Assert.NotNull(hashA);
+        Assert.Equal(hashA, hashB);
+        File.Delete(pathA);
+        File.Delete(pathB);
+    }
+
+    [Fact]
+    public void ComputeMeshHash_DifferentMeshBytes_ProducesDifferentHash()
+    {
+        var pathA = CreateTemp3mfWithMesh("geometry-one"u8.ToArray());
+        var pathB = CreateTemp3mfWithMesh("geometry-two"u8.ToArray());
+
+        var hashA = ProjectService.ComputeMeshHash(pathA);
+        var hashB = ProjectService.ComputeMeshHash(pathB);
+
+        Assert.NotEqual(hashA, hashB);
+        File.Delete(pathA);
+        File.Delete(pathB);
+    }
+
+    [Fact]
+    public void ComputeMeshHash_NoMeshEntry_ReturnsNull()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"spoolbook-test-{Guid.NewGuid():N}.3mf");
+        using (var archive = ZipFile.Open(path, ZipArchiveMode.Create))
+            archive.CreateEntry("Metadata/placeholder.txt");
+
+        Assert.Null(ProjectService.ComputeMeshHash(path));
+        File.Delete(path);
+    }
+
+    [Fact]
+    public void ComputeMeshHash_NotAZipFile_ReturnsNullRatherThanThrowing()
+    {
+        var path = CreateTempFile();
+
+        Assert.Null(ProjectService.ComputeMeshHash(path));
+        File.Delete(path);
+    }
+
+    [Fact]
+    public async Task UpsertByPathAsync_NewProject_StoresMeshHash()
+    {
+        using var db = TestDbFactory.Create();
+        var service = new ProjectService(db);
+        var path = CreateTemp3mfWithMesh("geometry"u8.ToArray());
+
+        var result = await service.UpsertByPathAsync(path);
+
+        Assert.Equal(ProjectService.ComputeMeshHash(path), result.Project!.MeshHash);
+        File.Delete(path);
+    }
+
+    [Fact]
+    public async Task FindVersionCandidateAsync_MatchesOnMeshHash_OverFilename()
+    {
+        using var db = TestDbFactory.Create();
+        var service = new ProjectService(db);
+        var originalPath = CreateTemp3mfWithMesh("shared-geometry"u8.ToArray());
+        var original = await service.UpsertByPathAsync(originalPath, "widget.3mf");
+
+        // Different filename, same mesh — mesh hash should still win.
+        var resliced = CreateTemp3mfWithMesh("shared-geometry"u8.ToArray());
+        var meshHash = ProjectService.ComputeMeshHash(resliced);
+
+        var candidate = await service.FindVersionCandidateAsync(meshHash, "totally-different-name.3mf");
+
+        Assert.NotNull(candidate);
+        Assert.Equal(original.Project!.Id, candidate!.Id);
+        File.Delete(originalPath);
+        File.Delete(resliced);
+    }
+
+    [Fact]
+    public async Task FindVersionCandidateAsync_FallsBackToFilename_WhenNoMeshMatch()
+    {
+        using var db = TestDbFactory.Create();
+        var service = new ProjectService(db);
+        var originalPath = CreateTemp3mfWithMesh("original-geometry"u8.ToArray());
+        var original = await service.UpsertByPathAsync(originalPath, "widget.3mf");
+
+        var candidate = await service.FindVersionCandidateAsync(meshHash: "does-not-match-anything", "widget.3mf");
+
+        Assert.NotNull(candidate);
+        Assert.Equal(original.Project!.Id, candidate!.Id);
+        File.Delete(originalPath);
+    }
+
+    [Fact]
+    public async Task FindVersionCandidateAsync_ReturnsNull_WhenNeitherMatches()
+    {
+        using var db = TestDbFactory.Create();
+        var service = new ProjectService(db);
+        var originalPath = CreateTemp3mfWithMesh("original-geometry"u8.ToArray());
+        await service.UpsertByPathAsync(originalPath, "widget.3mf");
+
+        var candidate = await service.FindVersionCandidateAsync("no-match", "unrelated.3mf");
+
+        Assert.Null(candidate);
+        File.Delete(originalPath);
+    }
+
+    [Fact]
+    public async Task LinkAsNewVersionAsync_ChainsVersionAndFlipsCurrentFlag()
+    {
+        using var db = TestDbFactory.Create();
+        var service = new ProjectService(db);
+        var originalPath = CreateTemp3mfWithMesh("v1-geometry"u8.ToArray());
+        var original = await service.UpsertByPathAsync(originalPath, "widget.3mf");
+        var reslicedPath = CreateTemp3mfWithMesh("v1-geometry"u8.ToArray());
+        var resliced = await service.UpsertByPathAsync(reslicedPath, "widget-v2.3mf");
+
+        await service.LinkAsNewVersionAsync(resliced.Project!.Id, original.Project!.Id);
+
+        var projects = await service.ListAsync();
+        var originalAfter = projects.Single(p => p.Id == original.Project.Id);
+        var newAfter = projects.Single(p => p.Id == resliced.Project!.Id);
+
+        Assert.False(originalAfter.IsCurrentVersion);
+        Assert.True(newAfter.IsCurrentVersion);
+        Assert.Equal(original.Project.Id, newAfter.PreviousVersionProjectId);
+        Assert.Equal(originalAfter.VersionNumber + 1, newAfter.VersionNumber);
+        File.Delete(originalPath);
+        File.Delete(reslicedPath);
+    }
 }
