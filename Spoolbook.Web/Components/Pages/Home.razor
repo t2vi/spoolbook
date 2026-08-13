@@ -1,6 +1,8 @@
 @page "/"
 @using Spoolbook.Desktop.Features.Dashboard
+@using Spoolbook.Desktop.Features.Profiles
 @inject DashboardMetricsService MetricsService
+@inject ProfileInventoryService ProfileInventoryService
 
 <PageTitle>Spoolbook</PageTitle>
 
@@ -12,19 +14,23 @@
 }
 else
 {
-    <div class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <div class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-4">
+        <a href="/filaments" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow">
             <div class="text-3xl font-semibold text-slate-900">@metrics.FilamentCount</div>
             <div class="text-sm text-slate-500">Filaments</div>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        </a>
+        <a href="/spools" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow">
             <div class="text-3xl font-semibold text-slate-900">@metrics.SpoolsByStatus.Sum(c => c.Count)</div>
             <div class="text-sm text-slate-500">Spools</div>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        </a>
+        <a href="/profiles" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow">
+            <div class="text-3xl font-semibold text-slate-900">@profileCount</div>
+            <div class="text-sm text-slate-500">Print Profiles</div>
+        </a>
+        <a href="/prints" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow">
             <div class="text-3xl font-semibold text-slate-900">@metrics.PrintsByStatus.Sum(c => c.Count)</div>
             <div class="text-sm text-slate-500">Prints logged</div>
-        </div>
+        </a>
     </div>
 
     @if (metrics.LastFilamentSyncAt is not null)
@@ -74,6 +80,11 @@ else
 
 @code {
     private DashboardMetrics? metrics;
+    private int profileCount;
 
-    protected override async Task OnInitializedAsync() => metrics = await MetricsService.GetMetricsAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        metrics = await MetricsService.GetMetricsAsync();
+        profileCount = (await ProfileInventoryService.ListAsync(new ProfileInventoryQuery { Page = 1, PageSize = 1 })).Total;
+    }
 }
