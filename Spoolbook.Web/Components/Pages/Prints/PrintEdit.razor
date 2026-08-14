@@ -32,11 +32,18 @@
             }
         </select>
         <div class="mt-1 flex items-center gap-2">
-            <InputFile OnChange="OnThreeMfSelectedAsync" class="text-sm text-slate-700" />
+            <InputFile OnChange="OnThreeMfSelectedAsync" accept=".3mf"
+                       class="text-sm text-slate-500 file:mr-3 file:cursor-pointer file:rounded-md file:border file:border-slate-300 file:bg-white file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-50" />
             @if (uploading)
             {
                 <span class="text-xs text-slate-500">Uploading…</span>
             }
+        </div>
+        <div class="mt-1 flex items-center gap-2">
+            <input @bind="importUrl" placeholder="or paste a direct .3mf URL"
+                   class="flex-1 rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
+            <button type="button" @onclick="FetchFromUrlAsync" disabled="@(uploading || string.IsNullOrWhiteSpace(importUrl))"
+                    class="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">Fetch</button>
         </div>
         @if (uploadError is not null)
         {
@@ -199,6 +206,7 @@
     private bool uploading;
     private string? uploadError;
     private Project? versionCandidate;
+    private string? importUrl;
     private PrinterJob? matchedJob;
     private bool matchDismissed;
     private DateTime? startedAt;
@@ -277,29 +285,55 @@
         {
             await using var stream = e.File.OpenReadStream(maxAllowedSize: 100 * 1024 * 1024);
             var result = await ProjectUploadService.SaveAndUpsertAsync(stream, e.File.Name);
-            if (!result.Ok)
-            {
-                uploadError = $"Upload failed: {result.Error}";
-                return;
-            }
-
-            var project = result.Project!;
-            if (!projects.Any(p => p.Id == project.Id))
-                projects.Add(project);
-
-            selectedProjectId = project.Id;
-            plates = ProjectService.ReadPlates(project.FilePath);
-            selectedPlaterId = plates.FirstOrDefault()?.PlaterId;
-
-            // Only worth suggesting a version link for a genuinely new upload — re-uploading an
-            // identical file just dedupes to the existing row (docs/adr/0020), nothing to link.
-            if (result.Created)
-                versionCandidate = await ProjectService.FindVersionCandidateAsync(project.MeshHash, project.FileName, excludeProjectId: project.Id);
+            await ApplyUploadResultAsync(result);
         }
         finally
         {
             uploading = false;
         }
+    }
+
+    private async Task FetchFromUrlAsync()
+    {
+        if (string.IsNullOrWhiteSpace(importUrl)) return;
+
+        uploading = true;
+        uploadError = null;
+        versionCandidate = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await ProjectUploadService.SaveFromUrlAsync(importUrl);
+            await ApplyUploadResultAsync(result);
+            if (result.Ok) importUrl = null;
+        }
+        finally
+        {
+            uploading = false;
+        }
+    }
+
+    private async Task ApplyUploadResultAsync(ProjectResult result)
+    {
+        if (!result.Ok)
+        {
+            uploadError = $"Import failed: {result.Error}";
+            return;
+        }
+
+        var project = result.Project!;
+        if (!projects.Any(p => p.Id == project.Id))
+            projects.Add(project);
+
+        selectedProjectId = project.Id;
+        plates = ProjectService.ReadPlates(project.FilePath);
+        selectedPlaterId = plates.FirstOrDefault()?.PlaterId;
+
+        // Only worth suggesting a version link for a genuinely new upload — re-uploading an
+        // identical file just dedupes to the existing row (docs/adr/0020), nothing to link.
+        if (result.Created)
+            versionCandidate = await ProjectService.FindVersionCandidateAsync(project.MeshHash, project.FileName, excludeProjectId: project.Id);
     }
 
     private async Task LinkVersionAsync()
