@@ -37,11 +37,12 @@ builder.Services.AddScoped<PrintInventoryService>();
 builder.Services.AddScoped<PrinterService>();
 builder.Services.AddScoped<PrinterTelemetryService>();
 builder.Services.AddScoped<ProjectService>();
-builder.Services.AddScoped<ProjectUploadService>();
+builder.Services.AddHttpClient<ProjectUploadService>();
 builder.Services.AddSingleton<PrinterLiveStatusStore>();
 builder.Services.AddHostedService<PrinterMqttHostedService>();
 builder.Services.AddScoped<PrinterConnectionTestService>();
 builder.Services.AddScoped<PrinterControlService>();
+builder.Services.AddScoped<PrinterPrintService>();
 builder.Services.AddScoped<AppSettingsService>();
 builder.Services.AddScoped<DashboardMetricsService>();
 builder.Services.AddScoped<BambuFilamentImportService>(_ => new BambuFilamentImportService(

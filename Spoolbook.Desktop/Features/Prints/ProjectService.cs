@@ -19,6 +19,7 @@ public class ProjectResult
     public bool Ok { get; init; }
     public Project? Project { get; init; }
     public string? Error { get; init; }
+    public bool Created { get; init; }
 }
 
 public class ProjectService
@@ -43,6 +44,7 @@ public class ProjectService
             return new ProjectResult { Ok = false, Error = "file_not_found" };
 
         var project = await _db.Projects.FirstOrDefaultAsync(p => p.FilePath == filePath);
+        var created = project is null;
         if (project is null)
         {
             project = new Project { FilePath = filePath, FileName = displayName ?? info.Name, MeshHash = ComputeMeshHash(filePath) };
@@ -53,7 +55,7 @@ public class ProjectService
         project.LastKnownFileSizeBytes = info.Length;
         await _db.SaveChangesAsync();
 
-        return new ProjectResult { Ok = true, Project = project };
+        return new ProjectResult { Ok = true, Project = project, Created = created };
     }
 
     public async Task<ProjectResult> DeleteAsync(int id)
@@ -93,15 +95,15 @@ public class ProjectService
     // Suggests an existing Project this upload might be a new version of — mesh hash first
     // (strongest signal), filename as a weaker fallback for when re-export reformatting misses
     // the mesh hash. Caller still confirms explicitly (docs/adr/0023) — this only pre-selects.
-    public async Task<Project?> FindVersionCandidateAsync(string? meshHash, string fileName)
+    public async Task<Project?> FindVersionCandidateAsync(string? meshHash, string fileName, int? excludeProjectId = null)
     {
         if (!string.IsNullOrEmpty(meshHash))
         {
-            var byMesh = await _db.Projects.FirstOrDefaultAsync(p => p.MeshHash == meshHash);
+            var byMesh = await _db.Projects.FirstOrDefaultAsync(p => p.MeshHash == meshHash && p.Id != excludeProjectId);
             if (byMesh is not null) return byMesh;
         }
 
-        return await _db.Projects.FirstOrDefaultAsync(p => p.FileName == fileName);
+        return await _db.Projects.FirstOrDefaultAsync(p => p.FileName == fileName && p.Id != excludeProjectId);
     }
 
     public async Task LinkAsNewVersionAsync(int newProjectId, int previousVersionProjectId)

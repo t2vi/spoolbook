@@ -392,6 +392,49 @@ public class ProjectServiceTests
     }
 
     [Fact]
+    public async Task FindVersionCandidateAsync_ExcludesGivenProjectId()
+    {
+        using var db = TestDbFactory.Create();
+        var service = new ProjectService(db);
+        var path = CreateTemp3mfWithMesh("geometry"u8.ToArray());
+        var uploaded = await service.UpsertByPathAsync(path, "widget.3mf");
+
+        // A fresh upload always matches its own just-saved row by mesh hash — must be excluded
+        // or every upload would suggest linking to itself.
+        var candidate = await service.FindVersionCandidateAsync(uploaded.Project!.MeshHash, "widget.3mf", excludeProjectId: uploaded.Project.Id);
+
+        Assert.Null(candidate);
+        File.Delete(path);
+    }
+
+    [Fact]
+    public async Task UpsertByPathAsync_NewPath_ReturnsCreatedTrue()
+    {
+        using var db = TestDbFactory.Create();
+        var service = new ProjectService(db);
+        var path = CreateTempFile();
+
+        var result = await service.UpsertByPathAsync(path);
+
+        Assert.True(result.Created);
+        File.Delete(path);
+    }
+
+    [Fact]
+    public async Task UpsertByPathAsync_ExistingPath_ReturnsCreatedFalse()
+    {
+        using var db = TestDbFactory.Create();
+        var service = new ProjectService(db);
+        var path = CreateTempFile();
+        await service.UpsertByPathAsync(path);
+
+        var second = await service.UpsertByPathAsync(path);
+
+        Assert.False(second.Created);
+        File.Delete(path);
+    }
+
+    [Fact]
     public async Task FindVersionCandidateAsync_ReturnsNull_WhenNeitherMatches()
     {
         using var db = TestDbFactory.Create();

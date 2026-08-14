@@ -11,12 +11,16 @@ namespace Spoolbook.Web.Services;
 // happen, since nothing but this service ever writes into the storage directory.
 public class ProjectUploadService
 {
+    private const long MaxBytes = 100 * 1024 * 1024;
+
     private readonly ProjectService _projectService;
+    private readonly HttpClient _httpClient;
     private readonly string _storageDir;
 
-    public ProjectUploadService(ProjectService projectService)
+    public ProjectUploadService(ProjectService projectService, HttpClient httpClient)
     {
         _projectService = projectService;
+        _httpClient = httpClient;
         var dataDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "spoolbook");
@@ -28,13 +32,50 @@ public class ProjectUploadService
     {
         using var ms = new MemoryStream();
         await content.CopyToAsync(ms);
-        var bytes = ms.ToArray();
+        return await SaveBytesAsync(ms.ToArray(), originalFileName);
+    }
 
+    // Generic URL fetch (docs/adr/0023) — any direct link to a .3mf file, including a MakerWorld
+    // download link copied manually. Auto-resolving a MakerWorld page URL itself is deferred:
+    // that needs their unofficial frontend API, not a direct file link.
+    public async Task<ProjectResult> SaveFromUrlAsync(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || (uri.Scheme != "http" && uri.Scheme != "https"))
+            return new ProjectResult { Ok = false, Error = "Enter a valid http(s) URL." };
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.GetAsync(uri);
+        }
+        catch (Exception ex)
+        {
+            return new ProjectResult { Ok = false, Error = $"Fetch failed: {ex.Message}" };
+        }
+
+        if (!response.IsSuccessStatusCode)
+            return new ProjectResult { Ok = false, Error = $"Fetch failed: HTTP {(int)response.StatusCode}" };
+
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+        if (bytes.Length == 0)
+            return new ProjectResult { Ok = false, Error = "Downloaded file was empty." };
+        if (bytes.Length > MaxBytes)
+            return new ProjectResult { Ok = false, Error = "Downloaded file is too large (over 100 MB)." };
+
+        var fileName = Path.GetFileName(uri.LocalPath);
+        if (string.IsNullOrWhiteSpace(fileName) || !fileName.EndsWith(".3mf", StringComparison.OrdinalIgnoreCase))
+            fileName = "download.3mf";
+
+        return await SaveBytesAsync(bytes, fileName);
+    }
+
+    private async Task<ProjectResult> SaveBytesAsync(byte[] bytes, string displayName)
+    {
         var hash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
         var storedPath = Path.Combine(_storageDir, $"{hash}.3mf");
         if (!File.Exists(storedPath))
             await File.WriteAllBytesAsync(storedPath, bytes);
 
-        return await _projectService.UpsertByPathAsync(storedPath, originalFileName);
+        return await _projectService.UpsertByPathAsync(storedPath, displayName);
     }
 }
