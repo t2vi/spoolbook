@@ -14,7 +14,7 @@
 
 <h1 class="mb-6 text-2xl font-semibold text-slate-900">@(Id is null ? "Add profile" : "Edit profile")</h1>
 
-<div class="max-w-2xl space-y-4">
+<div class="max-w-3xl space-y-4">
     @if (Id is null)
     {
         <div class="flex flex-col gap-1">
@@ -44,46 +44,55 @@
         <input @bind="name" class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
     </div>
 
-    @* Most-commonly-tuned subset, not all ~140 PrintProfile fields — anything else the .3mf import
-       matched still gets applied via the full Fields dict on save, just not shown for editing here. *@
-    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div class="flex flex-col gap-1">
-            <label class="text-sm font-medium text-slate-700">Nozzle temp (°C)</label>
-            <input @bind='Fields["NozzleTempC"]' class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
-        </div>
-        <div class="flex flex-col gap-1">
-            <label class="text-sm font-medium text-slate-700">Nozzle temp, first layer (°C)</label>
-            <input @bind='Fields["NozzleTempInitialC"]' class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
-        </div>
-        <div class="flex flex-col gap-1">
-            <label class="text-sm font-medium text-slate-700">Hot plate temp (°C)</label>
-            <input @bind='Fields["HotPlateTempC"]' class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
-        </div>
-        <div class="flex flex-col gap-1">
-            <label class="text-sm font-medium text-slate-700">Hot plate temp, first layer (°C)</label>
-            <input @bind='Fields["HotPlateTempInitialC"]' class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
-        </div>
-        <div class="flex flex-col gap-1">
-            <label class="text-sm font-medium text-slate-700">Retraction (mm)</label>
-            <input @bind='Fields["RetractionMm"]' class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
-        </div>
-        <div class="flex flex-col gap-1">
-            <label class="text-sm font-medium text-slate-700">Retraction speed (mm/s)</label>
-            <input @bind='Fields["RetractionSpeedMmS"]' class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
-        </div>
-        <div class="flex flex-col gap-1">
-            <label class="text-sm font-medium text-slate-700">Fan min speed (%)</label>
-            <input @bind='Fields["FanMinSpeedPct"]' class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
-        </div>
-        <div class="flex flex-col gap-1">
-            <label class="text-sm font-medium text-slate-700">Fan max speed (%)</label>
-            <input @bind='Fields["FanMaxSpeedPct"]' class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
-        </div>
-        <div class="flex flex-col gap-1">
-            <label class="text-sm font-medium text-slate-700">Flow ratio</label>
-            <input @bind='Fields["FlowRatio"]' class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
-        </div>
+    @* All ~140 PrintProfile fields, grouped the same way the desktop app does (ProfileFieldSpec —
+       mirrors Bambu Studio's own tab/section layout), not a curated subset. *@
+    <div class="flex flex-wrap gap-1 border-b border-slate-200">
+        @foreach (var tab in tabs)
+        {
+            <button type="button" @onclick="@(() => activeTab = tab.Title)"
+                    class="@(TabButtonClass(tab.Title))">@tab.Title</button>
+        }
     </div>
+
+    @foreach (var tab in tabs.Where(t => t.Title == activeTab))
+    {
+        @foreach (var section in tab.Sections)
+        {
+            <div class="pt-2">
+                <h3 class="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">@section.Title</h3>
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    @foreach (var field in section.Fields.Where(f => f.ShowRow))
+                    {
+                        <div class="flex flex-col gap-1">
+                            <label class="text-sm font-medium text-slate-700">@field.Label@(string.IsNullOrEmpty(field.Unit) ? "" : $" ({field.Unit})")</label>
+                            @if (field.IsBool)
+                            {
+                                <input type="checkbox" checked="@field.BoolValue" @onchange="@(e => field.BoolValue = (bool)e.Value!)" class="h-4 w-4 self-start rounded border-slate-300" />
+                            }
+                            else if (field.IsEnum)
+                            {
+                                <select @bind="field.Value" class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500">
+                                    <option value="">--</option>
+                                    @foreach (var opt in field.Options!)
+                                    {
+                                        <option value="@opt">@opt</option>
+                                    }
+                                </select>
+                            }
+                            else if (field.IsTextArea)
+                            {
+                                <textarea @bind="field.Value" rows="4" class="rounded-md border border-slate-300 px-3 py-2 font-mono text-xs focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"></textarea>
+                            }
+                            else
+                            {
+                                <input @bind="field.Value" class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    }
 
     @if (errorMessage is not null)
     {
@@ -100,21 +109,21 @@
     [Parameter]
     public int? Id { get; set; }
 
-    private static readonly string[] EditableKeys =
-    [
-        "NozzleTempC", "NozzleTempInitialC", "HotPlateTempC", "HotPlateTempInitialC",
-        "RetractionMm", "RetractionSpeedMmS", "FanMinSpeedPct", "FanMaxSpeedPct", "FlowRatio"
-    ];
-
     private List<Filament> filaments = [];
     private int selectedFilamentId;
     private string name = "";
-    private Dictionary<string, string> Fields = EditableKeys.ToDictionary(k => k, _ => "");
+    private List<ProfileFieldTab> tabs = ProfileFieldSpec.BuildGroups(null);
+    private string activeTab = ProfileFieldSpec.BuildGroups(null)[0].Title;
     private string? rawSettingsJson;
     private ProfileSource source = ProfileSource.Manual;
     private SlicerType? sourceSlicer;
     private string? importMessage;
     private string? errorMessage;
+
+    private string TabButtonClass(string title) =>
+        title == activeTab
+            ? "rounded-t-md border border-b-0 border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-900"
+            : "rounded-t-md border border-b-0 border-transparent px-3 py-1.5 text-sm font-medium text-slate-500 hover:text-slate-700";
 
     protected override async Task OnInitializedAsync()
     {
@@ -129,8 +138,8 @@
 
         name = existing.Name;
         var existingFields = ProfileFieldMapper.ToFieldStrings(existing);
-        foreach (var key in EditableKeys)
-            Fields[key] = existingFields.GetValueOrDefault(key, "");
+        tabs = ProfileFieldSpec.BuildGroups(existingFields);
+        activeTab = tabs[0].Title;
     }
 
     private async Task OnThreeMfSelectedAsync(InputFileChangeEventArgs e)
@@ -148,9 +157,8 @@
                 return;
             }
 
-            foreach (var key in EditableKeys)
-                if (result.Fields!.TryGetValue(key, out var value))
-                    Fields[key] = value;
+            tabs = ProfileFieldSpec.BuildGroups(result.Fields);
+            activeTab = tabs[0].Title;
 
             // result.SuggestedName is derived from the server-side temp path (a GUID), not
             // useful here — use the browser upload's original filename instead.
@@ -170,10 +178,15 @@
 
     private async Task SaveAsync()
     {
+        var fields = tabs
+            .SelectMany(t => t.Sections)
+            .SelectMany(s => s.Fields)
+            .ToDictionary(f => f.Name, f => f.Value);
+
         var input = new ProfileInput
         {
             Name = name,
-            Fields = Fields,
+            Fields = fields,
             Source = source,
             SourceSlicer = sourceSlicer,
             RawSettingsJson = rawSettingsJson
