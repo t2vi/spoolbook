@@ -8,6 +8,7 @@
 @inject PrinterService PrinterService
 @inject PrinterControlService ControlService
 @inject PrinterLiveStatusStore LiveStatusStore
+@inject PrinterCameraService CameraService
 
 <PageTitle>@(printer?.Name ?? "Printer") status</PageTitle>
 
@@ -32,6 +33,27 @@ else
     @if (controlError is not null)
     {
         <p class="mb-6 text-sm text-red-600">@controlError</p>
+    }
+
+    <h2 class="mb-3 text-lg font-semibold text-slate-900">Camera</h2>
+    @if (printer.IpAddress is null || printer.AccessCode is null)
+    {
+        <p class="mb-6 text-sm text-slate-500">No telemetry configured for this printer.</p>
+    }
+    else if (cameraStatus == CameraStreamStatus.Unavailable)
+    {
+        <div class="mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <p class="text-sm text-red-600">@(cameraError ?? "Camera unavailable.")</p>
+            <button @onclick="RetryCamera" class="mt-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">Retry</button>
+        </div>
+    }
+    else
+    {
+        @if (cameraStatus == CameraStreamStatus.Connecting)
+        {
+            <p class="mb-1 text-xs text-slate-500">Connecting…</p>
+        }
+        <img src="@CameraSrc" class="mb-6 w-full max-w-xl rounded-lg border border-slate-200 bg-slate-900" alt="Live camera" />
     }
 
     <h2 class="mb-3 text-lg font-semibold text-slate-900">AMS</h2>
@@ -82,8 +104,16 @@ else
     private bool sending;
     private string? controlError;
     private List<AmsUnitReading> amsUnits = [];
+    private CameraStreamStatus cameraStatus = CameraStreamStatus.NotStarted;
+    private string? cameraError;
+    private int cameraRetryCount;
     private PeriodicTimer? timer;
     private CancellationTokenSource? cts;
+
+    // Cache-busted so a Retry click forces the browser to open a fresh request to the
+    // endpoint — that request is what actually triggers PrinterCameraService to (re)start
+    // the pipeline (see PrinterCameraService.Retry's doc comment).
+    private string CameraSrc => $"/printers/{Id}/camera?r={cameraRetryCount}";
 
     protected override async Task OnInitializedAsync()
     {
@@ -112,6 +142,14 @@ else
     {
         connected = LiveStatusStore.GetConnectedClient(Id) is not null;
         amsUnits = LiveStatusStore.GetAmsUnits(Id);
+        cameraStatus = CameraService.GetStatus(Id);
+        cameraError = CameraService.GetLastError(Id);
+    }
+
+    private void RetryCamera()
+    {
+        CameraService.Retry(Id);
+        cameraRetryCount++;
     }
 
     private async Task SendAsync(string command)
