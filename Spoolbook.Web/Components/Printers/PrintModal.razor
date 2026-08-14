@@ -17,6 +17,7 @@
 @inject PrintProfileService ProfileService
 @inject PrinterPrintService PrinterPrintService
 @inject PrinterLiveStatusStore LiveStatusStore
+@inject ReslicingService ReslicingService
 
 <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" @onclick="Close">
     <div class="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-6 shadow-xl" @onclick:stopPropagation="true">
@@ -133,6 +134,23 @@
                 </select>
             </div>
 
+            @if (resliceError is not null)
+            {
+                <p class="text-sm text-red-600">@resliceError</p>
+            }
+            @if (resliceSucceeded)
+            {
+                <p class="text-sm text-green-700">Re-sliced — now sending the freshly-sliced version.</p>
+            }
+            <div>
+                <button type="button" @onclick="ReslicingAsync"
+                        disabled="@(reslicing || sending || selectedProjectId == 0 || selectedPlaterId is null || selectedProfileId == 0)"
+                        class="inline-flex items-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                    @(reslicing ? "Re-slicing…" : "Re-slice with this profile")
+                </button>
+                <p class="mt-1 text-xs text-slate-500">Applies the picked Profile's settings to this project and re-slices it before sending — otherwise the project sends exactly as originally sliced.</p>
+            </div>
+
             @if (sendError is not null)
             {
                 <p class="text-sm text-red-600">@sendError</p>
@@ -140,7 +158,7 @@
 
             <div class="flex items-center gap-3 pt-2">
                 <button @onclick="SendAsync"
-                        disabled="@(sending || selectedProjectId == 0 || selectedPlaterId is null || selectedSpoolId == 0 || selectedProfileId == 0 || (useAms && amsTrays.Count > 0 && selectedAmsTrayKey is null))"
+                        disabled="@(sending || reslicing || selectedProjectId == 0 || selectedPlaterId is null || selectedSpoolId == 0 || selectedProfileId == 0 || (useAms && amsTrays.Count > 0 && selectedAmsTrayKey is null))"
                         class="inline-flex items-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50">
                     @(sending ? "Sending…" : "Send to printer")
                 </button>
@@ -177,6 +195,9 @@
     private PrintProfile? recommended;
     private bool sending;
     private string? sendError;
+    private bool reslicing;
+    private string? resliceError;
+    private bool resliceSucceeded;
 
     private ProjectPlate? SelectedPlate => plates.FirstOrDefault(p => p.PlaterId == selectedPlaterId);
 
@@ -302,6 +323,45 @@
         recommended = await PrintService.RecommendProfileForProjectAsync(project.Id, currentTempC: null);
         if (recommended is not null && profiles.Any(p => p.Id == recommended.Id))
             selectedProfileId = recommended.Id;
+    }
+
+    private async Task ReslicingAsync()
+    {
+        var project = projects.FirstOrDefault(p => p.Id == selectedProjectId);
+        var profile = profiles.FirstOrDefault(p => p.Id == selectedProfileId);
+        if (project is null || profile is null || selectedPlaterId is null)
+        {
+            resliceError = "Pick a project, plate, and profile first.";
+            return;
+        }
+
+        reslicing = true;
+        resliceError = null;
+        resliceSucceeded = false;
+        StateHasChanged();
+
+        var previousPlaterId = selectedPlaterId;
+        var result = await ReslicingService.ReslicingAsync(project, profile);
+
+        if (!result.Ok || result.Project is null)
+        {
+            reslicing = false;
+            resliceError = result.Error ?? "Re-slice failed.";
+            return;
+        }
+
+        var reslicedProject = result.Project;
+        if (!projects.Any(p => p.Id == reslicedProject.Id))
+            projects.Add(reslicedProject);
+
+        selectedProjectId = reslicedProject.Id;
+        plates = ProjectService.ReadPlates(reslicedProject.FilePath);
+        // Plate layout doesn't change across a re-slice of the same mesh — keep the same plate
+        // selected if it still exists, only fall back to the first one if it doesn't.
+        selectedPlaterId = plates.Any(p => p.PlaterId == previousPlaterId) ? previousPlaterId : plates.FirstOrDefault()?.PlaterId;
+
+        reslicing = false;
+        resliceSucceeded = true;
     }
 
     private async Task SendAsync()

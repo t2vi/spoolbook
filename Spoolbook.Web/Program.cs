@@ -45,6 +45,11 @@ builder.Services.AddScoped<PrinterConnectionTestService>();
 builder.Services.AddScoped<PrinterControlService>();
 builder.Services.AddScoped<PrinterPrintService>();
 builder.Services.AddSingleton<PrinterCameraService>();
+// Standalone OrcaSlicer wrapper (slicer-service/) — separate deployable, not a project in this
+// solution. Defaults to localhost for local dev against a co-located instance; point
+// RESLICE_SERVICE_URL at the real LXC's address in production.
+builder.Services.AddHttpClient<ReslicingService>(client =>
+    client.BaseAddress = new Uri(Environment.GetEnvironmentVariable("RESLICE_SERVICE_URL") ?? "http://localhost:8100"));
 builder.Services.AddScoped<AppSettingsService>();
 builder.Services.AddScoped<DashboardMetricsService>();
 builder.Services.AddScoped<BambuFilamentImportService>(_ => new BambuFilamentImportService(
