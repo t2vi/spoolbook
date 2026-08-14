@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
@@ -14,17 +15,26 @@ using Spoolbook.Desktop.Features.Settings.General;
 using Spoolbook.Desktop.Features.Settings.Printers;
 using Spoolbook.Desktop.Features.Spools;
 using Spoolbook.Desktop.Services.Weather;
+using Spoolbook.Web.Api;
 using Spoolbook.Web.Components;
 using Spoolbook.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Same DB file the Avalonia desktop app uses — parallel-run migration, docs/adr/0018.
-var dataDir = Path.Combine(
-    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-    "spoolbook");
-Directory.CreateDirectory(dataDir);
-var dbPath = Path.Combine(dataDir, "spoolbook.db");
+// SPOOLBOOK_DB_PATH overrides this for a dev instance run alongside the live one during the
+// SvelteKit migration (feat/svelte-migration) — otherwise a second `dotnet run` double-connects
+// to real printer MQTT and double-writes telemetry into the same production DB the live
+// instance uses. Unset in production; only ever set for local dev.
+var dbPath = Environment.GetEnvironmentVariable("SPOOLBOOK_DB_PATH");
+if (string.IsNullOrEmpty(dbPath))
+{
+    var dataDir = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "spoolbook");
+    Directory.CreateDirectory(dataDir);
+    dbPath = Path.Combine(dataDir, "spoolbook.db");
+}
 
 builder.Services.AddDbContext<SpoolbookDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
 
@@ -60,12 +70,40 @@ builder.Services.AddScoped<IWeatherService, OpenMeteoWeatherService>();
 // docs/adr/0005-access-control-v1-vercel-gate-v2-mutation-lock.md for the LAN pivot
 // (docs/adr/0018). Still single-editor: no user table, no OAuth.
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-    .AddCookie(options => options.LoginPath = "/login");
+    .AddCookie(options =>
+    {
+        options.LoginPath = "/login";
+        // Blazor pages still want the plain redirect-to-/login (AuthorizeRouteView handles the
+        // rest). The new JSON API (/api/**) wants a clean 401 instead — the default redirect
+        // response gets its status code mangled to 400 by UseStatusCodePagesWithReExecute
+        // downstream, which isn't something a fetch()-based client should have to know about.
+        options.Events.OnRedirectToLogin = ctx =>
+        {
+            if (ctx.Request.Path.StartsWithSegments("/api"))
+            {
+                ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return ctx.Response.WriteAsJsonAsync(new { authenticated = false });
+            }
+            ctx.Response.Redirect(ctx.RedirectUri);
+            return Task.CompletedTask;
+        };
+    });
 builder.Services.AddAuthorization();
 builder.Services.AddCascadingAuthenticationState();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+// SvelteKit migration's JSON API is starting to return entities directly (no DTO layer, per
+// the migration plan) — Print.FailureModes <-> PrintFailureMode.Print is a genuine reference
+// cycle in the entity graph, not a hypothetical one. Enums (PrintStatus, AmbientSource, ...)
+// serialize as their string name, not the default numeric value — PrinterCard needs to show
+// "Success"/"Failed"/etc., not a bare 0-3 the frontend would have to keep a private mapping for.
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
 
 var app = builder.Build();
 
@@ -102,6 +140,13 @@ if (!app.Environment.IsDevelopment())
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
+// This re-executes ANY response with an empty body and a 400-599 status against the Blazor
+// not-found page — including JSON API responses, stamping Blazor's own headers over them and
+// mangling the status (confirmed live: a bare 401 came out as 400). Branching this middleware
+// by path broke re-execution for genuine Blazor 404s (the re-executed pipeline's continuation
+// doesn't chain the same way inside a UseWhen branch) — so instead every /api/** 4xx/5xx
+// response below carries a non-empty JSON body, which is what actually keeps this middleware
+// from touching it.
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 
@@ -135,17 +180,26 @@ app.MapGet("/login", (string? returnUrl, string? error) => Results.Content($"""
     </html>
     """, "text/html"));
 
+// Shared by /login's form POST and the SvelteKit-facing /api/login below — same shared-secret
+// check, same cookie, two different response shapes (redirect vs JSON) for two different callers.
+async Task<bool> TrySignInEditorAsync(HttpContext ctx, string password)
+{
+    var expected = Environment.GetEnvironmentVariable("SPOOLBOOK_ADMIN_PASSWORD");
+    if (string.IsNullOrEmpty(expected) || password != expected) return false;
+
+    var identity = new ClaimsIdentity([new Claim(ClaimTypes.Name, "editor")], CookieAuthenticationDefaults.AuthenticationScheme);
+    await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
+    return true;
+}
+
 app.MapPost("/login", async (HttpContext ctx, string? returnUrl) =>
 {
     var form = await ctx.Request.ReadFormAsync();
     var password = form["password"].ToString();
-    var expected = Environment.GetEnvironmentVariable("SPOOLBOOK_ADMIN_PASSWORD");
 
-    if (string.IsNullOrEmpty(expected) || password != expected)
+    if (!await TrySignInEditorAsync(ctx, password))
         return Results.Redirect($"/login?returnUrl={Uri.EscapeDataString(returnUrl ?? "/")}&error=1");
 
-    var identity = new ClaimsIdentity([new Claim(ClaimTypes.Name, "editor")], CookieAuthenticationDefaults.AuthenticationScheme);
-    await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
     return Results.Redirect(returnUrl ?? "/");
 });
 
@@ -154,6 +208,28 @@ app.MapPost("/logout", async (HttpContext ctx) =>
     await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     return Results.Redirect("/");
 });
+
+// SvelteKit-facing counterparts of the two endpoints above — same cookie, JSON in/out instead
+// of a form post + redirect, so the Svelte app can render its own login form.
+app.MapPost("/api/login", async (HttpContext ctx, ApiLoginRequest req) =>
+    await TrySignInEditorAsync(ctx, req.Password) ? Results.Ok(new { ok = true }) : Results.Json(new { ok = false }, statusCode: 401));
+
+app.MapPost("/api/logout", async (HttpContext ctx) =>
+{
+    await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    return Results.Ok(new { ok = true });
+});
+
+app.MapGet("/api/me", (HttpContext ctx) => Results.Ok(new { authenticated = ctx.User.Identity?.IsAuthenticated == true }));
+
+app.MapPrinterEndpoints();
+app.MapProjectEndpoints();
+app.MapPrintEndpoints();
+app.MapSpoolEndpoints();
+app.MapProfileEndpoints();
+app.MapDashboardEndpoints();
+app.MapSettingsEndpoints();
+app.MapFilamentEndpoints();
 
 // MJPEG relay for a printer's live camera (docs/adr/0024) — plain minimal API so a browser
 // <img> tag can point straight at it; a Blazor component can't stream a raw multipart
@@ -194,3 +270,5 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.Run();
+
+public record ApiLoginRequest(string Password);

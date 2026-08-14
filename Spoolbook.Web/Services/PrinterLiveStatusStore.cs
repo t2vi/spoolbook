@@ -8,6 +8,7 @@ public class PrinterLiveStatus
 {
     public IMqttClient? Client { get; set; }
     public List<AmsUnitReading> AmsUnits { get; set; } = [];
+    public string? GcodeState { get; set; }
 }
 
 // Per-printer registry of the live MQTT connection PrinterMqttHostedService already holds open
@@ -25,9 +26,14 @@ public class PrinterLiveStatusStore
 
     public void SetAmsUnits(int printerId, List<AmsUnitReading> amsUnits) => GetOrAdd(printerId).AmsUnits = amsUnits;
 
+    public void SetGcodeState(int printerId, string gcodeState) => GetOrAdd(printerId).GcodeState = gcodeState;
+
     public IMqttClient? GetConnectedClient(int printerId) =>
         _byPrinterId.TryGetValue(printerId, out var status) && status.Client?.IsConnected == true ? status.Client : null;
 
     public List<AmsUnitReading> GetAmsUnits(int printerId) =>
         _byPrinterId.TryGetValue(printerId, out var status) ? status.AmsUnits : [];
+
+    public string? GetGcodeState(int printerId) =>
+        _byPrinterId.TryGetValue(printerId, out var status) ? status.GcodeState : null;
 }
