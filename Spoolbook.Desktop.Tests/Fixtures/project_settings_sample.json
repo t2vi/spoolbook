@@ -1,0 +1,47 @@
+{
+  "nozzle_temperature": [
+    "240",
+    "240"
+  ],
+  "nozzle_temperature_initial_layer": [
+    "255",
+    "245"
+  ],
+  "hot_plate_temp": [
+    "70"
+  ],
+  "fan_min_speed": [
+    "20"
+  ],
+  "fan_max_speed": [
+    "40"
+  ],
+  "retraction_length": [
+    "0.8",
+    "0.8"
+  ],
+  "wipe": [
+    "1",
+    "1"
+  ],
+  "cooling_slowdown_logic": [
+    "uniform_cooling"
+  ],
+  "layer_height": "0.2",
+  "sparse_infill_density": "15%",
+  "printer_model": "Bambu Lab P2S",
+  "filament_type": [
+    "PETG"
+  ],
+  "required_nozzle_HRC": [
+    "3"
+  ],
+  "z_hop_types": [
+    "Auto Lift",
+    "Auto Lift"
+  ],
+  "long_retractions_when_cut": [
+    "0",
+    "0"
+  ]
+}
