@@ -6,9 +6,27 @@
 <li><strong>Linux</strong>: unzip, <code>chmod +x Spoolbook.Desktop &#x26;&#x26; ./Spoolbook.Desktop</code>.</li>
 </ul>
 <h2 id="first-run">First run</h2>
-<p>spoolbook is single-user with no account or login. On first launch it seeds a starter filament
-catalog and begins syncing fresh data automatically in the background (throttled to once every
-24 hours).</p>
+<p>spoolbook is single-user with no account or login on the desktop app. On first launch it seeds a
+starter filament catalog and begins syncing fresh data automatically in the background (throttled
+to once every 24 hours).</p>
+<h2 id="running-the-web-app-instead-self-hosted">Running the web app instead (self-hosted)</h2>
+<p>spoolbook can also run as a self-hosted web app (<code>Spoolbook.Web</code>) — reachable from a phone or any
+device on your LAN, not just the machine it’s running on, and needed for live printer status,
+control, and camera (see below). It uses the same SQLite database as the desktop app, so either
+one can be used, including on the same machine at the same time.</p>
+<p>Build and run from source (there’s no packaged download for this yet):</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>dotnet run --project Spoolbook.Web -c Release</span></span></code></pre>
+<p>Set the <code>SPOOLBOOK_ADMIN_PASSWORD</code> environment variable first — the web app gates anything that
+changes data (editing, deleting, sending a print) behind that shared password; just browsing
+stays open to anyone on your LAN.</p>
+<h2 id="printer-control-and-live-camera">Printer control and live camera</h2>
+<p>Add a printer under <strong>Settings → Printers</strong> with its IP address and access code (found on the
+printer’s own network settings screen) to connect. Once connected, the <strong>Printers</strong> page shows a
+live card per printer: current status and temperatures, full AMS tray contents, pause/resume/stop
+controls, and a live camera view (opens in a popup window). The <strong>Print</strong> button on a card lets
+you send a <code>.3mf</code> project straight to that printer — pick the plate and AMS slot, and spoolbook
+creates the print-history entry automatically, filling in its outcome once the printer reports
+the job finished.</p>
 <h2 id="adding-your-first-spool">Adding your first spool</h2>
 <ol>
 <li>Go to <strong>Filaments</strong>, find or add the filament type on your roll (brand + material + variant + color).</li>
