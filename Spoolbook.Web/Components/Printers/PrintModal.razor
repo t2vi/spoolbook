@@ -1,0 +1,340 @@
+@* Print picker, launched as a modal from a printer card (docs/adr — 2026-08-14 UI redesign).
+   Printer is fixed by the caller — no printer dropdown, unlike the old standalone /prints/start
+   page this replaces. Profile/Spool default to a best guess (recommended profile for the
+   project; spool matched by the picked AMS tray's material) but stay real, editable dropdowns —
+   sending always creates the Print row (PrintService.CreateInProgressAsync), so a wrong guess is
+   visible and correctable before it's sent, not silently wrong. *@
+@using Spoolbook.Desktop.Features.Prints
+@using Spoolbook.Desktop.Features.Profiles
+@using Spoolbook.Desktop.Features.Settings.Printers
+@using Spoolbook.Desktop.Features.Spools
+@using Spoolbook.Desktop.Services.Printer
+@using Spoolbook.Web.Services
+@inject ProjectService ProjectService
+@inject ProjectUploadService ProjectUploadService
+@inject PrintService PrintService
+@inject SpoolService SpoolService
+@inject PrintProfileService ProfileService
+@inject PrinterPrintService PrinterPrintService
+@inject PrinterLiveStatusStore LiveStatusStore
+
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" @onclick="Close">
+    <div class="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-6 shadow-xl" @onclick:stopPropagation="true">
+        <div class="mb-4 flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-slate-900">Print on @Printer.Name</h2>
+            <button type="button" @onclick="Close" class="text-slate-400 hover:text-slate-600">✕</button>
+        </div>
+
+        <div class="space-y-4">
+            <div class="flex flex-col gap-1">
+                <label class="text-sm font-medium text-slate-700">Project</label>
+                <select @bind="selectedProjectId" @bind:after="OnProjectChangedAsync"
+                        class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500">
+                    <option value="0">-- none --</option>
+                    @foreach (var p in projects)
+                    {
+                        <option value="@p.Id">@p.FileName</option>
+                    }
+                </select>
+                <div class="mt-1 flex items-center gap-2">
+                    <InputFile OnChange="OnThreeMfSelectedAsync" accept=".3mf"
+                               class="text-sm text-slate-500 file:mr-3 file:cursor-pointer file:rounded-md file:border file:border-slate-300 file:bg-white file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-50" />
+                    @if (uploading)
+                    {
+                        <span class="text-xs text-slate-500">Uploading…</span>
+                    }
+                </div>
+                <div class="mt-1 flex items-center gap-2">
+                    <input @bind="importUrl" placeholder="or paste a direct .3mf URL"
+                           class="flex-1 rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500" />
+                    <button type="button" @onclick="FetchFromUrlAsync" disabled="@(uploading || string.IsNullOrWhiteSpace(importUrl))"
+                            class="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">Fetch</button>
+                </div>
+                @if (uploadError is not null)
+                {
+                    <p class="text-xs text-red-600">@uploadError</p>
+                }
+                @if (plates.Count > 0)
+                {
+                    <label class="mt-2 text-sm font-medium text-slate-700">Plate</label>
+                    <select @bind="selectedPlaterId" class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500">
+                        @foreach (var plate in plates)
+                        {
+                            <option value="@plate.PlaterId">@(plate.PlaterName ?? $"Plate {plate.PlaterId}")</option>
+                        }
+                    </select>
+                    <div class="mt-1 flex h-40 items-center justify-center overflow-hidden rounded-md bg-slate-900">
+                        @if (SelectedPlate?.ThumbnailBytes is { } thumb)
+                        {
+                            <img src="data:image/png;base64,@Convert.ToBase64String(thumb)" class="h-full w-full object-contain" alt="Plate preview" />
+                        }
+                        else
+                        {
+                            <span class="text-sm text-slate-500">No plate preview</span>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div>
+                <label class="flex items-center gap-2 text-sm text-slate-700">
+                    <input type="checkbox" @bind="useAms" class="h-4 w-4 rounded border-slate-300" />
+                    Use AMS
+                </label>
+                @if (useAms)
+                {
+                    @if (amsTrays.Count == 0)
+                    {
+                        <p class="mt-1 text-xs text-slate-500">No AMS data yet — printer may not be connected.</p>
+                    }
+                    else
+                    {
+                        <div class="mt-2 flex flex-col gap-1">
+                            @foreach (var tray in amsTrays)
+                            {
+                                <label class="flex items-center gap-2 text-sm text-slate-700">
+                                    <input type="radio" name="amsTray" value="@tray.Key" checked="@(selectedAmsTrayKey == tray.Key)"
+                                           @onchange="@(() => OnAmsTraySelected(tray.Key))" disabled="@(tray.Reading.MaterialType is null)"
+                                           class="h-4 w-4 border-slate-300" />
+                                    @if (tray.Reading.ColorHex is not null)
+                                    {
+                                        <span class="inline-block h-3 w-3 rounded-full border border-slate-300" style="background-color:#@(tray.Reading.ColorHex.Length >= 6 ? tray.Reading.ColorHex[..6] : "cccccc")"></span>
+                                    }
+                                    <span class="@(tray.Reading.MaterialType is null ? "text-slate-400" : "text-slate-900")">
+                                        AMS @tray.UnitId slot @tray.Reading.SlotId — @(tray.Reading.MaterialType ?? "Empty")
+                                    </span>
+                                </label>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+
+            <div class="flex flex-col gap-1">
+                <label class="text-sm font-medium text-slate-700">Spool</label>
+                <select @bind="selectedSpoolId" @bind:after="OnSpoolChangedAsync"
+                        class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500">
+                    <option value="0">-- pick a spool --</option>
+                    @foreach (var s in spools)
+                    {
+                        <option value="@s.Id">@s.Filament?.Brand @s.Filament?.Material @s.Filament?.Variant — @s.Filament?.Color @(s.LotCode is not null ? $"({s.LotCode})" : "")</option>
+                    }
+                </select>
+            </div>
+
+            <div class="flex flex-col gap-1">
+                <label class="text-sm font-medium text-slate-700">Profile</label>
+                <select @bind="selectedProfileId" class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500">
+                    <option value="0">-- pick a profile --</option>
+                    @foreach (var p in profiles)
+                    {
+                        <option value="@p.Id">@p.Name</option>
+                    }
+                </select>
+            </div>
+
+            @if (sendError is not null)
+            {
+                <p class="text-sm text-red-600">@sendError</p>
+            }
+
+            <div class="flex items-center gap-3 pt-2">
+                <button @onclick="SendAsync"
+                        disabled="@(sending || selectedProjectId == 0 || selectedPlaterId is null || selectedSpoolId == 0 || selectedProfileId == 0 || (useAms && amsTrays.Count > 0 && selectedAmsTrayKey is null))"
+                        class="inline-flex items-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50">
+                    @(sending ? "Sending…" : "Send to printer")
+                </button>
+                <button type="button" @onclick="Close" class="text-sm text-slate-500 hover:text-slate-700">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public Printer Printer { get; set; } = null!;
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    [Parameter]
+    public EventCallback OnSent { get; set; }
+
+    private List<Project> projects = [];
+    private List<Spool> spools = [];
+    private List<PrintProfile> profiles = [];
+    private List<ProjectPlate> plates = [];
+    private int selectedProjectId;
+    private string? selectedPlaterId;
+    private int selectedSpoolId;
+    private int selectedProfileId;
+    private bool useAms = true;
+    private List<AmsTraySlot> amsTrays = [];
+    private string? selectedAmsTrayKey;
+    private bool uploading;
+    private string? uploadError;
+    private string? importUrl;
+    private PrintProfile? recommended;
+    private bool sending;
+    private string? sendError;
+
+    private ProjectPlate? SelectedPlate => plates.FirstOrDefault(p => p.PlaterId == selectedPlaterId);
+
+    protected override async Task OnInitializedAsync()
+    {
+        projects = await ProjectService.ListAsync();
+        spools = await SpoolService.ListAllAsync();
+
+        amsTrays = LiveStatusStore.GetAmsUnits(Printer.Id)
+            .SelectMany(unit => unit.Trays.Select(t => new AmsTraySlot(unit.UnitId, t)))
+            .ToList();
+        var defaultTray = amsTrays.FirstOrDefault(t => t.Reading.MaterialType is not null);
+        if (defaultTray is not null)
+            await OnAmsTraySelectedAsync(defaultTray.Key);
+    }
+
+    // Bambu addresses AMS slots across units as unit_id * 4 + slot_id.
+    private int? SelectedAmsSlot =>
+        amsTrays.FirstOrDefault(t => t.Key == selectedAmsTrayKey) is { } tray
+            ? int.Parse(tray.UnitId) * 4 + int.Parse(tray.Reading.SlotId)
+            : null;
+
+    private record AmsTraySlot(string UnitId, AmsTrayReading Reading)
+    {
+        public string Key => $"{UnitId}:{Reading.SlotId}";
+    }
+
+    private void OnAmsTraySelected(string key) => _ = OnAmsTraySelectedAsync(key);
+
+    private async Task OnAmsTraySelectedAsync(string key)
+    {
+        selectedAmsTrayKey = key;
+
+        // Best-effort default: exactly one non-emptied Spool whose Filament matches this tray's
+        // material. Ambiguous (0 or 2+ candidates) leaves the dropdown for the user to pick —
+        // no color-hex-to-name matching exists to break the tie, and guessing wrong here is
+        // worse than an empty required field.
+        var tray = amsTrays.FirstOrDefault(t => t.Key == key);
+        if (tray?.Reading.MaterialType is not { } material) return;
+
+        var candidates = spools
+            .Where(s => s.EmptiedAt is null && string.Equals(s.Filament?.Material, material, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (candidates.Count == 1)
+        {
+            selectedSpoolId = candidates[0].Id;
+            await OnSpoolChangedAsync();
+        }
+    }
+
+    private async Task OnProjectChangedAsync()
+    {
+        var project = projects.FirstOrDefault(p => p.Id == selectedProjectId);
+        plates = project is null ? [] : ProjectService.ReadPlates(project.FilePath);
+        selectedPlaterId = plates.FirstOrDefault()?.PlaterId;
+        recommended = project is null ? null : await PrintService.RecommendProfileForProjectAsync(project.Id, currentTempC: null);
+        if (recommended is not null && profiles.Any(p => p.Id == recommended.Id))
+            selectedProfileId = recommended.Id;
+    }
+
+    private async Task OnSpoolChangedAsync()
+    {
+        var spool = spools.FirstOrDefault(s => s.Id == selectedSpoolId);
+        profiles = spool is null ? [] : await ProfileService.ListProfilesForFilamentAsync(spool.FilamentId);
+        selectedProfileId = recommended is not null && profiles.Any(p => p.Id == recommended.Id)
+            ? recommended.Id
+            : profiles.FirstOrDefault()?.Id ?? 0;
+    }
+
+    private async Task OnThreeMfSelectedAsync(InputFileChangeEventArgs e)
+    {
+        uploading = true;
+        uploadError = null;
+        StateHasChanged();
+
+        try
+        {
+            await using var stream = e.File.OpenReadStream(maxAllowedSize: 100 * 1024 * 1024);
+            var result = await ProjectUploadService.SaveAndUpsertAsync(stream, e.File.Name);
+            await ApplyUploadResultAsync(result);
+        }
+        finally
+        {
+            uploading = false;
+        }
+    }
+
+    private async Task FetchFromUrlAsync()
+    {
+        if (string.IsNullOrWhiteSpace(importUrl)) return;
+
+        uploading = true;
+        uploadError = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await ProjectUploadService.SaveFromUrlAsync(importUrl);
+            await ApplyUploadResultAsync(result);
+            if (result.Ok) importUrl = null;
+        }
+        finally
+        {
+            uploading = false;
+        }
+    }
+
+    private async Task ApplyUploadResultAsync(ProjectResult result)
+    {
+        if (!result.Ok)
+        {
+            uploadError = $"Import failed: {result.Error}";
+            return;
+        }
+
+        var project = result.Project!;
+        if (!projects.Any(p => p.Id == project.Id))
+            projects.Add(project);
+
+        selectedProjectId = project.Id;
+        plates = ProjectService.ReadPlates(project.FilePath);
+        selectedPlaterId = plates.FirstOrDefault()?.PlaterId;
+        recommended = await PrintService.RecommendProfileForProjectAsync(project.Id, currentTempC: null);
+        if (recommended is not null && profiles.Any(p => p.Id == recommended.Id))
+            selectedProfileId = recommended.Id;
+    }
+
+    private async Task SendAsync()
+    {
+        var project = projects.FirstOrDefault(p => p.Id == selectedProjectId);
+        if (project is null || selectedPlaterId is null || Printer.IpAddress is null || Printer.AccessCode is null || Printer.SerialNumber is null
+            || selectedSpoolId == 0 || selectedProfileId == 0)
+        {
+            sendError = "Pick a project, plate, spool, and profile.";
+            return;
+        }
+
+        sending = true;
+        sendError = null;
+        StateHasChanged();
+
+        var result = await PrinterPrintService.StartPrintAsync(
+            Printer.Id, Printer.IpAddress, Printer.AccessCode, Printer.SerialNumber,
+            project.FilePath, project.FileName, $"plate_{selectedPlaterId}.gcode", useAms,
+            SelectedAmsSlot ?? 0, Printer.Model);
+
+        if (!result.Ok)
+        {
+            sending = false;
+            sendError = result.Error;
+            return;
+        }
+
+        await PrintService.CreateInProgressAsync(selectedProfileId, selectedSpoolId, Printer.Id, project.Id, selectedPlaterId, DateTime.UtcNow);
+
+        sending = false;
+        await OnSent.InvokeAsync();
+    }
+
+    private Task Close() => OnClose.InvokeAsync();
+}

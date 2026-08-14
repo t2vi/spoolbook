@@ -31,6 +31,7 @@ public class PrinterTelemetryService
         var job = await _db.PrinterJobs
             .FirstOrDefaultAsync(j => j.PrinterId == printerId && j.ExternalJobId == externalJobId && j.EndedAt == null);
 
+        var isNewJob = job is null;
         if (job is null)
         {
             job = new PrinterJob { PrinterId = printerId, ExternalJobId = externalJobId, StartedAt = recordedAt };
@@ -48,18 +49,58 @@ public class PrinterTelemetryService
             ProgressPct = input.ProgressPct
         });
 
+        // Auto-create-on-send (docs/adr/0017's 2026-08-14 addendum): a brand-new Job attaches
+        // straight to the printer's open (InProgress, not yet attached) Print instead of waiting
+        // for the retrospective dismissible-chip match — there's no ambiguity to confirm, since
+        // the Print was created moments before by the same "send" action that produced this Job.
+        // Only checked for a *new* job — an already-attached job must never be reassigned just
+        // because a second InProgress Print for the same printer shows up later.
+        if (isNewJob)
+        {
+            var attachedPrintIds = _db.PrinterJobs.Where(j => j.PrintId != null).Select(j => j.PrintId);
+            var openPrint = await _db.Prints
+                .Where(p => p.PrinterId == printerId && p.Status == PrintStatus.InProgress && !attachedPrintIds.Contains(p.Id))
+                .OrderByDescending(p => p.StartedAt)
+                .FirstOrDefaultAsync();
+            if (openPrint is not null)
+                job.PrintId = openPrint.Id;
+        }
+
         await _db.SaveChangesAsync();
     }
 
-    public async Task EndJobAsync(int printerId, string externalJobId, DateTime? at = null)
+    public async Task EndJobAsync(int printerId, string externalJobId, string? terminalGcodeState = null, DateTime? at = null)
     {
         var job = await _db.PrinterJobs
             .FirstOrDefaultAsync(j => j.PrinterId == printerId && j.ExternalJobId == externalJobId && j.EndedAt == null);
         if (job is null) return;
 
-        job.EndedAt = at ?? DateTime.UtcNow;
+        var endedAt = at ?? DateTime.UtcNow;
+        job.EndedAt = endedAt;
+
+        if (job.PrintId is { } printId)
+        {
+            var print = await _db.Prints.FindAsync(printId);
+            if (print is not null && print.Status == PrintStatus.InProgress)
+            {
+                print.EndedAt = endedAt;
+                print.Status = MapTerminalGcodeState(terminalGcodeState);
+            }
+        }
+
         await _db.SaveChangesAsync();
     }
+
+    // FINISH/FAILED are unambiguous. Everything else (IDLE, or a delta message that omitted
+    // gcode_state before this one) falls back to Partial rather than guessing — IDLE could mean
+    // a dropped FINISH right before the idle snapshot, or the printer going idle after a
+    // user-initiated Stop, and guessing wrong in either direction is worse than a review flag.
+    private static PrintStatus MapTerminalGcodeState(string? gcodeState) => gcodeState switch
+    {
+        "FINISH" => PrintStatus.Success,
+        "FAILED" => PrintStatus.Failed,
+        _ => PrintStatus.Partial
+    };
 
     // Auto-match candidate for the retrospective Print form: closest unattached Job for this
     // Printer by start time, shown as a dismissible chip rather than attached silently.

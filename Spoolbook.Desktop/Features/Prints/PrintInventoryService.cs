@@ -11,6 +11,7 @@ public class PrintInventoryQuery
     public string? Brand { get; set; }
     public string? Material { get; set; }
     public PrintStatus? Status { get; set; }
+    public int? PrinterId { get; set; }
     public PrintSortColumn Sort { get; set; } = PrintSortColumn.StartedAt;
     public SortOrder Order { get; set; } = SortOrder.Desc;
     public int Page { get; set; } = 1;
@@ -49,6 +50,8 @@ public class PrintInventoryService
             baseQuery = baseQuery.Where(p => p.Spool!.Filament!.Material == query.Material);
         if (query.Status is not null)
             baseQuery = baseQuery.Where(p => p.Status == query.Status);
+        if (query.PrinterId is not null)
+            baseQuery = baseQuery.Where(p => p.PrinterId == query.PrinterId);
 
         baseQuery = ApplySort(baseQuery, query.Sort, query.Order);
 

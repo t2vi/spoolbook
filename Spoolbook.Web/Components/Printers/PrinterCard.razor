@@ -1,0 +1,274 @@
+@* Full per-printer card — folded in from the old /printers/{id}/status page (docs/adr —
+   2026-08-14 UI redesign) so the /printers grid itself is the cohesive per-printer hub instead
+   of a table linking out to a separate detail page. *@
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Spoolbook.Desktop.Features.Prints
+@using Spoolbook.Desktop.Features.Settings.Printers
+@using Spoolbook.Desktop.Services.Printer
+@using Spoolbook.Web.Services
+@implements IDisposable
+@inject PrinterControlService ControlService
+@inject PrinterLiveStatusStore LiveStatusStore
+@inject PrinterCameraService CameraService
+@inject PrintService PrintService
+@inject PrinterService PrinterService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <div class="mb-3 flex items-start justify-between">
+        <div>
+            <h2 class="text-xl font-semibold text-slate-900">@Printer.Name</h2>
+            <p class="text-sm @(connected ? "text-green-700" : "text-slate-500")">@(connected ? "Connected" : "Not connected") @(Printer.Model is not null ? $"· {Printer.Model}" : "")</p>
+        </div>
+        <AuthorizeView>
+            <Authorized>
+                <div class="flex items-center gap-3 text-sm">
+                    <a href="@($"/printers/edit/{Printer.Id}")" class="text-slate-500 hover:text-slate-900 hover:underline">Edit</a>
+                    <button @onclick="DeleteAsync" class="text-red-600 hover:text-red-800 hover:underline">Delete</button>
+                </div>
+            </Authorized>
+        </AuthorizeView>
+    </div>
+
+    <div class="mb-4 flex items-center gap-3">
+        <button @onclick='() => SendAsync("pause")' disabled="@(!connected || sending)"
+                class="inline-flex items-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">Pause</button>
+        <button @onclick='() => SendAsync("resume")' disabled="@(!connected || sending)"
+                class="inline-flex items-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">Resume</button>
+        <button @onclick='() => SendAsync("stop")' disabled="@(!connected || sending)"
+                class="inline-flex items-center rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50">Stop</button>
+        <button @onclick="OpenPrintModal" disabled="@(Printer.IpAddress is null || Printer.AccessCode is null)"
+                class="ml-auto inline-flex items-center rounded-md bg-slate-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50">Print</button>
+    </div>
+
+    @if (controlError is not null)
+    {
+        <p class="mb-4 text-sm text-red-600">@controlError</p>
+    }
+
+    <div class="mb-4 flex items-center justify-between">
+        <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500">Camera</h3>
+        @if (Printer.IpAddress is null || Printer.AccessCode is null)
+        {
+            <span class="text-xs text-slate-500">No telemetry configured</span>
+        }
+        else
+        {
+            <button type="button" @onclick="OpenCameraWindow"
+                    class="inline-flex items-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">View camera</button>
+        }
+    </div>
+    @if (cameraStatus == CameraStreamStatus.Unavailable)
+    {
+        <div class="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <p class="text-sm text-red-600">@(cameraError ?? "Camera unavailable.")</p>
+            <button @onclick="RetryCamera" class="mt-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">Retry</button>
+        </div>
+    }
+
+    <h3 class="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">AMS</h3>
+    @if (amsUnits.Count == 0)
+    {
+        <p class="mb-4 text-sm text-slate-500">No AMS data yet — waiting for the printer to report, or none installed.</p>
+    }
+    else
+    {
+        <div class="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            @foreach (var unit in amsUnits)
+            {
+                <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <div class="mb-2 flex items-center justify-between">
+                        <span class="text-sm font-medium text-slate-700">AMS @unit.UnitId</span>
+                        @if (unit.HumidityLevel is not null)
+                        {
+                            <span class="text-xs text-slate-500">Humidity level @unit.HumidityLevel</span>
+                        }
+                    </div>
+                    <ul class="space-y-1 text-sm">
+                        @foreach (var tray in unit.Trays)
+                        {
+                            <li class="flex items-center justify-between">
+                                <span class="flex items-center gap-2">
+                                    @if (tray.ColorHex is not null)
+                                    {
+                                        <span class="inline-block h-3 w-3 rounded-full border border-slate-300" style="background-color:#@(tray.ColorHex.Length >= 6 ? tray.ColorHex[..6] : "cccccc")"></span>
+                                    }
+                                    <span class="@(tray.MaterialType is null ? "text-slate-400" : "text-slate-900")">@(tray.MaterialType ?? "Empty")</span>
+                                </span>
+                                <span class="text-slate-500">@(tray.RemainPercent is not null ? $"{tray.RemainPercent}%" : "—")</span>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            }
+        </div>
+    }
+
+    <h3 class="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Recent prints</h3>
+    @if (recentPrints.Count == 0)
+    {
+        <p class="text-sm text-slate-500">No prints logged yet.</p>
+    }
+    else
+    {
+        <ul class="divide-y divide-slate-100 rounded-lg border border-slate-200">
+            @foreach (var p in recentPrints)
+            {
+                <li class="flex items-center justify-between px-3 py-2 text-sm">
+                    <span class="text-slate-700">@p.StartedAt.ToLocalTime().ToString("g") — @p.Spool?.Filament?.Brand @p.Spool?.Filament?.Material</span>
+                    <span class="@StatusBadgeClass(p.Status)">@p.Status</span>
+                </li>
+            }
+        </ul>
+        <a href="@($"/prints?printerId={Printer.Id}")" class="mt-2 inline-block text-sm text-slate-500 hover:text-slate-700 hover:underline">View all prints for this printer</a>
+    }
+</div>
+
+@if (showPrintModal)
+{
+    <PrintModal Printer="Printer" OnClose="ClosePrintModal" OnSent="OnPrintSentAsync" />
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public Printer Printer { get; set; } = null!;
+
+    [Parameter]
+    public EventCallback OnDeleted { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private bool connected;
+    private bool sending;
+    private string? controlError;
+    private List<AmsUnitReading> amsUnits = [];
+    private CameraStreamStatus cameraStatus = CameraStreamStatus.NotStarted;
+    private string? cameraError;
+    private int cameraRetryCount;
+    private List<Print> recentPrints = [];
+    private bool showPrintModal;
+    private PeriodicTimer? timer;
+    private CancellationTokenSource? cts;
+
+    // Cache-busted so a Retry click forces the browser to open a fresh request to the
+    // endpoint — that request is what actually triggers PrinterCameraService to (re)start
+    // the pipeline (see PrinterCameraService.Retry's doc comment).
+    private string CameraSrc => $"/printers/{Printer.Id}/camera?r={cameraRetryCount}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        RefreshLiveState();
+        await RefreshRecentPrintsAsync();
+
+        cts = new CancellationTokenSource();
+        timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        _ = PollAsync(cts.Token);
+    }
+
+    private async Task PollAsync(CancellationToken token)
+    {
+        try
+        {
+            while (await timer!.WaitForNextTickAsync(token))
+            {
+                RefreshLiveState();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private void RefreshLiveState()
+    {
+        connected = LiveStatusStore.GetConnectedClient(Printer.Id) is not null;
+        amsUnits = LiveStatusStore.GetAmsUnits(Printer.Id);
+        cameraStatus = CameraService.GetStatus(Printer.Id);
+        cameraError = CameraService.GetLastError(Printer.Id);
+    }
+
+    private async Task RefreshRecentPrintsAsync()
+    {
+        var all = await PrintService.ListAsync();
+        recentPrints = all.Where(p => p.PrinterId == Printer.Id).Take(5).ToList();
+    }
+
+    private async Task OpenCameraWindow() =>
+        await JS.InvokeVoidAsync("open", CameraSrc, "_blank", "width=960,height=720,noopener");
+
+    private void RetryCamera()
+    {
+        CameraService.Retry(Printer.Id);
+        cameraRetryCount++;
+    }
+
+    private void OpenPrintModal() => showPrintModal = true;
+
+    private void ClosePrintModal() => showPrintModal = false;
+
+    private async Task OnPrintSentAsync()
+    {
+        showPrintModal = false;
+        await RefreshRecentPrintsAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        var authState = AuthStateTask is not null ? await AuthStateTask : null;
+        if (authState?.User.Identity?.IsAuthenticated != true)
+        {
+            controlError = "Sign in to delete.";
+            return;
+        }
+
+        var result = await PrinterService.DeleteAsync(Printer.Id);
+        if (result.Ok)
+            await OnDeleted.InvokeAsync();
+        else
+            controlError = result.Error == "has_prints" ? "Can't delete — prints reference this printer." : result.Error;
+    }
+
+    private async Task SendAsync(string command)
+    {
+        if (Printer.SerialNumber is null) return;
+
+        sending = true;
+        controlError = null;
+        StateHasChanged();
+
+        var result = command switch
+        {
+            "pause" => await ControlService.PauseAsync(Printer.Id, Printer.SerialNumber),
+            "resume" => await ControlService.ResumeAsync(Printer.Id, Printer.SerialNumber),
+            "stop" => await ControlService.StopAsync(Printer.Id, Printer.SerialNumber),
+            _ => throw new ArgumentOutOfRangeException(nameof(command))
+        };
+
+        if (!result.Ok)
+            controlError = result.Error;
+
+        sending = false;
+    }
+
+    private static string StatusBadgeClass(PrintStatus status)
+    {
+        const string baseClasses = "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium";
+        return status switch
+        {
+            PrintStatus.Success => $"{baseClasses} bg-green-100 text-green-800",
+            PrintStatus.Partial => $"{baseClasses} bg-amber-100 text-amber-800",
+            PrintStatus.Failed => $"{baseClasses} bg-red-100 text-red-800",
+            PrintStatus.InProgress => $"{baseClasses} bg-blue-100 text-blue-800",
+            _ => $"{baseClasses} bg-slate-100 text-slate-700"
+        };
+    }
+
+    public void Dispose()
+    {
+        cts?.Cancel();
+        cts?.Dispose();
+        timer?.Dispose();
+    }
+}

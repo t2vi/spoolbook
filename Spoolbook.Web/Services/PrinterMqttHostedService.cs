@@ -144,7 +144,7 @@ public class PrinterMqttHostedService : BackgroundService
         }
         else if (_activeTaskIdByPrinter.TryGetValue(printerId, out var activeTaskId) && activeTaskId is not null)
         {
-            await telemetryService.EndJobAsync(printerId, activeTaskId);
+            await telemetryService.EndJobAsync(printerId, activeTaskId, message.GcodeState);
             _activeTaskIdByPrinter[printerId] = null;
         }
     }

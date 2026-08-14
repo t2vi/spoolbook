@@ -157,8 +157,8 @@ public partial class PrintEditViewModel : EditViewModelBase
             SelectedSpool = existing.Spool;
             StartedDate = existing.StartedAt.Date;
             StartedTime = existing.StartedAt.TimeOfDay;
-            EndedDate = existing.EndedAt.Date;
-            EndedTime = existing.EndedAt.TimeOfDay;
+            EndedDate = existing.EndedAt?.Date ?? DateTime.UtcNow.Date;
+            EndedTime = existing.EndedAt?.TimeOfDay ?? DateTime.UtcNow.TimeOfDay;
             Status = existing.Status;
             Notes = existing.Notes;
             AmsHumidityPct = existing.AmsHumidityPct;

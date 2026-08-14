@@ -3,7 +3,7 @@ using Spoolbook.Desktop.Features.Spools;
 using Spoolbook.Desktop.Features.Settings.Printers;
 namespace Spoolbook.Desktop.Features.Prints;
 
-public enum PrintStatus { Success, Failed, Partial }
+public enum PrintStatus { Success, Failed, Partial, InProgress }
 public enum AmbientSource { WeatherApi, Sensor, Manual }
 
 public class Print
@@ -19,7 +19,9 @@ public class Print
     public Project? Project { get; set; }
     public string? ProjectPlaterId { get; set; }
     public DateTime StartedAt { get; set; }
-    public DateTime EndedAt { get; set; }
+    // Null while the print is InProgress — set once the printer's MQTT-reported gcode_state
+    // reaches a terminal value (see PrinterTelemetryService.EndJobAsync).
+    public DateTime? EndedAt { get; set; }
     public PrintStatus Status { get; set; }
     public string? Notes { get; set; }
     public decimal? AmbientTempC { get; set; }
