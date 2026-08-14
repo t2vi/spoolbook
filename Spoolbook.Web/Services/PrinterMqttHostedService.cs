@@ -134,6 +134,8 @@ public class PrinterMqttHostedService : BackgroundService
         if (message.AmsUnits.Count > 0)
             _liveStatusStore.SetAmsUnits(printerId, message.AmsUnits);
 
+        _liveStatusStore.SetGcodeState(printerId, message.GcodeState);
+
         using var scope = _scopeFactory.CreateScope();
         var telemetryService = scope.ServiceProvider.GetRequiredService<PrinterTelemetryService>();
 
