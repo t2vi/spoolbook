@@ -90,6 +90,106 @@ public class PrinterTelemetryServiceTests
         Assert.NotNull(job.EndedAt);
     }
 
+    private static async Task<int> SeedInProgressPrintAsync(SpoolbookDbContext db, int profileId, int spoolId, int printerId, DateTime startedAt)
+    {
+        var print = new Print
+        {
+            ProfileId = profileId,
+            SpoolId = spoolId,
+            PrinterId = printerId,
+            StartedAt = startedAt,
+            EndedAt = null,
+            Status = PrintStatus.InProgress
+        };
+        db.Prints.Add(print);
+        await db.SaveChangesAsync();
+        return print.Id;
+    }
+
+    [Fact]
+    public async Task RecordReadingAsync_AutoAttachesNewJobToOpenInProgressPrintForSamePrinter()
+    {
+        using var db = TestDbFactory.Create();
+        var printerId = await SeedPrinterAsync(db);
+        var (profileId, spoolId, _) = await SeedPrintDepsAsync(db, printerId);
+        var printId = await SeedInProgressPrintAsync(db, profileId, spoolId, printerId, new DateTime(2026, 1, 1, 8, 0, 0));
+        var service = new PrinterTelemetryService(db);
+
+        await service.RecordReadingAsync(printerId, "job-1", new ReadingInput { NozzleTempC = 245 });
+
+        var job = await db.PrinterJobs.FirstAsync();
+        Assert.Equal(printId, job.PrintId);
+    }
+
+    [Fact]
+    public async Task RecordReadingAsync_DoesNotReattachOnSubsequentReadingsForSameJob()
+    {
+        using var db = TestDbFactory.Create();
+        var printerId = await SeedPrinterAsync(db);
+        var (profileId, spoolId, _) = await SeedPrintDepsAsync(db, printerId);
+        var printId = await SeedInProgressPrintAsync(db, profileId, spoolId, printerId, new DateTime(2026, 1, 1, 8, 0, 0));
+        var service = new PrinterTelemetryService(db);
+        await service.RecordReadingAsync(printerId, "job-1", new ReadingInput { NozzleTempC = 245 });
+
+        // A second, unrelated InProgress print shows up before the next reading — the already-
+        // attached job must not be reassigned to it.
+        var secondPrintId = await SeedInProgressPrintAsync(db, profileId, spoolId, printerId, new DateTime(2026, 1, 1, 9, 0, 0));
+        await service.RecordReadingAsync(printerId, "job-1", new ReadingInput { NozzleTempC = 248 });
+
+        var job = await db.PrinterJobs.FirstAsync();
+        Assert.Equal(printId, job.PrintId);
+        Assert.NotEqual(secondPrintId, job.PrintId);
+    }
+
+    [Fact]
+    public async Task RecordReadingAsync_DoesNotAutoAttachWhenNoInProgressPrintExists()
+    {
+        using var db = TestDbFactory.Create();
+        var printerId = await SeedPrinterAsync(db);
+        var service = new PrinterTelemetryService(db);
+
+        await service.RecordReadingAsync(printerId, "job-1", new ReadingInput { NozzleTempC = 245 });
+
+        var job = await db.PrinterJobs.FirstAsync();
+        Assert.Null(job.PrintId);
+    }
+
+    [Theory]
+    [InlineData("FINISH", PrintStatus.Success)]
+    [InlineData("FAILED", PrintStatus.Failed)]
+    [InlineData("IDLE", PrintStatus.Partial)]
+    [InlineData(null, PrintStatus.Partial)]
+    public async Task EndJobAsync_SetsAttachedPrintStatusFromTerminalGcodeState(string? gcodeState, PrintStatus expected)
+    {
+        using var db = TestDbFactory.Create();
+        var printerId = await SeedPrinterAsync(db);
+        var (profileId, spoolId, _) = await SeedPrintDepsAsync(db, printerId);
+        var printId = await SeedInProgressPrintAsync(db, profileId, spoolId, printerId, new DateTime(2026, 1, 1, 8, 0, 0));
+        var service = new PrinterTelemetryService(db);
+        await service.RecordReadingAsync(printerId, "job-1", new ReadingInput { NozzleTempC = 245 });
+
+        await service.EndJobAsync(printerId, "job-1", gcodeState);
+
+        var print = await db.Prints.FindAsync(printId);
+        Assert.Equal(expected, print!.Status);
+        Assert.NotNull(print.EndedAt);
+    }
+
+    [Fact]
+    public async Task EndJobAsync_DoesNotTouchPrintStatus_WhenJobHasNoAttachedPrint()
+    {
+        using var db = TestDbFactory.Create();
+        var printerId = await SeedPrinterAsync(db);
+        var service = new PrinterTelemetryService(db);
+        await service.RecordReadingAsync(printerId, "job-1", new ReadingInput { NozzleTempC = 245 });
+
+        await service.EndJobAsync(printerId, "job-1", "FINISH");
+
+        var job = await db.PrinterJobs.FirstAsync();
+        Assert.NotNull(job.EndedAt);
+        Assert.Null(job.PrintId);
+    }
+
     [Fact]
     public async Task FindMatchForPrintAsync_ReturnsClosestUnattachedJobByStartTime()
     {

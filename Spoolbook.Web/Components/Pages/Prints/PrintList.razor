@@ -1,8 +1,10 @@
 @page "/prints"
 @using Microsoft.AspNetCore.Components.Authorization
 @using Spoolbook.Desktop.Features.Prints
+@using Spoolbook.Desktop.Features.Settings.Printers
 @inject PrintInventoryService InventoryService
 @inject PrintService PrintService
+@inject PrinterService PrinterService
 @inject NavigationManager Nav
 
 <PageTitle>Prints</PageTitle>
@@ -22,6 +24,11 @@
             <option value="@s">@s</option>
         }
     </select>
+    @if (PrinterId is not null)
+    {
+        <span class="text-sm text-slate-600">Filtered by @(printerName ?? "printer")</span>
+        <a href="/prints" class="text-sm text-slate-500 underline hover:text-slate-700">Clear</a>
+    }
 </div>
 
 @if (result is null)
@@ -78,19 +85,29 @@ else
     [CascadingParameter]
     private Task<AuthenticationState>? AuthStateTask { get; set; }
 
+    [SupplyParameterFromQuery]
+    private int? PrinterId { get; set; }
+
     private PrintInventoryResult? result;
     private string statusFilter = "";
     private int page = 1;
     private string? errorMessage;
+    private string? printerName;
     private string LoginUrl => $"/login?returnUrl={Uri.EscapeDataString(Nav.ToBaseRelativePath(Nav.Uri))}";
 
-    protected override Task OnInitializedAsync() => LoadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        if (PrinterId is not null)
+            printerName = (await PrinterService.ListAsync()).FirstOrDefault(p => p.Id == PrinterId)?.Name;
+        await LoadAsync();
+    }
 
     private async Task LoadAsync()
     {
         result = await InventoryService.ListAsync(new PrintInventoryQuery
         {
             Status = string.IsNullOrEmpty(statusFilter) ? null : Enum.Parse<PrintStatus>(statusFilter),
+            PrinterId = PrinterId,
             Page = page,
             PageSize = 20
         });

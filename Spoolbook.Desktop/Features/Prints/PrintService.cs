@@ -88,6 +88,31 @@ public class PrintService
         return new PrintResult { Ok = true, Print = print };
     }
 
+    // Auto-create-on-send (docs/adr/0017's 2026-08-14 addendum): called the moment
+    // PrinterPrintService.StartPrintAsync succeeds, so the Print row exists before the printer
+    // even confirms it started. No ambient-weather fetch here — GetAmbientAsync needs a range
+    // (started, ended) and EndedAt isn't known yet; left null for now (ponytail: revisit once
+    // this shape settles). Status/EndedAt fill in later via PrinterTelemetryService.EndJobAsync.
+    public async Task<PrintResult> CreateInProgressAsync(int profileId, int spoolId, int printerId, int? projectId, string? projectPlaterId, DateTime startedAt)
+    {
+        var print = new Print
+        {
+            ProfileId = profileId,
+            SpoolId = spoolId,
+            PrinterId = printerId,
+            ProjectId = projectId,
+            ProjectPlaterId = projectPlaterId,
+            StartedAt = startedAt,
+            EndedAt = null,
+            Status = PrintStatus.InProgress
+        };
+
+        _db.Prints.Add(print);
+        await _db.SaveChangesAsync();
+
+        return new PrintResult { Ok = true, Print = print };
+    }
+
     public async Task<PrintResult> UpdateAsync(int id, int printerId, PrintInput input)
     {
         if (input.FailureModes.Count > 0 && input.Status == PrintStatus.Success)
