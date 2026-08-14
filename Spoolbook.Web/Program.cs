@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
@@ -43,6 +44,7 @@ builder.Services.AddHostedService<PrinterMqttHostedService>();
 builder.Services.AddScoped<PrinterConnectionTestService>();
 builder.Services.AddScoped<PrinterControlService>();
 builder.Services.AddScoped<PrinterPrintService>();
+builder.Services.AddSingleton<PrinterCameraService>();
 builder.Services.AddScoped<AppSettingsService>();
 builder.Services.AddScoped<DashboardMetricsService>();
 builder.Services.AddScoped<BambuFilamentImportService>(_ => new BambuFilamentImportService(
@@ -147,6 +149,40 @@ app.MapPost("/logout", async (HttpContext ctx) =>
     await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     return Results.Redirect("/");
 });
+
+// MJPEG relay for a printer's live camera (docs/adr/0024) — plain minimal API so a browser
+// <img> tag can point straight at it; a Blazor component can't stream a raw multipart
+// response the way an ordinary endpoint can. Gated behind the shared secret (carve-out from
+// the usual "reads are open" policy — a live camera feed is a view into physical space, not
+// just app data).
+app.MapGet("/printers/{id:int}/camera", async (int id, HttpContext ctx, PrinterService printerService, PrinterCameraService cameraService) =>
+{
+    var printer = (await printerService.ListAsync()).FirstOrDefault(p => p.Id == id);
+    if (printer?.IpAddress is null || printer.AccessCode is null)
+    {
+        ctx.Response.StatusCode = StatusCodes.Status404NotFound;
+        return;
+    }
+
+    ctx.Response.ContentType = "multipart/x-mixed-replace; boundary=frame";
+    ctx.Response.Headers.CacheControl = "no-cache";
+
+    try
+    {
+        await foreach (var frame in cameraService.SubscribeAsync(id, printer.IpAddress, printer.AccessCode, ctx.RequestAborted))
+        {
+            var header = Encoding.ASCII.GetBytes($"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: {frame.Length}\r\n\r\n");
+            await ctx.Response.Body.WriteAsync(header, ctx.RequestAborted);
+            await ctx.Response.Body.WriteAsync(frame, ctx.RequestAborted);
+            await ctx.Response.Body.WriteAsync("\r\n"u8.ToArray(), ctx.RequestAborted);
+            await ctx.Response.Body.FlushAsync(ctx.RequestAborted);
+        }
+    }
+    catch (OperationCanceledException)
+    {
+        // Client navigated away / closed the tab — expected teardown, not an error.
+    }
+}).RequireAuthorization();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
