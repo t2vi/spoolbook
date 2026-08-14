@@ -13,9 +13,36 @@ Download the build for your OS from the [Downloads](/spoolbook/downloads) page.
 
 ## First run
 
-spoolbook is single-user with no account or login. On first launch it seeds a starter filament
-catalog and begins syncing fresh data automatically in the background (throttled to once every
-24 hours).
+spoolbook is single-user with no account or login on the desktop app. On first launch it seeds a
+starter filament catalog and begins syncing fresh data automatically in the background (throttled
+to once every 24 hours).
+
+## Running the web app instead (self-hosted)
+
+spoolbook can also run as a self-hosted web app (`Spoolbook.Web`) — reachable from a phone or any
+device on your LAN, not just the machine it's running on, and needed for live printer status,
+control, and camera (see below). It uses the same SQLite database as the desktop app, so either
+one can be used, including on the same machine at the same time.
+
+Build and run from source (there's no packaged download for this yet):
+
+```
+dotnet run --project Spoolbook.Web -c Release
+```
+
+Set the `SPOOLBOOK_ADMIN_PASSWORD` environment variable first — the web app gates anything that
+changes data (editing, deleting, sending a print) behind that shared password; just browsing
+stays open to anyone on your LAN.
+
+## Printer control and live camera
+
+Add a printer under **Settings → Printers** with its IP address and access code (found on the
+printer's own network settings screen) to connect. Once connected, the **Printers** page shows a
+live card per printer: current status and temperatures, full AMS tray contents, pause/resume/stop
+controls, and a live camera view (opens in a popup window). The **Print** button on a card lets
+you send a `.3mf` project straight to that printer — pick the plate and AMS slot, and spoolbook
+creates the print-history entry automatically, filling in its outcome once the printer reports
+the job finished.
 
 ## Adding your first spool
 
