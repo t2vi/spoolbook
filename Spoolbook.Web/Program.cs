@@ -15,8 +15,8 @@ using Spoolbook.Desktop.Features.Settings.General;
 using Spoolbook.Desktop.Features.Settings.Printers;
 using Spoolbook.Desktop.Features.Spools;
 using Spoolbook.Desktop.Services.Weather;
+using Microsoft.Extensions.FileProviders;
 using Spoolbook.Web.Api;
-using Spoolbook.Web.Components;
 using Spoolbook.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -73,10 +73,9 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     .AddCookie(options =>
     {
         options.LoginPath = "/login";
-        // Blazor pages still want the plain redirect-to-/login (AuthorizeRouteView handles the
-        // rest). The new JSON API (/api/**) wants a clean 401 instead — the default redirect
-        // response gets its status code mangled to 400 by UseStatusCodePagesWithReExecute
-        // downstream, which isn't something a fetch()-based client should have to know about.
+        // The JSON API (/api/**) wants a clean 401, not the cookie middleware's default
+        // redirect-to-/login response — not something a fetch()-based client should have to
+        // special-case. Non-API auth-gated routes (e.g. the camera stream) keep the redirect.
         options.Events.OnRedirectToLogin = ctx =>
         {
             if (ctx.Request.Path.StartsWithSegments("/api"))
@@ -89,10 +88,6 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         };
     });
 builder.Services.AddAuthorization();
-builder.Services.AddCascadingAuthenticationState();
-
-builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
 
 // SvelteKit migration's JSON API is starting to return entities directly (no DTO layer, per
 // the migration plan) — Print.FailureModes <-> PrintFailureMode.Print is a genuine reference
@@ -136,23 +131,23 @@ using (var scope = app.Services.CreateScope())
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Error", createScopeForErrors: true);
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
-// This re-executes ANY response with an empty body and a 400-599 status against the Blazor
-// not-found page — including JSON API responses, stamping Blazor's own headers over them and
-// mangling the status (confirmed live: a bare 401 came out as 400). Branching this middleware
-// by path broke re-execution for genuine Blazor 404s (the re-executed pipeline's continuation
-// doesn't chain the same way inside a UseWhen branch) — so instead every /api/** 4xx/5xx
-// response below carries a non-empty JSON body, which is what actually keeps this middleware
-// from touching it.
-app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
+
+// Svelte's static build (spoolbook-web-svelte's adapter-static output) — a sibling checkout
+// directory, not copied into wwwroot, so a rebuild of the frontend doesn't require rebuilding
+// Spoolbook.Web. SPOOLBOOK_STATIC_ROOT overrides this for Docker/LXC packaging later, where the
+// build output won't sit next to the .NET project on disk the way it does in a plain repo pull.
+var staticRoot = Environment.GetEnvironmentVariable("SPOOLBOOK_STATIC_ROOT")
+    ?? Path.Combine(app.Environment.ContentRootPath, "..", "spoolbook-web-svelte", "build");
+var svelteFileProvider = new PhysicalFileProvider(staticRoot);
+app.UseStaticFiles(); // wwwroot — still serves /css/tailwind.css for the plain-HTML /login page below
+app.UseStaticFiles(new StaticFileOptions { FileProvider = svelteFileProvider });
 
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseAntiforgery();
 
 // Plain HTML form + minimal API, deliberately outside the Blazor component tree — an
 // interactive component can't call HttpContext.SignInAsync (response has already started
@@ -265,9 +260,10 @@ app.MapGet("/printers/{id:int}/camera", async (int id, HttpContext ctx, PrinterS
     }
 }).RequireAuthorization();
 
-app.MapStaticAssets();
-app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
+// SPA fallback — anything not matched by an API/login/camera route above (i.e. every Svelte
+// client-side route: /prints/edit/5, /settings, ...) serves the same index.html and lets
+// SvelteKit's own client-side router take over.
+app.MapFallbackToFile("index.html", new StaticFileOptions { FileProvider = svelteFileProvider });
 
 app.Run();
 
