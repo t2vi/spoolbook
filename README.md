@@ -1,4 +1,3 @@
-[![Release builds](https://github.com/t2vi/spoolbook/actions/workflows/release.yml/badge.svg)](https://github.com/t2vi/spoolbook/actions/workflows/release.yml)
 [![Tests](https://github.com/t2vi/spoolbook/actions/workflows/tests.yml/badge.svg)](https://github.com/t2vi/spoolbook/actions/workflows/tests.yml)
 [![Docs Pages builds](https://github.com/t2vi/spoolbook/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/t2vi/spoolbook/actions/workflows/pages/pages-build-deployment)
 
@@ -8,9 +7,12 @@ Personal FDM 3D-printing notebook. Tracks filaments, spools, print profiles, and
 prints, so print outcomes can be correlated against settings and ambient conditions over time —
 built for one person, dealing with Melbourne's weather swings affecting print quality.
 
-Avalonia desktop app (.NET 10), local SQLite via EF Core. Single user, no auth, no server, no
-network dependency beyond two read-only public HTTP calls (weather lookup, filament catalog
-sync — see below).
+Self-hosted web app: SvelteKit frontend (`spoolbook-web-svelte`) + a .NET JSON API
+(`Spoolbook.Web`), local SQLite via EF Core. Single user, shared-secret auth on mutating routes
+only (reads stay open), no network dependency beyond two read-only public HTTP calls (weather
+lookup, filament catalog sync — see below). The original Avalonia desktop app is retired —
+`Spoolbook.Desktop` is now just the shared domain/data layer the web API builds on, not something
+you run directly.
 
 ## Domain
 

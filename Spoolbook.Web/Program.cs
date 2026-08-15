@@ -21,11 +21,12 @@ using Spoolbook.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Same DB file the Avalonia desktop app uses — parallel-run migration, docs/adr/0018.
-// SPOOLBOOK_DB_PATH overrides this for a dev instance run alongside the live one during the
-// SvelteKit migration (feat/svelte-migration) — otherwise a second `dotnet run` double-connects
-// to real printer MQTT and double-writes telemetry into the same production DB the live
-// instance uses. Unset in production; only ever set for local dev.
+// Same path the Avalonia desktop app used to write to, back when Spoolbook.Web was still a
+// second, web-hosted front end sharing that app's local SQLite file — kept as-is now that
+// Spoolbook.Desktop's UI is gone too, so existing installs don't need a data migration.
+// SPOOLBOOK_DB_PATH overrides this for a dev instance run alongside the live one — otherwise a
+// second `dotnet run` double-connects to real printer MQTT and double-writes telemetry into the
+// same production DB the live instance uses. Unset in production; only ever set for local dev.
 var dbPath = Environment.GetEnvironmentVariable("SPOOLBOOK_DB_PATH");
 if (string.IsNullOrEmpty(dbPath))
 {

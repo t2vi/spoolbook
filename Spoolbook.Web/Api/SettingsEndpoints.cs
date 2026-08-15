@@ -18,9 +18,9 @@ public static class SettingsEndpoints
             return new SettingsResponse(settings.AdditionalFilamentSourceUrls, settings.LastFilamentSyncAt, FilamentCatalogSyncService.CatalogUrl);
         });
 
-        // Bambu*Dir fields are desktop-only (local filesystem paths on whichever machine runs
-        // the Avalonia app) — preserved as-is so saving from here can't wipe a desktop user's
-        // configured paths, since both apps share the same AppSettings row.
+        // Bambu*Dir fields are local filesystem paths (Bambu Studio's own preset directories on
+        // whichever machine runs Spoolbook.Web) — preserved as-is here so saving general settings
+        // from this endpoint can't wipe them, since they share the same AppSettings row.
         group.MapPost("", async (SaveSettingsRequest req, AppSettingsService appSettings) =>
         {
             var current = await appSettings.GetAsync();
