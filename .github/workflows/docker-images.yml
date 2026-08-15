@@ -1,0 +1,108 @@
+name: Docker images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Spoolbook.Web/**'
+      - 'Spoolbook.Desktop/**'
+      - 'spoolbook-web-svelte/**'
+      - 'slicer-service/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/docker-images.yml'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  slicer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build slicer image
+        run: docker build -t spoolbook-slicer:ci ./slicer-service
+
+      - name: Run slicer container
+        run: docker run -d --name slicer -p 8100:8100 spoolbook-slicer:ci
+
+      - name: Wait for health
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8100/health && exit 0
+            sleep 2
+          done
+          echo "slicer-service never became healthy"
+          docker logs slicer
+          exit 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install httpx pytest
+
+      # Proves BambuStudio inside the built image actually slices a real P2S project and
+      # resolves its start/end gcode macros correctly — not just that the container boots.
+      - name: Real slice smoke test
+        run: pytest slicer-service/tests/test_slice.py -v
+
+      - name: Container logs
+        if: always()
+        run: docker logs slicer
+
+      - name: Login to GHCR
+        if: success()
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push slicer image
+        if: success()
+        run: |
+          docker tag spoolbook-slicer:ci ghcr.io/${{ github.repository_owner }}/spoolbook-slicer:latest
+          docker push ghcr.io/${{ github.repository_owner }}/spoolbook-slicer:latest
+
+  spoolbook:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build spoolbook image
+        run: docker build -t spoolbook:ci -f Spoolbook.Web/Dockerfile .
+
+      - name: Run spoolbook container
+        run: docker run -d --name spoolbook -p 5070:5070 -e SPOOLBOOK_ADMIN_PASSWORD=ci-test spoolbook:ci
+
+      # Confirms the container actually starts and serves traffic, not just that it compiled —
+      # same philosophy as the old Desktop release pipeline's launch smoke test.
+      - name: Smoke test — container starts and responds
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:5070/api/me && exit 0
+            sleep 2
+          done
+          echo "spoolbook never responded"
+          docker logs spoolbook
+          exit 1
+
+      - name: Container logs
+        if: always()
+        run: docker logs spoolbook
+
+      - name: Login to GHCR
+        if: success()
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push spoolbook image
+        if: success()
+        run: |
+          docker tag spoolbook:ci ghcr.io/${{ github.repository_owner }}/spoolbook:latest
+          docker push ghcr.io/${{ github.repository_owner }}/spoolbook:latest

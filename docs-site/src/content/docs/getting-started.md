@@ -5,34 +5,36 @@ order: 1
 
 ## Installing
 
-Download the build for your OS from the [Downloads](/spoolbook/downloads) page.
+spoolbook is a self-hosted web app — reachable from a phone or any device on your LAN, not just
+the machine it's running on. The one-click install runs it via Docker Compose:
 
-- **macOS**: unzip, right-click `Spoolbook.app` → Open (first launch only — it's ad-hoc signed, not notarized, so Gatekeeper will warn once).
-- **Windows**: unzip, run `Spoolbook.Desktop.exe`.
-- **Linux**: unzip, `chmod +x Spoolbook.Desktop && ./Spoolbook.Desktop`.
+```
+curl -fsSL https://raw.githubusercontent.com/t2vi/spoolbook/main/install.sh | bash
+```
+
+This pulls the pre-built `spoolbook` app image plus a `spoolbook-slicer` service (BambuStudio,
+headless — used for re-slicing before print) from GHCR, prompts for an admin password, and starts
+both. Works anywhere Docker runs: bare metal, a VM, or a Proxmox LXC (enable nesting first if
+running inside an unprivileged LXC). Requires Docker + the Compose plugin.
+
+Once it's up, it's at `http://<host-ip>:5070`.
 
 ## First run
 
-spoolbook is single-user with no account or login on the desktop app. On first launch it seeds a
-starter filament catalog and begins syncing fresh data automatically in the background (throttled
-to once every 24 hours).
+spoolbook is single-user. The admin password you set during install gates anything that changes
+data (editing, deleting, sending a print) — just browsing stays open to anyone on your LAN. On
+first launch it seeds a starter filament catalog and begins syncing fresh data automatically in
+the background (throttled to once every 24 hours).
 
-## Running the web app instead (self-hosted)
-
-spoolbook can also run as a self-hosted web app (`Spoolbook.Web`) — reachable from a phone or any
-device on your LAN, not just the machine it's running on, and needed for live printer status,
-control, and camera (see below). It uses the same SQLite database as the desktop app, so either
-one can be used, including on the same machine at the same time.
-
-Build and run from source (there's no packaged download for this yet):
+## Building from source instead
 
 ```
+cd spoolbook-web-svelte && npm run build   # frontend, needed once before first run
 dotnet run --project Spoolbook.Web -c Release
 ```
 
-Set the `SPOOLBOOK_ADMIN_PASSWORD` environment variable first — the web app gates anything that
-changes data (editing, deleting, sending a print) behind that shared password; just browsing
-stays open to anyone on your LAN.
+Set `SPOOLBOOK_ADMIN_PASSWORD` first. Useful for development or if you'd rather not use Docker;
+see the [repo README](https://github.com/t2vi/spoolbook) for the full dev workflow.
 
 ## Printer control and live camera
 
