@@ -7,10 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Referenced directly rather than extracted into a shared class library — namespaces
-         stay identical either way, so this is the smaller diff. Pulls in Avalonia as a
-         transitive (unused-by-Web) dependency; worth splitting out only once that bloat
-         actually matters, e.g. when Docker image size is a real decision (docs/adr/0018). -->
+    <!-- Spoolbook.Desktop is now purely the shared domain/data layer (Avalonia UI retired) —
+         entities, EF Core, Features/* services. Referenced directly rather than extracted into
+         its own project since it'll be replaced wholesale once a planned Rust backend port
+         reaches parity, so splitting it out now would be throwaway work. -->
     <ProjectReference Include="..\Spoolbook.Desktop\Spoolbook.Desktop.csproj" />
   </ItemGroup>
 

@@ -1,7 +1,9 @@
-using CommunityToolkit.Mvvm.ComponentModel;
 namespace Spoolbook.Desktop.Features.Profiles;
 
-public partial class ProfileFieldEntry : ObservableObject
+// Pure data shape — serialized directly as JSON by Spoolbook.Web's /api/profiles/field-spec
+// endpoint (ProfileEndpoints.cs). No observable/two-way-binding machinery needed since nothing
+// mutates an instance after construction; the Svelte client owns its own edit-time state.
+public class ProfileFieldEntry
 {
     public required string Name { get; init; }
     public required string Label { get; init; }
@@ -18,20 +20,8 @@ public partial class ProfileFieldEntry : ObservableObject
     public bool HideWhenBlank { get; init; }
     public bool ShowRow => !HideWhenBlank || !string.IsNullOrWhiteSpace(Value);
 
-    [ObservableProperty]
-    private string value = "";
-
-    public bool BoolValue
-    {
-        get => Value == "true";
-        set => Value = value ? "true" : "false";
-    }
-
-    partial void OnValueChanged(string value)
-    {
-        OnPropertyChanged(nameof(BoolValue));
-        OnPropertyChanged(nameof(ShowRow));
-    }
+    public required string Value { get; init; }
+    public bool BoolValue => Value == "true";
 }
 
 public class ProfileFieldGroup
