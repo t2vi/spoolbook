@@ -1,0 +1,15 @@
+**/bin/
+**/obj/
+**/node_modules/
+**/.svelte-kit/
+**/build/
+spoolbook-web-svelte/node_modules/
+docs-site/
+docs/
+slicer-service/.venv/
+slicer-service/.venv-check/
+slicer-service/__pycache__/
+slicer-service/tests/
+Spoolbook.Desktop.Tests/
+.git/
+*.md

@@ -2,6 +2,7 @@
 
 | Version | Date | Notes |
 |---|---|---|
+| [v0.1.8](docs/releases/v0.1.8.md) | 2026-08-15 | One-click Docker install (spoolbook + BambuStudio slicer service via GHCR); Avalonia desktop UI fully retired; repo made public |
 | [v0.1.7](docs/releases/v0.1.7.md) | 2026-08-14 | Blazor Server retired — SvelteKit is now the web UI; Recommend page removed; printer controls gate on live print state |
 | [v0.1.6](docs/releases/v0.1.6.md) | 2026-08-14 | Self-hosted web app; live printer telemetry/control; send prints from spoolbook; live camera; cohesive per-printer UI |
 | [v0.1.5](docs/releases/v0.1.5.md) | 2026-07-26 | .3mf plate thumbnails on Prints; required-field validation highlighting |

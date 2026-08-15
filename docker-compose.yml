@@ -1,0 +1,36 @@
+# `image:` + `build:` together on each service: `docker compose build` builds from source and
+# tags the result as that image name (what CI does, and what running this from a repo checkout
+# does); `docker compose pull && up -d` (what the one-click installer does) just pulls the
+# pre-built tag from GHCR — nobody running the installer has this source checked out.
+services:
+  spoolbook:
+    image: ghcr.io/t2vi/spoolbook:latest
+    build:
+      context: .
+      dockerfile: Spoolbook.Web/Dockerfile
+    ports:
+      - "5070:5070"
+    environment:
+      - SPOOLBOOK_ADMIN_PASSWORD=${SPOOLBOOK_ADMIN_PASSWORD}
+      - RESLICE_SERVICE_URL=http://spoolbook-slicer:8100
+    volumes:
+      - spoolbook-data:/data
+    depends_on:
+      spoolbook-slicer:
+        condition: service_healthy
+    restart: unless-stopped
+
+  spoolbook-slicer:
+    image: ghcr.io/t2vi/spoolbook-slicer:latest
+    build:
+      context: ./slicer-service
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8100/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  spoolbook-data:

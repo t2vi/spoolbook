@@ -70,10 +70,22 @@ only host: a static published file already behaves like a minimal read API, so n
 be deployed or authenticated against. Scraped color names resolve to real hex values (CSS Color
 Module Level 4 + a small supplementary filament-marketing list) rather than a flat placeholder.
 
-## Running
+## Installing
 
 ```sh
-dotnet run --project Spoolbook.Desktop
+curl -fsSL https://raw.githubusercontent.com/t2vi/spoolbook/main/install.sh | bash
+```
+
+Pulls the pre-built `spoolbook` + `spoolbook-slicer` (BambuStudio, for re-slicing before print)
+images from GHCR into `./spoolbook/`, prompts for an admin password, and starts both containers
+via Docker Compose. Requires Docker + the Compose plugin. See `docker-compose.yml` for the
+service layout if you'd rather run it by hand.
+
+## Developing
+
+```sh
+cd spoolbook-web-svelte && npm run dev   # frontend, port 5173, proxies /api to :5070
+dotnet run --project Spoolbook.Web       # backend, port 5070
 ```
 
 ## Testing
@@ -85,7 +97,7 @@ dotnet test
 ## Releasing
 
 See the "Release checklist" in `CLAUDE.md`. Version bump lives in
-`Spoolbook.Desktop/Spoolbook.Desktop.csproj`; publishing a GitHub Release triggers
-`.github/workflows/release.yml`, which builds and attaches self-contained single-file binaries
-for win-x64, osx-x64, osx-arm64, and linux-x64. Release notes go in `docs/releases/`, indexed by
+`Spoolbook.Desktop/Spoolbook.Desktop.csproj`. `.github/workflows/docker-images.yml` builds and
+pushes the `spoolbook`/`spoolbook-slicer` images to GHCR (gated on a real slicing smoke test
+against the latest-stable BambuStudio). Release notes go in `docs/releases/`, indexed by
 `CHANGELOG.md`. `.github/workflows/tests.yml` runs the test suite on every push/PR.
