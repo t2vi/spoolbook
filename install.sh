@@ -24,7 +24,9 @@ fi
 
 if [[ ! -f .env ]]; then
   echo "No .env found — setting one up."
-  read -rsp "Choose an admin password (gates editing/deleting/sending prints): " admin_pass
+  # Reads from /dev/tty, not stdin — when piped from curl, stdin is the script itself, not
+  # the terminal, so a plain `read` here would get EOF instead of the user's input.
+  read -rsp "Choose an admin password (gates editing/deleting/sending prints): " admin_pass < /dev/tty
   echo
   if [[ -z "$admin_pass" ]]; then
     echo "Password can't be empty."
