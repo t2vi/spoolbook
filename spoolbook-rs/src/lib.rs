@@ -14,6 +14,7 @@ pub mod profiles;
 pub mod project_upload;
 pub mod projects;
 pub mod reslicing;
+pub mod send_print;
 pub mod settings;
 pub mod spools;
 
@@ -41,6 +42,7 @@ pub fn app_with_live_status(pool: SqlitePool, live_status: printer_mqtt::LiveSta
         .merge(project_upload::router())
         .merge(bambu_import::router())
         .merge(reslicing::router())
+        .merge(send_print::router())
         .layer(Extension(live_status))
         .with_state(pool)
 }

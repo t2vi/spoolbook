@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 axum = { version = "0.8.9", features = ["multipart"] }
 base64 = "0.23.1"
+chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
+md5 = "0.7.0"
 reqwest = { version = "0.13.4", default-features = false, features = ["rustls", "json", "multipart"] }
 roxmltree = "0.21.1"
 rumqttc = { version = "0.25.1", features = ["use-rustls"] }
@@ -14,6 +16,8 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 sha2 = "0.11.0"
 sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite"] }
+suppaftp = { version = "7", default-features = false, features = ["tokio-rustls", "deprecated"] }
+tokio-rustls = "0.26"
 tokio = { version = "1.53.1", features = ["full"] }
 tokio-stream = "0.1.19"
 zip = "8.6.0"

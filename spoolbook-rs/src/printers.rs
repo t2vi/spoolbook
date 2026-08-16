@@ -139,6 +139,14 @@ async fn live(Extension(store): Extension<LiveStatusStore>, Path(id): Path<i64>)
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
+pub(crate) async fn get_by_id(pool: &SqlitePool, id: i64) -> Option<Printer> {
+    sqlx::query_as::<_, Printer>("SELECT id, name, model, ip_address, access_code, serial_number FROM printers WHERE id = ?1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .expect("query failed")
+}
+
 async fn list(State(pool): State<SqlitePool>) -> Json<Vec<Printer>> {
     let printers = sqlx::query_as::<_, Printer>(
         "SELECT id, name, model, ip_address, access_code, serial_number FROM printers ORDER BY name",
