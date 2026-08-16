@@ -11,9 +11,9 @@ use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 
 // Weather auto-fetch (Open-Meteo, populating ambient_temp_c/ambient_humidity_pct/ambient_source)
-// is deliberately not implemented here — a real external network dependency, same category as
-// the filament-catalog sync and project upload/import, deferred as a future integration.
-// ActualRoomTempC (manual entry) already covers the non-network path.
+// is deliberately not implemented here — unlike filament-catalog sync or project upload/import
+// (both now ported), this one has no reference test suite to port forward, only a live external
+// API. ActualRoomTempC (manual entry) already covers the non-network path.
 #[derive(sqlx::FromRow)]
 struct PrintRow {
     id: i64,
@@ -172,7 +172,34 @@ pub fn router() -> Router<SqlitePool> {
         .route("/api/prints", get(list).post(create))
         .route("/api/prints/inventory", get(inventory))
         .route("/api/prints/recommend-profile", get(recommend_profile))
+        .route("/api/prints/job-match", get(job_match))
         .route("/api/prints/{id}", get(get_one).put(update).delete(delete))
+        .route("/api/prints/{id}/attach-job", axum::routing::post(attach_job))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct JobMatchQuery {
+    printer_id: i64,
+    started_at: String,
+}
+
+async fn job_match(
+    State(pool): State<SqlitePool>,
+    Query(q): Query<JobMatchQuery>,
+) -> Json<Option<crate::printer_telemetry::PrinterJob>> {
+    Json(crate::printer_telemetry::find_match_for_print(&pool, q.printer_id, &q.started_at).await)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AttachJobRequest {
+    job_id: i64,
+}
+
+async fn attach_job(State(pool): State<SqlitePool>, Path(id): Path<i64>, Json(req): Json<AttachJobRequest>) -> Json<serde_json::Value> {
+    crate::printer_telemetry::attach_job_to_print(&pool, req.job_id, id).await;
+    Json(serde_json::json!({ "ok": true }))
 }
 
 #[derive(Deserialize)]
