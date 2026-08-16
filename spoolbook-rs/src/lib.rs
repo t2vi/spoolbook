@@ -3,6 +3,7 @@ pub mod dashboard;
 pub mod filaments;
 pub mod printers;
 pub mod prints;
+pub mod profile_field_spec;
 pub mod profiles;
 pub mod projects;
 pub mod settings;
