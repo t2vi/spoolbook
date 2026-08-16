@@ -1,3 +1,4 @@
+use serde::Serialize;
 use serde_json::Value;
 
 pub struct ReadingInput {
@@ -9,7 +10,10 @@ pub struct ReadingInput {
 }
 
 // Live-only AMS snapshot — deliberately not persisted onto PrinterReading (docs/adr/0022): the
-// point is a live status view, not a per-tray time series in print history.
+// point is a live status view, not a per-tray time series in print history. Clone+Serialize so
+// printer_mqtt.rs's live-status store can hand a snapshot straight to the /live SSE endpoint.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AmsTrayReading {
     pub slot_id: String,
     pub material_type: Option<String>,
@@ -17,6 +21,8 @@ pub struct AmsTrayReading {
     pub remain_percent: Option<i64>,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AmsUnitReading {
     pub unit_id: String,
     pub humidity_level: Option<i64>,

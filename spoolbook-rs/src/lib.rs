@@ -6,6 +6,7 @@ pub mod filament_catalog_sync;
 pub mod filaments;
 pub mod printers;
 pub mod prints;
+pub mod printer_mqtt;
 pub mod printer_telemetry;
 pub mod profile_field_spec;
 pub mod profiles;
@@ -14,10 +15,17 @@ pub mod projects;
 pub mod settings;
 pub mod spools;
 
-use axum::Router;
+use axum::{Extension, Router};
 use sqlx::SqlitePool;
 
+// Tests (and anything else that doesn't care about live MQTT status) get a fresh, empty store —
+// the /live endpoint just reports "not connected" rather than needing a real background
+// connection. Production wiring (main.rs) uses app_with_live_status with the real, populated one.
 pub fn app(pool: SqlitePool) -> Router {
+    app_with_live_status(pool, printer_mqtt::new_store())
+}
+
+pub fn app_with_live_status(pool: SqlitePool, live_status: printer_mqtt::LiveStatusStore) -> Router {
     filaments::router()
         .merge(colors::router())
         .merge(spools::router())
@@ -30,5 +38,6 @@ pub fn app(pool: SqlitePool) -> Router {
         .merge(filament_catalog_sync::router())
         .merge(project_upload::router())
         .merge(bambu_import::router())
+        .layer(Extension(live_status))
         .with_state(pool)
 }
