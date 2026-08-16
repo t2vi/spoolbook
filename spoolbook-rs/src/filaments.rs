@@ -17,12 +17,23 @@ pub struct Filament {
     pub color: String,
 }
 
+// Aliases accept the catalog feed's PascalCase field names (Brand/Material/Variant/Color/Hex)
+// alongside the API's lowercase ones, so the same type deserializes both without a second
+// struct — matches .NET's PropertyNameCaseInsensitive on the catalog parser.
 #[derive(Deserialize)]
 pub struct FilamentInput {
+    #[serde(alias = "Brand")]
     pub brand: String,
+    #[serde(alias = "Material")]
     pub material: String,
+    #[serde(alias = "Variant")]
     pub variant: Option<String>,
+    #[serde(alias = "Color")]
     pub color: String,
+    // Set by the catalog scraper when the color name matched a known hex; falls back to the
+    // #CCCCCC placeholder in ensure_color_exists when absent.
+    #[serde(alias = "Hex")]
+    pub hex: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -144,15 +155,36 @@ fn err(status: StatusCode, message: &str) -> (StatusCode, Json<FilamentResult>) 
     (status, Json(FilamentResult { ok: false, error: Some(message.to_string()), entry: None }))
 }
 
-async fn create(
-    State(pool): State<SqlitePool>,
-    Json(input): Json<FilamentInput>,
-) -> (StatusCode, Json<FilamentResult>) {
-    if let Some(error) = validate(&input) {
-        return err(StatusCode::BAD_REQUEST, error);
+// Colors aren't hand-seeded independently — they're discovered from filaments (known or owned)
+// as they're added. Uses the catalog scraper's resolved hex when available, otherwise a
+// placeholder the user can correct in Settings.
+async fn ensure_color_exists(pool: &SqlitePool, name: &str, hex: Option<&str>) {
+    let exists = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM filament_colors WHERE name = ?1")
+        .bind(name)
+        .fetch_one(pool)
+        .await
+        .expect("query failed")
+        > 0;
+    if exists {
+        return;
     }
-    if is_duplicate(&pool, &input, None).await {
-        return err(StatusCode::BAD_REQUEST, "duplicate");
+
+    sqlx::query("INSERT INTO filament_colors (name, hex) VALUES (?1, ?2)")
+        .bind(name)
+        .bind(hex.unwrap_or("#CCCCCC"))
+        .execute(pool)
+        .await
+        .expect("insert failed");
+}
+
+// Shared by the create endpoint and the catalog sync importer, which needs the same
+// validate/dedupe/persist path per entry without the axum request/response plumbing.
+pub async fn create_one(pool: &SqlitePool, input: &FilamentInput) -> Result<Filament, &'static str> {
+    if let Some(error) = validate(input) {
+        return Err(error);
+    }
+    if is_duplicate(pool, input, None).await {
+        return Err("duplicate");
     }
 
     let entry = sqlx::query_as::<_, Filament>(
@@ -163,11 +195,20 @@ async fn create(
     .bind(&input.material)
     .bind(&input.variant)
     .bind(&input.color)
-    .fetch_one(&pool)
+    .fetch_one(pool)
     .await
     .expect("insert failed");
 
-    (StatusCode::OK, Json(FilamentResult { ok: true, error: None, entry: Some(entry) }))
+    ensure_color_exists(pool, &input.color, input.hex.as_deref()).await;
+
+    Ok(entry)
+}
+
+async fn create(State(pool): State<SqlitePool>, Json(input): Json<FilamentInput>) -> (StatusCode, Json<FilamentResult>) {
+    match create_one(&pool, &input).await {
+        Ok(entry) => (StatusCode::OK, Json(FilamentResult { ok: true, error: None, entry: Some(entry) })),
+        Err(error) => err(StatusCode::BAD_REQUEST, error),
+    }
 }
 
 async fn update(
@@ -197,7 +238,10 @@ async fn update(
     .expect("update failed");
 
     match entry {
-        Some(entry) => (StatusCode::OK, Json(FilamentResult { ok: true, error: None, entry: Some(entry) })),
+        Some(entry) => {
+            ensure_color_exists(&pool, &input.color, input.hex.as_deref()).await;
+            (StatusCode::OK, Json(FilamentResult { ok: true, error: None, entry: Some(entry) }))
+        }
         None => err(StatusCode::NOT_FOUND, "not_found"),
     }
 }
