@@ -1,5 +1,6 @@
 pub mod colors;
 pub mod dashboard;
+pub mod filament_catalog_sync;
 pub mod filaments;
 pub mod printers;
 pub mod prints;
@@ -22,5 +23,6 @@ pub fn app(pool: SqlitePool) -> Router {
         .merge(prints::router())
         .merge(settings::router())
         .merge(dashboard::router())
+        .merge(filament_catalog_sync::router())
         .with_state(pool)
 }

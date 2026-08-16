@@ -82,6 +82,43 @@ async fn create_persists_and_returns_the_entry() {
 }
 
 #[tokio::test]
+async fn create_registers_a_new_color_with_its_resolved_hex() {
+    let pool = test_pool().await;
+    let input = json!({ "brand": "Bambu Lab", "material": "PLA", "variant": "Basic", "color": "Jade White", "hex": "#FFFFFF" });
+
+    post_json(&pool, "/api/filaments", input).await;
+
+    let (status, colors) = send(&pool, "GET", "/api/filament-colors", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let jade = colors.as_array().unwrap().iter().find(|c| c["name"] == "Jade White").unwrap();
+    assert_eq!(jade["hex"], "#FFFFFF");
+}
+
+#[tokio::test]
+async fn create_falls_back_to_a_placeholder_hex_when_none_given() {
+    let pool = test_pool().await;
+    let input = json!({ "brand": "Bambu Lab", "material": "PLA", "variant": "Basic", "color": "Mystery Gray" });
+
+    post_json(&pool, "/api/filaments", input).await;
+
+    let (_, colors) = send(&pool, "GET", "/api/filament-colors", None).await;
+    let entry = colors.as_array().unwrap().iter().find(|c| c["name"] == "Mystery Gray").unwrap();
+    assert_eq!(entry["hex"], "#CCCCCC");
+}
+
+#[tokio::test]
+async fn create_does_not_duplicate_an_already_known_color() {
+    let pool = test_pool().await;
+    post_json(&pool, "/api/filaments", json!({ "brand": "A", "material": "PLA", "variant": null, "color": "Black", "hex": "#000000" })).await;
+    post_json(&pool, "/api/filaments", json!({ "brand": "B", "material": "PETG", "variant": null, "color": "Black" })).await;
+
+    let (_, colors) = send(&pool, "GET", "/api/filament-colors", None).await;
+    let blacks: Vec<&Value> = colors.as_array().unwrap().iter().filter(|c| c["name"] == "Black").collect();
+    assert_eq!(blacks.len(), 1);
+    assert_eq!(blacks[0]["hex"], "#000000", "first-registered hex wins, not overwritten by a later hex-less create");
+}
+
+#[tokio::test]
 async fn create_rejects_exact_duplicate() {
     let pool = test_pool().await;
     let input = json!({ "brand": "Bambu Lab", "material": "PLA", "variant": "Basic", "color": "Black" });
