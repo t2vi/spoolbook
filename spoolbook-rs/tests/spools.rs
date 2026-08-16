@@ -112,6 +112,78 @@ async fn update_persists_changes() {
     assert_eq!(body["spool"]["notes"], "rewound");
 }
 
+async fn seed_profile(pool: &sqlx::SqlitePool, filament_id: i64, spool_id: i64) -> i64 {
+    sqlx::query_scalar::<_, i64>(
+        "INSERT INTO print_profiles (filament_id, spool_id, name, nozzle_temp_c) VALUES (?1, ?2, 'p', 220) RETURNING id",
+    )
+    .bind(filament_id)
+    .bind(spool_id)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+async fn seed_printer(pool: &sqlx::SqlitePool) -> i64 {
+    let (_, body) = send(pool, "POST", "/api/printers", Some(json!({
+        "name": "P2S #1", "model": "P2S", "ipAddress": null, "accessCode": null, "serialNumber": null
+    }))).await;
+    body["printer"]["id"].as_i64().unwrap()
+}
+
+#[tokio::test]
+async fn delete_rejects_a_spool_with_profiles() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let (_, created) = send(&pool, "POST", "/api/spools", Some(json!({
+        "filamentId": filament_id, "lotCode": null, "purchasedAt": null,
+        "openedAt": null, "emptiedAt": null, "weightGrams": null, "diameterMm": null, "notes": null
+    }))).await;
+    let id = created["spool"]["id"].as_i64().unwrap();
+    seed_profile(&pool, filament_id, id).await;
+
+    let (status, body) = send(&pool, "DELETE", &format!("/api/spools/{id}"), None).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "has_profiles");
+
+    let (_, all) = send(&pool, "GET", "/api/spools", None).await;
+    assert_eq!(all.as_array().unwrap().len(), 1, "spool must survive the rejected delete");
+}
+
+#[tokio::test]
+async fn delete_rejects_a_spool_with_prints() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let (_, created) = send(&pool, "POST", "/api/spools", Some(json!({
+        "filamentId": filament_id, "lotCode": null, "purchasedAt": null,
+        "openedAt": null, "emptiedAt": null, "weightGrams": null, "diameterMm": null, "notes": null
+    }))).await;
+    let id = created["spool"]["id"].as_i64().unwrap();
+    let profile_id = sqlx::query_scalar::<_, i64>(
+        "INSERT INTO print_profiles (filament_id, name, nozzle_temp_c) VALUES (?1, 'p', 220) RETURNING id",
+    )
+    .bind(filament_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let printer_id = seed_printer(&pool).await;
+    send(&pool, "POST", "/api/prints", Some(json!({
+        "profileId": profile_id, "spoolId": id, "printerId": printer_id,
+        "input": {
+            "startedAt": "2026-08-15T10:00:00Z", "endedAt": "2026-08-15T12:00:00Z",
+            "status": "Success", "notes": null, "amsHumidityPct": null,
+            "actualRoomTempC": null, "cleanBuildPlate": true,
+            "projectId": null, "projectPlaterId": null,
+            "failureModes": []
+        }
+    }))).await;
+
+    let (status, body) = send(&pool, "DELETE", &format!("/api/spools/{id}"), None).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "has_prints");
+}
+
 #[tokio::test]
 async fn delete_removes_the_spool() {
     let pool = test_pool().await;
