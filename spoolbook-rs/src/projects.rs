@@ -9,10 +9,11 @@ use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::io::Read;
 
-// Domain-only slice of ProjectService: list, plate reading, and version-linking. Upload,
-// import-from-url, and reslicing are Web-specific integrations (multipart handling, network
-// fetch, the separate slicer-service subsystem) — same "not domain layer" boundary as the MQTT/
-// camera code, deliberately out of scope here.
+// Upload and import-from-url (see project_upload.rs) build on the mesh-hash/upsert helpers
+// below — plain file I/O and an HTTP GET, no different in kind from filament_catalog_sync's
+// fetch. Only reslicing stays out of scope: it shells out to Bambu Studio as an external
+// process, the same deferred tier as MQTT/camera (live hardware/process integration, not data
+// layer).
 #[derive(Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {
@@ -35,8 +36,81 @@ pub struct ProjectPlate {
     pub thumbnail_bytes: Option<String>,
 }
 
-const COLUMNS: &str = "id, file_path, file_name, last_known_write_time_utc, last_known_file_size_bytes,
+pub(crate) const COLUMNS: &str = "id, file_path, file_name, last_known_write_time_utc, last_known_file_size_bytes,
     mesh_hash, previous_version_project_id, version_number, is_current_version";
+
+// sha256 of just the mesh geometry entry, not the whole file — a re-slice of the same design
+// changes settings/thumbnails but usually not this. Byte-exact, not canonicalized (docs/adr/0023).
+// Returns None for anything that isn't a readable .3mf zip with that entry, rather than panicking.
+pub(crate) fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+pub(crate) fn compute_mesh_hash(file_path: &str) -> Option<String> {
+    use sha2::{Digest, Sha256};
+
+    let file = std::fs::File::open(file_path).ok()?;
+    let mut archive = zip::ZipArchive::new(file).ok()?;
+    let mut entry = archive.by_name("3D/3dmodel.model").ok()?;
+    let mut buf = Vec::new();
+    entry.read_to_end(&mut buf).ok()?;
+    Some(hex(&Sha256::digest(&buf)))
+}
+
+pub(crate) struct UpsertResult {
+    pub project: Project,
+    pub created: bool,
+}
+
+// Mirrors ProjectService.UpsertByPathAsync. last_known_write_time_utc is stamped at import
+// time via SQLite's own now() rather than the file's OS mtime — nothing in this crate reads
+// that column back for drift comparison yet (GetFileStatus isn't ported), so exact OS-mtime
+// fidelity isn't worth pulling in a date/time crate for. Revisit if drift detection lands.
+pub(crate) async fn upsert_by_path(pool: &SqlitePool, file_path: &str, display_name: &str) -> Option<UpsertResult> {
+    let size = std::fs::metadata(file_path).ok()?.len() as i64;
+
+    let existing_id = sqlx::query_scalar::<_, i64>("SELECT id FROM projects WHERE file_path = ?1")
+        .bind(file_path)
+        .fetch_optional(pool)
+        .await
+        .expect("query failed");
+
+    let created = existing_id.is_none();
+    let id = match existing_id {
+        Some(id) => id,
+        None => {
+            let mesh_hash = compute_mesh_hash(file_path);
+            sqlx::query_scalar::<_, i64>(
+                "INSERT INTO projects (file_path, file_name, mesh_hash, last_known_write_time_utc, last_known_file_size_bytes)
+                 VALUES (?1, ?2, ?3, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?4)
+                 RETURNING id",
+            )
+            .bind(file_path)
+            .bind(display_name)
+            .bind(&mesh_hash)
+            .bind(size)
+            .fetch_one(pool)
+            .await
+            .expect("insert failed")
+        }
+    };
+
+    if !created {
+        sqlx::query(
+            "UPDATE projects SET last_known_write_time_utc = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), last_known_file_size_bytes = ?1
+             WHERE id = ?2",
+        )
+        .bind(size)
+        .bind(id)
+        .execute(pool)
+        .await
+        .expect("update failed");
+    }
+
+    let sql = format!("SELECT {COLUMNS} FROM projects WHERE id = ?1");
+    let project = sqlx::query_as::<_, Project>(&sql).bind(id).fetch_one(pool).await.expect("query failed");
+    Some(UpsertResult { project, created })
+}
 
 pub fn router() -> Router<SqlitePool> {
     Router::new()

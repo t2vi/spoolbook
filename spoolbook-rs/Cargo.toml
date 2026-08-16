@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-axum = "0.8.9"
+axum = { version = "0.8.9", features = ["multipart"] }
 base64 = "0.23.1"
 reqwest = { version = "0.13.4", default-features = false, features = ["rustls", "json"] }
 roxmltree = "0.21.1"
