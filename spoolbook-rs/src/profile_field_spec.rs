@@ -265,7 +265,7 @@ pub fn build_groups(name: String, initial_values: Option<&HashMap<&'static str, 
     ProfileFieldSpecResponse { name, tabs }
 }
 
-fn fmt_f64(v: f64) -> String {
+pub(crate) fn fmt_f64(v: f64) -> String {
     v.to_string()
 }
 

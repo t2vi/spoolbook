@@ -15,7 +15,7 @@ use sqlx::SqlitePool;
 // this from Svelte yet (ADR-0026: isolated dev, no live coexistence), so there's no live
 // contract to break; whenever Profiles' Svelte page is pointed at this backend, its form will
 // need to send typed values instead of stringified ones — a real, separate future step.
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize, sqlx::FromRow, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct PrintProfile {
     pub id: i64,
@@ -350,6 +350,11 @@ pub struct ProfileInventoryResult {
     page: i64,
     page_size: i64,
     total_pages: i64,
+}
+
+pub(crate) async fn get_by_id(pool: &SqlitePool, id: i64) -> Option<PrintProfile> {
+    let sql = format!("SELECT {COLUMNS} FROM print_profiles WHERE id = ?1");
+    sqlx::query_as::<_, PrintProfile>(&sql).bind(id).fetch_optional(pool).await.expect("query failed")
 }
 
 const COLUMNS: &str = "id, filament_id, spool_id, name, print_speed_mm_s,

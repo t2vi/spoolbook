@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 axum = { version = "0.8.9", features = ["multipart"] }
 base64 = "0.23.1"
-reqwest = { version = "0.13.4", default-features = false, features = ["rustls", "json"] }
+reqwest = { version = "0.13.4", default-features = false, features = ["rustls", "json", "multipart"] }
 roxmltree = "0.21.1"
 rumqttc = { version = "0.25.1", features = ["use-rustls"] }
 rustls = "0.23.43"

@@ -18,7 +18,7 @@ pub fn router() -> Router<SqlitePool> {
 // ponytail: fixed local path, same dev-stub tier as main.rs's hardcoded dev.db — a real
 // deployment will want this configurable (persistent volume, not OS temp) once this crate has
 // a deployment story at all.
-fn storage_dir() -> PathBuf {
+pub(crate) fn storage_dir() -> PathBuf {
     let dir = std::env::temp_dir().join("spoolbook-rs-projects");
     std::fs::create_dir_all(&dir).ok();
     dir
@@ -35,7 +35,7 @@ fn err_response(message: &str) -> serde_json::Value {
 // Content-hash-derived storage naturally dedupes re-uploads of the same bytes (upsert_by_path
 // finds the existing row for that path) and means drift can never happen, since nothing but
 // this function ever writes into the storage directory. Mirrors ProjectUploadService.SaveBytesAsync.
-async fn save_bytes(storage_dir: &Path, pool: &SqlitePool, bytes: &[u8], display_name: &str) -> serde_json::Value {
+pub(crate) async fn save_bytes(storage_dir: &Path, pool: &SqlitePool, bytes: &[u8], display_name: &str) -> serde_json::Value {
     let hash = projects::hex(&Sha256::digest(bytes));
     let stored_path = storage_dir.join(format!("{hash}.3mf"));
     if !stored_path.exists() {
