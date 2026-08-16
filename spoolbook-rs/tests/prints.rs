@@ -321,3 +321,60 @@ async fn delete_returns_not_found_for_missing_id() {
     let (status, _) = send(&pool, "DELETE", "/api/prints/999", None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+async fn seed_printer_job(pool: &sqlx::SqlitePool, printer_id: i64, external_job_id: &str, started_at: &str) -> i64 {
+    sqlx::query_scalar::<_, i64>(
+        "INSERT INTO printer_jobs (printer_id, external_job_id, started_at) VALUES (?1, ?2, ?3) RETURNING id",
+    )
+    .bind(printer_id)
+    .bind(external_job_id)
+    .bind(started_at)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn job_match_returns_the_closest_unattached_job() {
+    let pool = test_pool().await;
+    let f = seed_all(&pool).await;
+    seed_printer_job(&pool, f.printer_id, "job-far", "2026-01-01T06:00:00Z").await;
+    seed_printer_job(&pool, f.printer_id, "job-close", "2026-01-01T08:00:00Z").await;
+
+    let (status, body) =
+        send(&pool, "GET", &format!("/api/prints/job-match?printerId={}&startedAt=2026-01-01T08:05:00Z", f.printer_id), None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["externalJobId"], "job-close");
+}
+
+#[tokio::test]
+async fn job_match_returns_null_when_no_unattached_jobs_exist() {
+    let pool = test_pool().await;
+    let f = seed_all(&pool).await;
+
+    let (status, body) =
+        send(&pool, "GET", &format!("/api/prints/job-match?printerId={}&startedAt=2026-01-01T08:00:00Z", f.printer_id), None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, Value::Null);
+}
+
+#[tokio::test]
+async fn attach_job_sets_the_jobs_print_id() {
+    let pool = test_pool().await;
+    let f = seed_all(&pool).await;
+    let (_, created) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
+    let print_id = created["print"]["id"].as_i64().unwrap();
+    let job_id = seed_printer_job(&pool, f.printer_id, "job-1", "2026-01-01T08:00:00Z").await;
+
+    let (status, body) =
+        send(&pool, "POST", &format!("/api/prints/{print_id}/attach-job"), Some(json!({ "jobId": job_id }))).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["ok"], true);
+
+    let attached_print_id: Option<i64> =
+        sqlx::query_scalar("SELECT print_id FROM printer_jobs WHERE id = ?1").bind(job_id).fetch_one(&pool).await.unwrap();
+    assert_eq!(attached_print_id, Some(print_id));
+}
