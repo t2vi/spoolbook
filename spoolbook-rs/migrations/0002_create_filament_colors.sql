@@ -1,0 +1,5 @@
+CREATE TABLE filament_colors (
+    id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    hex  TEXT NOT NULL
+);
