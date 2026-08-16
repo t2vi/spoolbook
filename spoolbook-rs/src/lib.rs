@@ -1,3 +1,4 @@
+pub mod bambu_import;
 pub mod colors;
 pub mod dashboard;
 pub mod filament_catalog_sync;
@@ -6,6 +7,7 @@ pub mod printers;
 pub mod prints;
 pub mod profile_field_spec;
 pub mod profiles;
+pub mod project_upload;
 pub mod projects;
 pub mod settings;
 pub mod spools;
@@ -24,5 +26,7 @@ pub fn app(pool: SqlitePool) -> Router {
         .merge(settings::router())
         .merge(dashboard::router())
         .merge(filament_catalog_sync::router())
+        .merge(project_upload::router())
+        .merge(bambu_import::router())
         .with_state(pool)
 }
