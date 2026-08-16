@@ -207,6 +207,39 @@ pub async fn publish_command(store: &LiveStatusStore, printer_id: i64, serial_nu
     client.publish(topic, QoS::AtMostOnce, false, payload).await.map_err(|e| e.to_string())
 }
 
+// One-shot diagnostic: connects and disconnects immediately, no subscribe. A successful CONNACK
+// already proves both the IP is reachable and the access code is correct — Bambu's broker
+// rejects auth at connect time — so there's nothing a subscribe would add here.
+pub async fn test_connection(ip_address: &str, access_code: &str) -> Result<(), String> {
+    let mut mqttoptions = MqttOptions::new(format!("spoolbook-test-{}", uuid_v4()), ip_address, 8883);
+    mqttoptions.set_credentials("bblp", access_code);
+    mqttoptions.set_keep_alive(Duration::from_secs(30));
+    mqttoptions.set_transport(Transport::tls_with_config(TlsConfiguration::Rustls(Arc::new(tls_config()))));
+
+    let (client, mut eventloop) = AsyncClient::new(mqttoptions, 10);
+
+    let outcome = tokio::time::timeout(Duration::from_secs(6), async {
+        loop {
+            match eventloop.poll().await {
+                Ok(Event::Incoming(Packet::ConnAck(ack))) => {
+                    return if ack.code == rumqttc::ConnectReturnCode::Success {
+                        Ok(())
+                    } else {
+                        Err(format!("{:?}", ack.code))
+                    };
+                }
+                Ok(_) => continue,
+                Err(e) => return Err(e.to_string()),
+            }
+        }
+    })
+    .await
+    .unwrap_or_else(|_| Err("Timed out — check the IP address and that LAN mode is enabled on the printer.".to_string()));
+
+    client.disconnect().await.ok();
+    outcome
+}
+
 fn uuid_v4() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos();

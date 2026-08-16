@@ -50,6 +50,21 @@ pub fn router() -> Router<SqlitePool> {
         .route("/api/printers/{id}", axum::routing::put(update).delete(delete))
         .route("/api/printers/{id}/live", get(live))
         .route("/api/printers/{id}/control", axum::routing::post(control))
+        .route("/api/printers/test", axum::routing::post(test))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PrinterConnectionTestRequest {
+    ip_address: String,
+    access_code: String,
+}
+
+async fn test(Json(req): Json<PrinterConnectionTestRequest>) -> Json<serde_json::Value> {
+    match printer_mqtt::test_connection(&req.ip_address, &req.access_code).await {
+        Ok(()) => Json(serde_json::json!({ "ok": true })),
+        Err(error) => Json(serde_json::json!({ "ok": false, "error": error })),
+    }
 }
 
 #[derive(Deserialize)]
