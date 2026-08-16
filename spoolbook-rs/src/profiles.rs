@@ -647,6 +647,15 @@ async fn create(
 // .NET blocks updating a version already referenced by a Print ("Locked" error). The Prints
 // table doesn't exist in this DB yet (not ported), so that check is skipped — same gap pattern
 // as Spool's has_profiles/has_prints. Add back once Prints lands.
+async fn has_prints(pool: &SqlitePool, profile_id: i64) -> bool {
+    sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM prints WHERE profile_id = ?1")
+        .bind(profile_id)
+        .fetch_one(pool)
+        .await
+        .expect("query failed")
+        > 0
+}
+
 async fn update(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
@@ -654,6 +663,18 @@ async fn update(
 ) -> (StatusCode, Json<ProfileResult>) {
     if input.name.trim().is_empty() {
         return validation_error("name", "Name is required");
+    }
+    if has_prints(&pool, id).await {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ProfileResult {
+                ok: false,
+                errors: Some(serde_json::json!({
+                    "Locked": "This version has been used in a Print — save as a new version instead."
+                })),
+                profile: None,
+            }),
+        );
     }
 
     let sql = format!(
@@ -852,14 +873,20 @@ async fn update(
     }
 }
 
-// .NET also blocks deleting a version referenced by a Print (has_prints). Prints table doesn't
-// exist in this DB yet — see the note on `update`. Unconditional delete for now.
-async fn delete(State(pool): State<SqlitePool>, Path(id): Path<i64>) -> StatusCode {
+async fn delete(State(pool): State<SqlitePool>, Path(id): Path<i64>) -> (StatusCode, Json<serde_json::Value>) {
+    if has_prints(&pool, id).await {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "has_prints" })));
+    }
+
     let result = sqlx::query("DELETE FROM print_profiles WHERE id = ?1")
         .bind(id)
         .execute(&pool)
         .await
         .expect("delete failed");
 
-    if result.rows_affected() == 0 { StatusCode::NOT_FOUND } else { StatusCode::OK }
+    if result.rows_affected() == 0 {
+        return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "ok": false, "error": "not_found" })));
+    }
+
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true })))
 }

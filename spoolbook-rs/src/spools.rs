@@ -199,10 +199,27 @@ async fn update(
     }
 }
 
-// .NET also blocks deleting a Spool referenced by a PrintProfile or a Print (has_profiles /
-// has_prints). Neither table exists in this DB yet — no Profiles/Prints slice ported — so this
-// unconditionally deletes. Add those guards back once those slices land.
 async fn delete(State(pool): State<SqlitePool>, Path(id): Path<i64>) -> (StatusCode, Json<SpoolResult>) {
+    let has_profiles = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM print_profiles WHERE spool_id = ?1")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .expect("query failed")
+        > 0;
+    if has_profiles {
+        return err(StatusCode::BAD_REQUEST, "has_profiles");
+    }
+
+    let has_prints = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM prints WHERE spool_id = ?1")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .expect("query failed")
+        > 0;
+    if has_prints {
+        return err(StatusCode::BAD_REQUEST, "has_prints");
+    }
+
     let result = sqlx::query("DELETE FROM spools WHERE id = ?1")
         .bind(id)
         .execute(&pool)

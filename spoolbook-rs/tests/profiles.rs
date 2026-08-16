@@ -221,6 +221,76 @@ async fn update_returns_not_found_for_missing_id() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
+async fn seed_printer(pool: &sqlx::SqlitePool) -> i64 {
+    let (_, body) = send(pool, "POST", "/api/printers", Some(json!({
+        "name": "P2S #1", "model": "P2S", "ipAddress": null, "accessCode": null, "serialNumber": null
+    }))).await;
+    body["printer"]["id"].as_i64().unwrap()
+}
+
+async fn seed_spool(pool: &sqlx::SqlitePool, filament_id: i64) -> i64 {
+    let (_, body) = send(pool, "POST", "/api/spools", Some(json!({
+        "filamentId": filament_id, "lotCode": null, "purchasedAt": null,
+        "openedAt": null, "emptiedAt": null, "weightGrams": null, "diameterMm": null, "notes": null
+    }))).await;
+    body["spool"]["id"].as_i64().unwrap()
+}
+
+async fn attach_print(pool: &sqlx::SqlitePool, profile_id: i64, spool_id: i64, printer_id: i64) {
+    let (status, body) = send(pool, "POST", "/api/prints", Some(json!({
+        "profileId": profile_id, "spoolId": spool_id, "printerId": printer_id,
+        "input": {
+            "startedAt": "2026-08-15T10:00:00Z", "endedAt": "2026-08-15T12:00:00Z",
+            "status": "Success", "notes": null, "amsHumidityPct": null,
+            "actualRoomTempC": null, "cleanBuildPlate": true,
+            "projectId": null, "projectPlaterId": null,
+            "failureModes": []
+        }
+    }))).await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+}
+
+#[tokio::test]
+async fn update_rejects_a_version_used_in_a_print() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let (_, created) = send(&pool, "POST", &format!("/api/profiles?filamentId={filament_id}"), Some(full_profile_body())).await;
+    let id = created["profile"]["id"].as_i64().unwrap();
+    let spool_id = seed_spool(&pool, filament_id).await;
+    let printer_id = seed_printer(&pool).await;
+    attach_print(&pool, id, spool_id, printer_id).await;
+
+    let mut updated = full_profile_body();
+    updated["name"] = json!("Should not apply");
+
+    let (status, body) = send(&pool, "PUT", &format!("/api/profiles/{id}"), Some(updated)).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["errors"]["Locked"], "This version has been used in a Print — save as a new version instead.");
+
+    let (_, inventory) = send(&pool, "GET", "/api/profiles/inventory", None).await;
+    assert_eq!(inventory["profiles"][0]["name"], "Cold day tune", "profile must survive the rejected update unchanged");
+}
+
+#[tokio::test]
+async fn delete_rejects_a_version_used_in_a_print() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let (_, created) = send(&pool, "POST", &format!("/api/profiles?filamentId={filament_id}"), Some(full_profile_body())).await;
+    let id = created["profile"]["id"].as_i64().unwrap();
+    let spool_id = seed_spool(&pool, filament_id).await;
+    let printer_id = seed_printer(&pool).await;
+    attach_print(&pool, id, spool_id, printer_id).await;
+
+    let (status, body) = send(&pool, "DELETE", &format!("/api/profiles/{id}"), None).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "has_prints");
+
+    let (_, inventory) = send(&pool, "GET", "/api/profiles/inventory", None).await;
+    assert_eq!(inventory["total"], 1, "profile must survive the rejected delete");
+}
+
 #[tokio::test]
 async fn delete_removes_the_profile() {
     let pool = test_pool().await;

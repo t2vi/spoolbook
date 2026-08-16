@@ -209,6 +209,30 @@ async fn delete_removes_the_entry() {
 }
 
 #[tokio::test]
+async fn delete_rejects_a_filament_with_spools() {
+    let pool = test_pool().await;
+    let (_, created) = post_json(
+        &pool,
+        "/api/filaments",
+        json!({ "brand": "Bambu Lab", "material": "PLA", "variant": "Basic", "color": "Black" }),
+    )
+    .await;
+    let id = created["entry"]["id"].as_i64().unwrap();
+    send(&pool, "POST", "/api/spools", Some(json!({
+        "filamentId": id, "lotCode": null, "purchasedAt": null,
+        "openedAt": null, "emptiedAt": null, "weightGrams": null, "diameterMm": null, "notes": null
+    }))).await;
+
+    let (status, body) = send(&pool, "DELETE", &format!("/api/filaments/{id}"), None).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "has_spools");
+
+    let (_, all) = send(&pool, "GET", "/api/filaments/all", None).await;
+    assert_eq!(all.as_array().unwrap().len(), 1, "filament must survive the rejected delete");
+}
+
+#[tokio::test]
 async fn delete_returns_not_found_for_missing_id() {
     let pool = test_pool().await;
 
