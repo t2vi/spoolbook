@@ -116,19 +116,25 @@ async fn list_all(State(pool): State<SqlitePool>) -> Json<Vec<Spool>> {
 }
 
 async fn get_one(State(pool): State<SqlitePool>, Path(id): Path<i64>) -> Result<Json<Spool>, StatusCode> {
+    match fetch_by_id(&pool, id).await {
+        Some(spool) => Ok(Json(spool)),
+        None => Err(StatusCode::NOT_FOUND),
+    }
+}
+
+// Exposed for Print's nested `spool` field (Print references a Spool directly, same as .NET's
+// `.Include(p => p.Spool).ThenInclude(s => s!.Filament)`).
+pub async fn fetch_by_id(pool: &SqlitePool, id: i64) -> Option<Spool> {
     let row = sqlx::query_as::<_, SpoolRow>(
         "SELECT id, filament_id, lot_code, purchased_at, opened_at, emptied_at, weight_grams, diameter_mm, notes
          FROM spools WHERE id = ?1",
     )
     .bind(id)
-    .fetch_optional(&pool)
+    .fetch_optional(pool)
     .await
-    .expect("query failed");
+    .expect("query failed")?;
 
-    match row {
-        Some(row) => Ok(Json(attach_filament(&pool, row).await)),
-        None => Err(StatusCode::NOT_FOUND),
-    }
+    Some(attach_filament(pool, row).await)
 }
 
 fn err(status: StatusCode, message: &str) -> (StatusCode, Json<SpoolResult>) {
