@@ -347,6 +347,34 @@ async fn recommend_profile(State(pool): State<SqlitePool>, Query(q): Query<Recom
     Json(profile)
 }
 
+// Auto-create-on-send (docs/adr/0017's 2026-08-14 addendum) — called the moment the printer
+// send succeeds, so the Print row exists before the printer even confirms it started.
+// EndedAt/ambient weather fill in later (printer_telemetry::end_job / a future weather fetch).
+pub(crate) async fn create_in_progress(
+    pool: &SqlitePool,
+    profile_id: i64,
+    spool_id: i64,
+    printer_id: i64,
+    project_id: Option<i64>,
+    project_plater_id: Option<&str>,
+    started_at: &str,
+) -> i64 {
+    sqlx::query_scalar::<_, i64>(
+        "INSERT INTO prints (profile_id, spool_id, printer_id, project_id, project_plater_id, started_at, status)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'InProgress')
+         RETURNING id",
+    )
+    .bind(profile_id)
+    .bind(spool_id)
+    .bind(printer_id)
+    .bind(project_id)
+    .bind(project_plater_id)
+    .bind(started_at)
+    .fetch_one(pool)
+    .await
+    .expect("insert failed")
+}
+
 async fn create(
     State(pool): State<SqlitePool>,
     Json(body): Json<CreatePrintBody>,

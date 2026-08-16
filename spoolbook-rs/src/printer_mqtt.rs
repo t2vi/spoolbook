@@ -35,8 +35,9 @@ pub async fn snapshot(store: &LiveStatusStore, printer_id: i64) -> PrinterLiveSt
 // Accepts whatever certificate the printer's LAN broker presents — Bambu's firmware uses a
 // self-signed cert, and this is a local-network-only credential exchange (docs/adr/0017), not a
 // certificate-authenticated one. Mirrors MQTTnet's `.WithCertificateValidationHandler(_ => true)`.
+// Reused by send_print.rs's FTPS upload — same self-signed-cert, LAN-only posture.
 #[derive(Debug)]
-struct NoCertVerification;
+pub(crate) struct NoCertVerification;
 
 impl rustls::client::danger::ServerCertVerifier for NoCertVerification {
     fn verify_server_cert(
@@ -197,12 +198,18 @@ pub async fn handle_message(printer_id: i64, payload: &str, pool: &SqlitePool, s
 // than opening a new one per action — so a command fails outright (rather than queuing) if that
 // connection happens to be mid-reconnect.
 pub async fn publish_command(store: &LiveStatusStore, printer_id: i64, serial_number: &str, command: &str) -> Result<(), String> {
+    let payload = serde_json::json!({ "print": { "command": command, "sequence_id": uuid_v4() } }).to_string();
+    publish_raw(store, printer_id, serial_number, payload).await
+}
+
+// Shared by publish_command above and send_print.rs's "project_file" start-print command —
+// both just publish an already-built payload on the same live connection telemetry holds open.
+pub(crate) async fn publish_raw(store: &LiveStatusStore, printer_id: i64, serial_number: &str, payload: String) -> Result<(), String> {
     let client = store.read().await.get(&printer_id).and_then(|s| s.client.clone());
     let Some(client) = client else {
         return Err("Printer isn't connected — telemetry link is down or still reconnecting.".to_string());
     };
 
-    let payload = serde_json::json!({ "print": { "command": command, "sequence_id": uuid_v4() } }).to_string();
     let topic = format!("device/{serial_number}/request");
     client.publish(topic, QoS::AtMostOnce, false, payload).await.map_err(|e| e.to_string())
 }
