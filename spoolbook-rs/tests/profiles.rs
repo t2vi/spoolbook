@@ -292,6 +292,83 @@ async fn delete_rejects_a_version_used_in_a_print() {
 }
 
 #[tokio::test]
+async fn field_spec_returns_blank_tabs_when_no_profile_id() {
+    let pool = test_pool().await;
+
+    let (status, body) = send(&pool, "GET", "/api/profiles/field-spec", None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["name"], "");
+    let tabs = body["tabs"].as_array().unwrap();
+    assert_eq!(tabs[0]["title"], "Filament");
+    let first_section = &tabs[0]["sections"][0];
+    assert_eq!(first_section["title"], "Basic information");
+    let fields = first_section["fields"].as_array().unwrap();
+    let soluble = fields.iter().find(|f| f["name"] == "Soluble").unwrap();
+    assert_eq!(soluble["label"], "Soluble material");
+    assert_eq!(soluble["isBool"], true);
+    assert_eq!(soluble["isEnum"], false);
+    assert_eq!(soluble["isPlainText"], false);
+    assert_eq!(soluble["value"], "");
+    assert_eq!(soluble["boolValue"], false);
+
+    let diameter = fields.iter().find(|f| f["name"] == "DiameterMm").unwrap();
+    assert_eq!(diameter["label"], "Diameter");
+    assert_eq!(diameter["unit"], "mm");
+    assert_eq!(diameter["isPlainText"], true);
+
+    let default_colour = fields.iter().find(|f| f["name"] == "DefaultColourHex").unwrap();
+    assert_eq!(default_colour["hideWhenBlank"], true);
+    assert_eq!(default_colour["showRow"], false, "blank + hideWhenBlank must hide the row");
+
+    let long_retraction = tabs.iter()
+        .find(|t| t["title"] == "Setting Overrides").unwrap()["sections"]
+        .as_array().unwrap().iter().find(|s| s["title"] == "Retraction").unwrap()["fields"]
+        .as_array().unwrap().iter().find(|f| f["name"] == "LongRetractionsWhenCut").unwrap()
+        .clone();
+    assert_eq!(long_retraction["label"], "Long retraction when cut (experimental)", "the NonUnitSuffixes exception keeps this out of the unit slot");
+    assert_eq!(long_retraction["unit"], "");
+}
+
+#[tokio::test]
+async fn field_spec_returns_not_found_for_missing_profile_id() {
+    let pool = test_pool().await;
+    let (status, body) = send(&pool, "GET", "/api/profiles/field-spec?profileId=999", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["error"], "not_found");
+}
+
+#[tokio::test]
+async fn field_spec_returns_the_profiles_name_and_populated_values() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let mut body = full_profile_body();
+    body["defaultColourHex"] = json!("#abcdef");
+    let (_, created) = send(&pool, "POST", &format!("/api/profiles?filamentId={filament_id}"), Some(body)).await;
+    let id = created["profile"]["id"].as_i64().unwrap();
+
+    let (status, spec) = send(&pool, "GET", &format!("/api/profiles/field-spec?profileId={id}"), None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(spec["name"], "Cold day tune");
+    let all_fields: Vec<Value> = spec["tabs"].as_array().unwrap().iter()
+        .flat_map(|t| t["sections"].as_array().unwrap().iter())
+        .flat_map(|s| s["fields"].as_array().unwrap().iter().cloned())
+        .collect();
+    let nozzle_temp = all_fields.iter().find(|f| f["name"] == "NozzleTempC").unwrap();
+    assert_eq!(nozzle_temp["value"], "220");
+    let soluble = all_fields.iter().find(|f| f["name"] == "Soluble").unwrap();
+    assert_eq!(soluble["value"], "false");
+    assert_eq!(soluble["boolValue"], false);
+    let bridge_fan = all_fields.iter().find(|f| f["name"] == "EnableOverhangBridgeFan").unwrap();
+    assert_eq!(bridge_fan["value"], "true");
+    assert_eq!(bridge_fan["boolValue"], true);
+    let default_colour = all_fields.iter().find(|f| f["name"] == "DefaultColourHex").unwrap();
+    assert_eq!(default_colour["value"], "#abcdef");
+    assert_eq!(default_colour["showRow"], true);
+}
+
+#[tokio::test]
 async fn delete_removes_the_profile() {
     let pool = test_pool().await;
     let filament_id = seed_filament(&pool).await;

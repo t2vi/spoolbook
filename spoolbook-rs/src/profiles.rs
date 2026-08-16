@@ -397,7 +397,43 @@ pub fn router() -> Router<SqlitePool> {
     Router::new()
         .route("/api/profiles", get(list_for_filament).post(create))
         .route("/api/profiles/inventory", get(inventory))
+        .route("/api/profiles/field-spec", get(field_spec))
         .route("/api/profiles/{id}", axum::routing::put(update).delete(delete))
+}
+
+#[derive(Deserialize)]
+struct FieldSpecQuery {
+    #[serde(rename = "profileId")]
+    profile_id: Option<i64>,
+}
+
+// Serves both /profiles/new (no profileId — blank tabs) and /profiles/edit/{id} (tabs
+// pre-filled from the existing profile's fields), matching ProfileEndpoints.cs's single
+// field-spec route.
+async fn field_spec(
+    State(pool): State<SqlitePool>,
+    Query(q): Query<FieldSpecQuery>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let Some(profile_id) = q.profile_id else {
+        let spec = crate::profile_field_spec::build_groups(String::new(), None);
+        return (StatusCode::OK, Json(serde_json::to_value(spec).unwrap()));
+    };
+
+    let sql = format!("SELECT {COLUMNS} FROM print_profiles WHERE id = ?1");
+    let profile = sqlx::query_as::<_, PrintProfile>(&sql)
+        .bind(profile_id)
+        .fetch_optional(&pool)
+        .await
+        .expect("query failed");
+
+    match profile {
+        Some(profile) => {
+            let values = crate::profile_field_spec::field_strings(&profile);
+            let spec = crate::profile_field_spec::build_groups(profile.name.clone(), Some(&values));
+            (StatusCode::OK, Json(serde_json::to_value(spec).unwrap()))
+        }
+        None => (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "not_found" }))),
+    }
 }
 
 async fn list_for_filament(
