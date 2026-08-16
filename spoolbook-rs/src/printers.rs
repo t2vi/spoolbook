@@ -135,6 +135,16 @@ async fn update(
 // .NET also blocks deleting a printer referenced by a Print (has_prints) — Prints table
 // doesn't exist in this DB yet. Same gap as Spool/PrintProfile's delete guards.
 async fn delete(State(pool): State<SqlitePool>, Path(id): Path<i64>) -> (StatusCode, Json<PrinterResult>) {
+    let has_prints = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM prints WHERE printer_id = ?1")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .expect("query failed")
+        > 0;
+    if has_prints {
+        return err(StatusCode::BAD_REQUEST, "has_prints");
+    }
+
     let result = sqlx::query("DELETE FROM printers WHERE id = ?1")
         .bind(id)
         .execute(&pool)

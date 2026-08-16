@@ -110,6 +110,48 @@ async fn update_returns_not_found_for_missing_id() {
 }
 
 #[tokio::test]
+async fn delete_rejects_a_printer_with_prints() {
+    let pool = test_pool().await;
+    let (_, created) = send(&pool, "POST", "/api/printers", Some(printer_body("P2S #1"))).await;
+    let printer_id = created["printer"]["id"].as_i64().unwrap();
+
+    let (_, filament) = send(&pool, "POST", "/api/filaments", Some(json!({
+        "brand": "Bambu Lab", "material": "PLA", "variant": "Basic", "color": "Black"
+    }))).await;
+    let filament_id = filament["entry"]["id"].as_i64().unwrap();
+    let (_, spool) = send(&pool, "POST", "/api/spools", Some(json!({
+        "filamentId": filament_id, "lotCode": null, "purchasedAt": null,
+        "openedAt": null, "emptiedAt": null, "weightGrams": null, "diameterMm": null, "notes": null
+    }))).await;
+    let spool_id = spool["spool"]["id"].as_i64().unwrap();
+    let profile_id = sqlx::query_scalar::<_, i64>(
+        "INSERT INTO print_profiles (filament_id, name, nozzle_temp_c) VALUES (?1, 'p', 220) RETURNING id",
+    )
+    .bind(filament_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    send(&pool, "POST", "/api/prints", Some(json!({
+        "profileId": profile_id, "spoolId": spool_id, "printerId": printer_id,
+        "input": {
+            "startedAt": "2026-08-15T10:00:00Z", "endedAt": "2026-08-15T12:00:00Z",
+            "status": "Success", "notes": null, "amsHumidityPct": null,
+            "actualRoomTempC": null, "cleanBuildPlate": true,
+            "projectId": null, "projectPlaterId": null,
+            "failureModes": []
+        }
+    }))).await;
+
+    let (status, body) = send(&pool, "DELETE", &format!("/api/printers/{printer_id}"), None).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "has_prints");
+
+    let (_, all) = send(&pool, "GET", "/api/printers", None).await;
+    assert_eq!(all.as_array().unwrap().len(), 1, "printer must survive the rejected delete");
+}
+
+#[tokio::test]
 async fn delete_removes_the_printer() {
     let pool = test_pool().await;
     let (_, created) = send(&pool, "POST", "/api/printers", Some(printer_body("P2S #1"))).await;
