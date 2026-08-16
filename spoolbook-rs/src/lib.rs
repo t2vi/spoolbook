@@ -8,10 +8,12 @@ pub mod printers;
 pub mod prints;
 pub mod printer_mqtt;
 pub mod printer_telemetry;
+pub mod profile_config_patcher;
 pub mod profile_field_spec;
 pub mod profiles;
 pub mod project_upload;
 pub mod projects;
+pub mod reslicing;
 pub mod settings;
 pub mod spools;
 
@@ -38,6 +40,7 @@ pub fn app_with_live_status(pool: SqlitePool, live_status: printer_mqtt::LiveSta
         .merge(filament_catalog_sync::router())
         .merge(project_upload::router())
         .merge(bambu_import::router())
+        .merge(reslicing::router())
         .layer(Extension(live_status))
         .with_state(pool)
 }
