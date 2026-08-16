@@ -14,6 +14,12 @@ pub struct PrinterLiveStatus {
     pub connected: bool,
     pub ams_units: Vec<parser::AmsUnitReading>,
     pub gcode_state: Option<String>,
+    // Reused by printer control commands (docs/adr/0022) so pause/resume/stop publish on the
+    // same live connection telemetry already holds open, rather than opening a new one per
+    // action. AsyncClient is a cheap handle (channel sender), not the real socket — cloning it
+    // for the SSE snapshot every 2s is fine.
+    #[serde(skip)]
+    pub client: Option<AsyncClient>,
 }
 
 pub type LiveStatusStore = Arc<RwLock<HashMap<i64, PrinterLiveStatus>>>;
@@ -140,6 +146,7 @@ async fn connect_and_subscribe_loop(
             tokio::time::sleep(Duration::from_secs(15)).await;
             continue;
         }
+        store.write().await.entry(printer_id).or_default().client = Some(client.clone());
 
         loop {
             match eventloop.poll().await {
@@ -184,6 +191,20 @@ pub async fn handle_message(printer_id: i64, payload: &str, pool: &SqlitePool, s
     } else if let Some(task_id) = active_task_id.take() {
         printer_telemetry::end_job(pool, printer_id, &task_id, Some(&message.gcode_state), None).await;
     }
+}
+
+// Publishes on the same live connection telemetry already holds open (docs/adr/0022) rather
+// than opening a new one per action — so a command fails outright (rather than queuing) if that
+// connection happens to be mid-reconnect.
+pub async fn publish_command(store: &LiveStatusStore, printer_id: i64, serial_number: &str, command: &str) -> Result<(), String> {
+    let client = store.read().await.get(&printer_id).and_then(|s| s.client.clone());
+    let Some(client) = client else {
+        return Err("Printer isn't connected — telemetry link is down or still reconnecting.".to_string());
+    };
+
+    let payload = serde_json::json!({ "print": { "command": command, "sequence_id": uuid_v4() } }).to_string();
+    let topic = format!("device/{serial_number}/request");
+    client.publish(topic, QoS::AtMostOnce, false, payload).await.map_err(|e| e.to_string())
 }
 
 fn uuid_v4() -> String {

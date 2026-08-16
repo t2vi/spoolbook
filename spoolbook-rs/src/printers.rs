@@ -49,6 +49,46 @@ pub fn router() -> Router<SqlitePool> {
         .route("/api/printers", get(list).post(create))
         .route("/api/printers/{id}", axum::routing::put(update).delete(delete))
         .route("/api/printers/{id}/live", get(live))
+        .route("/api/printers/{id}/control", axum::routing::post(control))
+}
+
+#[derive(Deserialize)]
+struct PrinterControlRequest {
+    command: String,
+}
+
+#[derive(Serialize)]
+struct PrinterControlResult {
+    ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+async fn control(
+    State(pool): State<SqlitePool>,
+    Extension(store): Extension<LiveStatusStore>,
+    Path(id): Path<i64>,
+    Json(req): Json<PrinterControlRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let serial_number = sqlx::query_scalar::<_, Option<String>>("SELECT serial_number FROM printers WHERE id = ?1")
+        .bind(id)
+        .fetch_optional(&pool)
+        .await
+        .expect("query failed")
+        .flatten();
+
+    let Some(serial_number) = serial_number else {
+        return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "not_found" })));
+    };
+
+    if !["pause", "resume", "stop"].contains(&req.command.as_str()) {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::to_value(PrinterControlResult { ok: false, error: Some("Unknown command.".into()) }).unwrap()));
+    }
+
+    match printer_mqtt::publish_command(&store, id, &serial_number, &req.command).await {
+        Ok(()) => (StatusCode::OK, Json(serde_json::to_value(PrinterControlResult { ok: true, error: None }).unwrap())),
+        Err(error) => (StatusCode::BAD_REQUEST, Json(serde_json::to_value(PrinterControlResult { ok: false, error: Some(error) }).unwrap())),
+    }
 }
 
 #[derive(Serialize)]
