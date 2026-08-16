@@ -1,9 +1,11 @@
 pub mod colors;
+pub mod dashboard;
 pub mod filaments;
 pub mod printers;
 pub mod prints;
 pub mod profiles;
 pub mod projects;
+pub mod settings;
 pub mod spools;
 
 use axum::Router;
@@ -17,5 +19,7 @@ pub fn app(pool: SqlitePool) -> Router {
         .merge(printers::router())
         .merge(projects::router())
         .merge(prints::router())
+        .merge(settings::router())
+        .merge(dashboard::router())
         .with_state(pool)
 }
