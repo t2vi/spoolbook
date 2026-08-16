@@ -1,0 +1,131 @@
+use axum::body::Body;
+use axum::http::{Request, StatusCode};
+use serde_json::{Value, json};
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+use std::str::FromStr;
+use tower::ServiceExt;
+
+async fn test_pool() -> sqlx::SqlitePool {
+    let options = SqliteConnectOptions::from_str("sqlite::memory:").unwrap().foreign_keys(true);
+    let pool = SqlitePoolOptions::new().max_connections(1).connect_with(options).await.unwrap();
+    sqlx::migrate!().run(&pool).await.expect("migration failed");
+    pool
+}
+
+async fn send(pool: &sqlx::SqlitePool, method: &str, uri: &str, body: Option<Value>) -> (StatusCode, Value) {
+    let body = body.map(|b| b.to_string()).unwrap_or_default();
+    let response = spoolbook_rs::app(pool.clone())
+        .oneshot(
+            Request::builder()
+                .method(method)
+                .uri(uri)
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: Value = if bytes.is_empty() { Value::Null } else { serde_json::from_slice(&bytes).unwrap() };
+    (status, json)
+}
+
+async fn seed_filament(pool: &sqlx::SqlitePool) -> i64 {
+    let (_, body) = send(
+        pool,
+        "POST",
+        "/api/filaments",
+        Some(json!({ "brand": "Bambu Lab", "material": "PLA", "variant": "Basic", "color": "Black" })),
+    )
+    .await;
+    body["entry"]["id"].as_i64().unwrap()
+}
+
+#[tokio::test]
+async fn create_persists_and_returns_the_spool_with_its_filament() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+
+    let (status, body) = send(
+        &pool,
+        "POST",
+        "/api/spools",
+        Some(json!({
+            "filamentId": filament_id, "lotCode": "LOT-1", "purchasedAt": "2026-08-01",
+            "openedAt": null, "emptiedAt": null, "weightGrams": 1000, "diameterMm": 1.75, "notes": null
+        })),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["ok"], true);
+    assert_eq!(body["spool"]["filamentId"], filament_id);
+    assert_eq!(body["spool"]["lotCode"], "LOT-1");
+    assert_eq!(body["spool"]["weightGrams"], 1000);
+    assert_eq!(body["spool"]["diameterMm"], 1.75);
+    assert_eq!(body["spool"]["filament"]["brand"], "Bambu Lab");
+}
+
+#[tokio::test]
+async fn list_all_includes_the_nested_filament() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    send(&pool, "POST", "/api/spools", Some(json!({
+        "filamentId": filament_id, "lotCode": null, "purchasedAt": null,
+        "openedAt": null, "emptiedAt": null, "weightGrams": null, "diameterMm": null, "notes": null
+    }))).await;
+
+    let (status, body) = send(&pool, "GET", "/api/spools", None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    let entries = body.as_array().unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0]["filament"]["material"], "PLA");
+}
+
+#[tokio::test]
+async fn get_by_id_returns_not_found_for_missing_id() {
+    let pool = test_pool().await;
+    let (status, _) = send(&pool, "GET", "/api/spools/999", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn update_persists_changes() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let (_, created) = send(&pool, "POST", "/api/spools", Some(json!({
+        "filamentId": filament_id, "lotCode": "OLD", "purchasedAt": null,
+        "openedAt": null, "emptiedAt": null, "weightGrams": null, "diameterMm": null, "notes": null
+    }))).await;
+    let id = created["spool"]["id"].as_i64().unwrap();
+
+    let (status, body) = send(&pool, "PUT", &format!("/api/spools/{id}"), Some(json!({
+        "lotCode": "NEW", "purchasedAt": null, "openedAt": null, "emptiedAt": null,
+        "weightGrams": null, "diameterMm": null, "notes": "rewound"
+    }))).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["spool"]["lotCode"], "NEW");
+    assert_eq!(body["spool"]["notes"], "rewound");
+}
+
+#[tokio::test]
+async fn delete_removes_the_spool() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let (_, created) = send(&pool, "POST", "/api/spools", Some(json!({
+        "filamentId": filament_id, "lotCode": null, "purchasedAt": null,
+        "openedAt": null, "emptiedAt": null, "weightGrams": null, "diameterMm": null, "notes": null
+    }))).await;
+    let id = created["spool"]["id"].as_i64().unwrap();
+
+    let (status, body) = send(&pool, "DELETE", &format!("/api/spools/{id}"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["ok"], true);
+
+    let (_, all) = send(&pool, "GET", "/api/spools", None).await;
+    assert_eq!(all.as_array().unwrap().len(), 0);
+}
