@@ -4,8 +4,10 @@ pub mod colors;
 pub mod dashboard;
 pub mod filament_catalog_sync;
 pub mod filaments;
+pub mod jpeg_frame_extractor;
 pub mod printers;
 pub mod prints;
+pub mod printer_camera;
 pub mod printer_mqtt;
 pub mod printer_telemetry;
 pub mod profile_config_patcher;
@@ -29,6 +31,10 @@ pub fn app(pool: SqlitePool) -> Router {
 }
 
 pub fn app_with_live_status(pool: SqlitePool, live_status: printer_mqtt::LiveStatusStore) -> Router {
+    app_with_camera(pool, live_status, printer_camera::new_registry())
+}
+
+pub fn app_with_camera(pool: SqlitePool, live_status: printer_mqtt::LiveStatusStore, camera_registry: printer_camera::CameraRegistry) -> Router {
     filaments::router()
         .merge(colors::router())
         .merge(spools::router())
@@ -43,6 +49,8 @@ pub fn app_with_live_status(pool: SqlitePool, live_status: printer_mqtt::LiveSta
         .merge(bambu_import::router())
         .merge(reslicing::router())
         .merge(send_print::router())
+        .merge(printer_camera::router())
         .layer(Extension(live_status))
+        .layer(Extension(camera_registry))
         .with_state(pool)
 }

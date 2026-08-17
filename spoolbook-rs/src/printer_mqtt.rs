@@ -83,6 +83,17 @@ fn tls_config() -> rustls::ClientConfig {
         .with_no_client_auth()
 }
 
+// Shared by send_print.rs's FTPS upload and printer_camera.rs's RTSP TLS proxy — both need TLS
+// 1.2 forced (this printer family's firmware has session-handling quirks with 1.3, confirmed in
+// both the print-start FTPS fix and the camera proxy's own doc comments) on top of the same
+// accept-any-cert posture as tls_config() above.
+pub(crate) fn tls12_no_verify_config() -> rustls::ClientConfig {
+    rustls::ClientConfig::builder_with_protocol_versions(&[&rustls::version::TLS12])
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(NoCertVerification))
+        .with_no_client_auth()
+}
+
 // Auto-connects at launch to every configured Printer's local MQTT broker (docs/adr/0017) and
 // buffers live telemetry via printer_telemetry. Read-only: subscribes to device/{serial}/report
 // only, never publishes to a printer's request/control topic.

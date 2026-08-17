@@ -109,13 +109,6 @@ pub fn submission_id() -> String {
     if id == 0 { "1".to_string() } else { id.to_string() }
 }
 
-fn ftps_tls_config() -> rustls::ClientConfig {
-    rustls::ClientConfig::builder_with_protocol_versions(&[&rustls::version::TLS12])
-        .dangerous()
-        .with_custom_certificate_verifier(Arc::new(crate::printer_mqtt::NoCertVerification))
-        .with_no_client_auth()
-}
-
 // FTPS upload to the printer's onboard vsftpd (port 990, implicit TLS, bblp/access-code creds —
 // same as MQTT). UNVERIFIED AGAINST REAL HARDWARE, same posture as printer_mqtt.rs. The three
 // workarounds the C# original needed (via FluentFTP.GnuTLS, since .NET's SslStream can't do any
@@ -127,7 +120,7 @@ fn ftps_tls_config() -> rustls::ClientConfig {
 // build's require_ssl_reuse check, and whether the data connection opens fast enough relative to
 // the control handshake, is the one thing only a real P2S can confirm.
 pub async fn upload_via_ftps(ip_address: &str, access_code: &str, local_file_path: &str, remote_file_name: &str) -> Result<(), String> {
-    let connector = tokio_rustls::TlsConnector::from(Arc::new(ftps_tls_config()));
+    let connector = tokio_rustls::TlsConnector::from(Arc::new(crate::printer_mqtt::tls12_no_verify_config()));
     let mut ftp = AsyncRustlsFtpStream::connect_secure_implicit((ip_address, 990), AsyncRustlsConnector::from(connector), ip_address)
         .await
         .map_err(|e| e.to_string())?;

@@ -120,16 +120,23 @@ struct PrinterLiveSnapshot {
 
 // SSE: direct port of PrinterCard.razor's poll loop (2s cadence). Streams a snapshot of the
 // in-memory live-status store printer_mqtt.rs's background connection populates.
-async fn live(Extension(store): Extension<LiveStatusStore>, Path(id): Path<i64>) -> Sse<impl tokio_stream::Stream<Item = Result<SseEvent, Infallible>>> {
+async fn live(
+    Extension(store): Extension<LiveStatusStore>,
+    Extension(camera_registry): Extension<crate::printer_camera::CameraRegistry>,
+    Path(id): Path<i64>,
+) -> Sse<impl tokio_stream::Stream<Item = Result<SseEvent, Infallible>>> {
     let stream = IntervalStream::new(tokio::time::interval(Duration::from_secs(2))).then(move |_| {
         let store = store.clone();
+        let camera_registry = camera_registry.clone();
         async move {
             let status = printer_mqtt::snapshot(&store, id).await;
+            let camera_status = crate::printer_camera::status_of(&camera_registry, id).await;
+            let camera_error = crate::printer_camera::last_error_of(&camera_registry, id).await;
             let snapshot = PrinterLiveSnapshot {
                 connected: status.connected,
                 ams_units: status.ams_units,
-                camera_status: "NotStarted",
-                camera_error: None,
+                camera_status: camera_status.as_str(),
+                camera_error,
                 gcode_state: status.gcode_state,
             };
             Ok(SseEvent::default().data(serde_json::to_string(&snapshot).unwrap()))
