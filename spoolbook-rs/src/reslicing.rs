@@ -27,6 +27,7 @@ fn err_response(message: &str) -> serde_json::Value {
 }
 
 async fn reslice(
+    _editor: crate::auth::Editor,
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
     Json(req): Json<ResliceRequest>,

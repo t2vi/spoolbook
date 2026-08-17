@@ -54,7 +54,7 @@ async fn get_settings(State(pool): State<SqlitePool>) -> Json<SettingsResponse> 
     })
 }
 
-async fn save_settings(State(pool): State<SqlitePool>, Json(req): Json<SaveSettingsRequest>) -> Json<serde_json::Value> {
+async fn save_settings(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Json(req): Json<SaveSettingsRequest>) -> Json<serde_json::Value> {
     fetch(&pool).await;
     let urls = req.additional_filament_source_urls.filter(|u| !u.trim().is_empty());
     sqlx::query("UPDATE app_settings SET additional_filament_source_urls = ?1 WHERE id = 1")

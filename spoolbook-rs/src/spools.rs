@@ -142,6 +142,7 @@ fn err(status: StatusCode, message: &str) -> (StatusCode, Json<SpoolResult>) {
 }
 
 async fn create(
+    _editor: crate::auth::Editor,
     State(pool): State<SqlitePool>,
     Json(body): Json<CreateSpoolInput>,
 ) -> (StatusCode, Json<SpoolResult>) {
@@ -168,6 +169,7 @@ async fn create(
 }
 
 async fn update(
+    _editor: crate::auth::Editor,
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
     Json(input): Json<SpoolInput>,
@@ -199,7 +201,7 @@ async fn update(
     }
 }
 
-async fn delete(State(pool): State<SqlitePool>, Path(id): Path<i64>) -> (StatusCode, Json<SpoolResult>) {
+async fn delete(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Path(id): Path<i64>) -> (StatusCode, Json<SpoolResult>) {
     let has_profiles = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM print_profiles WHERE spool_id = ?1")
         .bind(id)
         .fetch_one(&pool)

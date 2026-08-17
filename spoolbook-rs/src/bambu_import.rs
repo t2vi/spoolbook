@@ -200,7 +200,7 @@ fn import_from_three_mf(bytes: &[u8]) -> Result<(serde_json::Map<String, Value>,
     Ok((merged, json))
 }
 
-async fn import_3mf(mut multipart: Multipart) -> (StatusCode, Json<Value>) {
+async fn import_3mf(_editor: crate::auth::Editor, mut multipart: Multipart) -> (StatusCode, Json<Value>) {
     let field = loop {
         match multipart.next_field().await {
             Ok(Some(field)) if field.name() == Some("file") => break Some(field),

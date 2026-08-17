@@ -1,3 +1,5 @@
+mod common;
+
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use serde_json::{Value, json};
@@ -14,7 +16,15 @@ async fn test_pool() -> sqlx::SqlitePool {
 async fn send(pool: &sqlx::SqlitePool, method: &str, uri: &str, body: Option<Value>) -> (StatusCode, Value) {
     let body = body.map(|b| b.to_string()).unwrap_or_default();
     let response = spoolbook_rs::app(pool.clone())
-        .oneshot(Request::builder().method(method).uri(uri).header("content-type", "application/json").body(Body::from(body)).unwrap())
+        .oneshot(
+            Request::builder()
+                .method(method)
+                .uri(uri)
+                .header("content-type", "application/json")
+                .header("cookie", common::auth_cookie_header())
+                .body(Body::from(body))
+                .unwrap(),
+        )
         .await
         .unwrap();
 

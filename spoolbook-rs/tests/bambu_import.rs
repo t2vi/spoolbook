@@ -1,3 +1,5 @@
+mod common;
+
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use serde_json::Value;
@@ -24,6 +26,7 @@ async fn post_multipart(uri: &str, field_name: &str, filename: &str, content: &[
                 .method("POST")
                 .uri(uri)
                 .header("content-type", format!("multipart/form-data; boundary={boundary}"))
+                .header("cookie", common::auth_cookie_header())
                 .body(Body::from(body))
                 .unwrap(),
         )

@@ -197,7 +197,12 @@ struct AttachJobRequest {
     job_id: i64,
 }
 
-async fn attach_job(State(pool): State<SqlitePool>, Path(id): Path<i64>, Json(req): Json<AttachJobRequest>) -> Json<serde_json::Value> {
+async fn attach_job(
+    _editor: crate::auth::Editor,
+    State(pool): State<SqlitePool>,
+    Path(id): Path<i64>,
+    Json(req): Json<AttachJobRequest>,
+) -> Json<serde_json::Value> {
     crate::printer_telemetry::attach_job_to_print(&pool, req.job_id, id).await;
     Json(serde_json::json!({ "ok": true }))
 }
@@ -376,6 +381,7 @@ pub(crate) async fn create_in_progress(
 }
 
 async fn create(
+    _editor: crate::auth::Editor,
     State(pool): State<SqlitePool>,
     Json(body): Json<CreatePrintBody>,
 ) -> (StatusCode, Json<PrintResult>) {
@@ -431,6 +437,7 @@ async fn create(
 }
 
 async fn update(
+    _editor: crate::auth::Editor,
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
     Json(body): Json<UpdatePrintBody>,
@@ -492,7 +499,7 @@ async fn update(
     (StatusCode::OK, Json(PrintResult { ok: true, error: None, print: Some(print) }))
 }
 
-async fn delete(State(pool): State<SqlitePool>, Path(id): Path<i64>) -> (StatusCode, Json<PrintResult>) {
+async fn delete(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Path(id): Path<i64>) -> (StatusCode, Json<PrintResult>) {
     let result = sqlx::query("DELETE FROM prints WHERE id = ?1")
         .bind(id)
         .execute(&pool)

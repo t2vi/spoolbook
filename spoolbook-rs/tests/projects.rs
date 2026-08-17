@@ -1,3 +1,4 @@
+mod common;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use serde_json::Value;
@@ -23,6 +24,7 @@ async fn send(pool: &sqlx::SqlitePool, method: &str, uri: &str, body: Option<Val
                 .method(method)
                 .uri(uri)
                 .header("content-type", "application/json")
+                .header("cookie", common::auth_cookie_header())
                 .body(Body::from(body))
                 .unwrap(),
         )

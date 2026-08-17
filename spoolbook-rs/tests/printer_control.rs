@@ -1,3 +1,5 @@
+mod common;
+
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use rumqttc::{AsyncClient, MqttOptions};
@@ -19,6 +21,7 @@ async fn send(pool: &sqlx::SqlitePool, store: &spoolbook_rs::printer_mqtt::LiveS
                 .method(method)
                 .uri(uri)
                 .header("content-type", "application/json")
+                .header("cookie", common::auth_cookie_header())
                 .body(Body::from(body))
                 .unwrap(),
         )
