@@ -15,8 +15,9 @@ async fn main() {
 
     let live_status = spoolbook_rs::printer_mqtt::new_store();
     spoolbook_rs::printer_mqtt::spawn_all(pool.clone(), live_status.clone()).await;
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
 
-    let app = spoolbook_rs::app_with_live_status(pool, live_status);
+    let app = spoolbook_rs::app_with_camera(pool, live_status, camera_registry);
 
     let listener = TcpListener::bind("127.0.0.1:8090").await.unwrap();
     println!("spoolbook-rs listening on http://127.0.0.1:8090");
