@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod bambu_import;
 pub mod bambu_mqtt_payload_parser;
 pub mod colors;
@@ -50,6 +51,7 @@ pub fn app_with_camera(pool: SqlitePool, live_status: printer_mqtt::LiveStatusSt
         .merge(reslicing::router())
         .merge(send_print::router())
         .merge(printer_camera::router())
+        .merge(auth::router())
         .layer(Extension(live_status))
         .layer(Extension(camera_registry))
         .with_state(pool)

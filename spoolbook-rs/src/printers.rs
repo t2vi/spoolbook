@@ -60,7 +60,7 @@ struct PrinterConnectionTestRequest {
     access_code: String,
 }
 
-async fn test(Json(req): Json<PrinterConnectionTestRequest>) -> Json<serde_json::Value> {
+async fn test(_editor: crate::auth::Editor, Json(req): Json<PrinterConnectionTestRequest>) -> Json<serde_json::Value> {
     match printer_mqtt::test_connection(&req.ip_address, &req.access_code).await {
         Ok(()) => Json(serde_json::json!({ "ok": true })),
         Err(error) => Json(serde_json::json!({ "ok": false, "error": error })),
@@ -80,6 +80,7 @@ struct PrinterControlResult {
 }
 
 async fn control(
+    _editor: crate::auth::Editor,
     State(pool): State<SqlitePool>,
     Extension(store): Extension<LiveStatusStore>,
     Path(id): Path<i64>,
@@ -183,6 +184,7 @@ async fn is_duplicate(pool: &SqlitePool, name: &str, exclude_id: Option<i64>) ->
 }
 
 async fn create(
+    _editor: crate::auth::Editor,
     State(pool): State<SqlitePool>,
     Json(input): Json<PrinterInput>,
 ) -> (StatusCode, Json<PrinterResult>) {
@@ -210,6 +212,7 @@ async fn create(
 }
 
 async fn update(
+    _editor: crate::auth::Editor,
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
     Json(input): Json<PrinterInput>,
@@ -242,7 +245,7 @@ async fn update(
     }
 }
 
-async fn delete(State(pool): State<SqlitePool>, Path(id): Path<i64>) -> (StatusCode, Json<PrinterResult>) {
+async fn delete(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Path(id): Path<i64>) -> (StatusCode, Json<PrinterResult>) {
     let has_prints = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM prints WHERE printer_id = ?1")
         .bind(id)
         .fetch_one(&pool)

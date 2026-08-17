@@ -29,7 +29,7 @@ pub async fn import_many(pool: &SqlitePool, entries: &[FilamentInput]) -> (i64, 
     (added, skipped)
 }
 
-async fn sync(State(pool): State<SqlitePool>) -> (StatusCode, Json<serde_json::Value>) {
+async fn sync(_editor: crate::auth::Editor, State(pool): State<SqlitePool>) -> (StatusCode, Json<serde_json::Value>) {
     let settings = settings::fetch(&pool).await;
     let additional_urls: Vec<&str> = settings
         .additional_filament_source_urls

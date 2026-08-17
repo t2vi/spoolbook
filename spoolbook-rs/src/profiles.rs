@@ -488,6 +488,7 @@ fn validation_error(field: &str, message: &str) -> (StatusCode, Json<ProfileResu
 }
 
 async fn create(
+    _editor: crate::auth::Editor,
     State(pool): State<SqlitePool>,
     Query(q): Query<FilamentIdQuery>,
     Json(input): Json<ProfileInput>,
@@ -698,6 +699,7 @@ async fn has_prints(pool: &SqlitePool, profile_id: i64) -> bool {
 }
 
 async fn update(
+    _editor: crate::auth::Editor,
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
     Json(input): Json<ProfileInput>,
@@ -914,7 +916,7 @@ async fn update(
     }
 }
 
-async fn delete(State(pool): State<SqlitePool>, Path(id): Path<i64>) -> (StatusCode, Json<serde_json::Value>) {
+async fn delete(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Path(id): Path<i64>) -> (StatusCode, Json<serde_json::Value>) {
     if has_prints(&pool, id).await {
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "has_prints" })));
     }

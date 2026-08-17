@@ -1,3 +1,5 @@
+mod common;
+
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use serde_json::{Value, json};
@@ -14,6 +16,7 @@ async fn send(uri: &str, body: Value) -> (StatusCode, Value) {
                 .method("POST")
                 .uri(uri)
                 .header("content-type", "application/json")
+                .header("cookie", common::auth_cookie_header())
                 .body(Body::from(body.to_string()))
                 .unwrap(),
         )

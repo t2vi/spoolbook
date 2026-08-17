@@ -204,7 +204,7 @@ pub async fn create_one(pool: &SqlitePool, input: &FilamentInput) -> Result<Fila
     Ok(entry)
 }
 
-async fn create(State(pool): State<SqlitePool>, Json(input): Json<FilamentInput>) -> (StatusCode, Json<FilamentResult>) {
+async fn create(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Json(input): Json<FilamentInput>) -> (StatusCode, Json<FilamentResult>) {
     match create_one(&pool, &input).await {
         Ok(entry) => (StatusCode::OK, Json(FilamentResult { ok: true, error: None, entry: Some(entry) })),
         Err(error) => err(StatusCode::BAD_REQUEST, error),
@@ -212,6 +212,7 @@ async fn create(State(pool): State<SqlitePool>, Json(input): Json<FilamentInput>
 }
 
 async fn update(
+    _editor: crate::auth::Editor,
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
     Json(input): Json<FilamentInput>,
@@ -246,7 +247,7 @@ async fn update(
     }
 }
 
-async fn delete(State(pool): State<SqlitePool>, Path(id): Path<i64>) -> (StatusCode, Json<FilamentResult>) {
+async fn delete(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Path(id): Path<i64>) -> (StatusCode, Json<FilamentResult>) {
     let has_spools = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM spools WHERE filament_id = ?1")
         .bind(id)
         .fetch_one(&pool)

@@ -50,7 +50,7 @@ pub(crate) async fn save_bytes(storage_dir: &Path, pool: &SqlitePool, bytes: &[u
     }
 }
 
-async fn upload(State(pool): State<SqlitePool>, mut multipart: Multipart) -> (StatusCode, Json<serde_json::Value>) {
+async fn upload(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, mut multipart: Multipart) -> (StatusCode, Json<serde_json::Value>) {
     let field = loop {
         match multipart.next_field().await {
             Ok(Some(field)) if field.name() == Some("file") => break Some(field),
@@ -82,7 +82,7 @@ struct ImportUrlRequest {
 // Generic URL fetch (docs/adr/0023) — any direct link to a .3mf file, including a MakerWorld
 // download link copied manually. Auto-resolving a MakerWorld page URL itself is deferred: that
 // needs their unofficial frontend API, not a direct file link.
-async fn import_url(State(pool): State<SqlitePool>, Json(req): Json<ImportUrlRequest>) -> (StatusCode, Json<serde_json::Value>) {
+async fn import_url(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Json(req): Json<ImportUrlRequest>) -> (StatusCode, Json<serde_json::Value>) {
     let Ok(parsed) = reqwest::Url::parse(&req.url) else {
         return (StatusCode::BAD_REQUEST, Json(err_response("Enter a valid http(s) URL.")));
     };

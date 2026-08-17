@@ -512,7 +512,12 @@ pub fn router() -> Router<SqlitePool> {
     Router::new().route("/printers/{id}/camera", get(stream)).route("/api/printers/{id}/camera/retry", axum::routing::post(retry_endpoint))
 }
 
-async fn stream(State(pool): State<SqlitePool>, Extension(registry): Extension<CameraRegistry>, Path(id): Path<i64>) -> Response {
+async fn stream(
+    _editor: crate::auth::Editor,
+    State(pool): State<SqlitePool>,
+    Extension(registry): Extension<CameraRegistry>,
+    Path(id): Path<i64>,
+) -> Response {
     let Some(printer) = crate::printers::get_by_id(&pool, id).await else {
         return StatusCode::NOT_FOUND.into_response();
     };

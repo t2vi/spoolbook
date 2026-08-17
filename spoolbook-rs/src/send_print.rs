@@ -153,6 +153,7 @@ fn err_response(message: &str) -> serde_json::Value {
 }
 
 async fn start_print(
+    _editor: crate::auth::Editor,
     State(pool): State<SqlitePool>,
     Extension(store): Extension<LiveStatusStore>,
     Path(id): Path<i64>,

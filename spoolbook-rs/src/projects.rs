@@ -242,6 +242,7 @@ struct LinkVersionInput {
 }
 
 async fn link_version(
+    _editor: crate::auth::Editor,
     State(pool): State<SqlitePool>,
     Path(new_id): Path<i64>,
     Json(input): Json<LinkVersionInput>,
