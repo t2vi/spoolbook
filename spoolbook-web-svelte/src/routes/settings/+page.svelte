@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
-	import { getSettings, me, saveSettings } from '$lib/api/client';
+	import { getSettings, me, saveSettings, updateAccount } from '$lib/api/client';
 
 	let additionalUrls = $state('');
 	let catalogUrl = $state('');
@@ -9,9 +10,29 @@
 	let savedMessage = $state<string | null>(null);
 	let authenticated = $state(false);
 
+	let currentPassword = $state('');
+	let newUsername = $state('');
+	let newPassword = $state('');
+	let accountError = $state<string | null>(null);
+	let accountSavedMessage = $state<string | null>(null);
+
 	async function save() {
 		await saveSettings(additionalUrls.trim() || null);
 		savedMessage = 'Saved.';
+	}
+
+	async function saveAccount() {
+		accountError = null;
+		accountSavedMessage = null;
+		const result = await updateAccount(currentPassword, newUsername.trim() || undefined, newPassword || undefined);
+		if (!result.ok) {
+			accountError = result.error === 'wrong_current_password' ? 'Current password is wrong.' : 'Update failed.';
+			return;
+		}
+		currentPassword = '';
+		newUsername = '';
+		newPassword = '';
+		accountSavedMessage = 'Account updated.';
 	}
 
 	$effect(() => {
@@ -58,5 +79,21 @@
 				<span class="text-foreground">{lastSyncedAt ? new Date(lastSyncedAt).toLocaleString() : 'never'}</span>
 			</div>
 		</div>
+
+		{#if authenticated}
+			<div class="border-t pt-6">
+				<h2 class="mb-3 text-lg font-semibold">Account</h2>
+				<div class="space-y-3">
+					<Input type="password" bind:value={currentPassword} placeholder="Current password" />
+					<Input bind:value={newUsername} placeholder="New username (leave blank to keep current)" />
+					<Input type="password" bind:value={newPassword} placeholder="New password (leave blank to keep current)" />
+					{#if accountError}<p class="text-sm text-destructive">{accountError}</p>{/if}
+					<div>
+						<Button onclick={saveAccount} disabled={!currentPassword}>Update account</Button>
+						{#if accountSavedMessage}<span class="ml-3 text-sm text-muted-foreground">{accountSavedMessage}</span>{/if}
+					</div>
+				</div>
+			</div>
+		{/if}
 	</div>
 </div>

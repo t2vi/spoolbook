@@ -25,10 +25,11 @@ async fn seed_printer(pool: &sqlx::SqlitePool, ip_address: Option<&str>, access_
 #[tokio::test]
 async fn camera_stream_returns_not_found_for_a_missing_printer() {
     let pool = test_pool().await;
+    let cookie = common::auth_cookie_header(&pool).await;
     let app = spoolbook_rs::app(pool);
 
     let response = app
-        .oneshot(Request::builder().method("GET").uri("/printers/999/camera").header("cookie", common::auth_cookie_header()).body(Body::empty()).unwrap())
+        .oneshot(Request::builder().method("GET").uri("/printers/999/camera").header("cookie", cookie).body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -39,6 +40,7 @@ async fn camera_stream_returns_not_found_for_a_missing_printer() {
 async fn camera_stream_returns_not_found_for_a_printer_missing_connection_details() {
     let pool = test_pool().await;
     let printer_id = seed_printer(&pool, None, None).await;
+    let cookie = common::auth_cookie_header(&pool).await;
     let app = spoolbook_rs::app(pool);
 
     let response = app
@@ -46,7 +48,7 @@ async fn camera_stream_returns_not_found_for_a_printer_missing_connection_detail
             Request::builder()
                 .method("GET")
                 .uri(format!("/printers/{printer_id}/camera"))
-                .header("cookie", common::auth_cookie_header())
+                .header("cookie", cookie)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -65,6 +67,7 @@ async fn camera_stream_responds_with_multipart_headers_for_a_configured_printer(
     let printer_id = seed_printer(&pool, Some("127.0.0.1"), Some("12345678")).await;
     let live_status = spoolbook_rs::printer_mqtt::new_store();
     let camera_registry = spoolbook_rs::printer_camera::new_registry();
+    let cookie = common::auth_cookie_header(&pool).await;
     let app = spoolbook_rs::app_with_camera(pool, live_status, camera_registry.clone());
 
     let response = app
@@ -72,7 +75,7 @@ async fn camera_stream_responds_with_multipart_headers_for_a_configured_printer(
             Request::builder()
                 .method("GET")
                 .uri(format!("/printers/{printer_id}/camera"))
-                .header("cookie", common::auth_cookie_header())
+                .header("cookie", cookie)
                 .body(Body::empty())
                 .unwrap(),
         )

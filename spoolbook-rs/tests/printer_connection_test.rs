@@ -10,13 +10,14 @@ async fn send(uri: &str, body: Value) -> (StatusCode, Value) {
     let pool = SqlitePoolOptions::new().max_connections(1).connect("sqlite::memory:").await.unwrap();
     sqlx::migrate!().run(&pool).await.unwrap();
 
+    let cookie = common::auth_cookie_header(&pool).await;
     let response = spoolbook_rs::app(pool)
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri(uri)
                 .header("content-type", "application/json")
-                .header("cookie", common::auth_cookie_header())
+                .header("cookie", cookie)
                 .body(Body::from(body.to_string()))
                 .unwrap(),
         )

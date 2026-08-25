@@ -54,10 +54,19 @@ async function requestAllowingError<T>(path: string, init: RequestInit): Promise
 }
 
 export const me = () => request<{ authenticated: boolean }>('/api/me');
-// requestAllowingError, not request: a wrong password is a normal 401 the caller needs to show
-// inline, not throw-and-catch.
-export const login = (password: string) => requestAllowingError<ApiResult>('/api/login', json({ password }));
+export const setupStatus = () => request<{ needsSetup: boolean }>('/api/setup-status');
+// requestAllowingError, not request: a wrong password / already-set-up is a normal error response
+// the caller needs to show inline, not throw-and-catch.
+export const setup = (username: string, password: string) =>
+	requestAllowingError<ApiResult>('/api/setup', json({ username, password }));
+export const login = (username: string, password: string) =>
+	requestAllowingError<ApiResult>('/api/login', json({ username, password }));
 export const logout = () => request<ApiResult>('/api/logout', { method: 'POST' });
+export const updateAccount = (currentPassword: string, newUsername?: string, newPassword?: string) =>
+	requestAllowingError<ApiResult>('/api/account', {
+		method: 'PUT',
+		body: JSON.stringify({ currentPassword, newUsername, newPassword })
+	});
 export const getDashboard = () => request<DashboardSnapshot>('/api/dashboard');
 
 export interface SettingsResponse {

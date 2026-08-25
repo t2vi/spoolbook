@@ -18,6 +18,11 @@ async fn main() {
         .unwrap_or_else(|e| panic!("failed to open {db_path}: {e}"));
     sqlx::migrate!().run(&pool).await.expect("migration failed");
 
+    // Existing installs running on SPOOLBOOK_ADMIN_PASSWORD before real user accounts shipped
+    // get migrated seamlessly (no wizard); a genuinely fresh install with no users and no env
+    // var falls through and the frontend shows the setup wizard (GET /api/setup-status).
+    spoolbook_rs::auth::migrate_env_var_admin_if_needed(&pool).await;
+
     let live_status = spoolbook_rs::printer_mqtt::new_store();
     spoolbook_rs::printer_mqtt::spawn_all(pool.clone(), live_status.clone()).await;
     let camera_registry = spoolbook_rs::printer_camera::new_registry();

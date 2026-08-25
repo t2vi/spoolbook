@@ -1,66 +1,39 @@
-// Port of the shared-secret editor gate (Program.cs's cookie auth block + TrySignInEditorAsync).
-// Single editor, no user table, no OAuth — same threat model as the C# original (docs/adr/0005's
-// v2 mutation lock, reactivated for the LAN pivot). Only the SvelteKit-facing JSON endpoints
-// (/api/login, /api/logout, /api/me) are ported — the HTML form-post /login /logout routes exist
-// in C# only for the retired Blazor era and have no caller left once the frontend is SvelteKit.
-//
-// Cookie value is HMAC-SHA256(SPOOLBOOK_ADMIN_PASSWORD, "editor") rather than a signed/encrypted
-// session token: the "identity" here is a single constant ("editor"), so there's nothing to
-// encode — the cookie IS the proof of knowing the password, deterministic across logins, checked
-// by recomputing and comparing. No expiry, matching the C# cookie's own default lifetime
-// (persists until logout).
-use axum::extract::FromRequestParts;
+// Real user accounts (users + sessions tables) replaced the single shared-secret HMAC cookie
+// this crate used to run on. Session tokens are opaque random values looked up server-side
+// (sessions.id), not a recomputable proof the way the old HMAC(password, "editor") cookie was —
+// that trick only worked because the shared password doubled as both credential and signing key,
+// which breaks once login means "verify against an argon2 hash in a users row." See
+// docs/adr/0027 for the full reasoning.
+use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng as PwOsRng};
+use argon2::Argon2;
+use axum::extract::{FromRef, FromRequestParts};
 use axum::http::{HeaderMap, StatusCode, header, request::Parts};
 use axum::response::{IntoResponse, Response};
-use axum::{Json, Router, routing::get};
+use axum::{Json, Router, routing::{get, post, put}};
+use chrono::{DateTime, Duration, Utc};
+use rand::RngCore;
+use rand::rngs::OsRng;
 use serde::Deserialize;
 use serde_json::json;
-use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
 
-const COOKIE_NAME: &str = "spoolbook_editor";
+const COOKIE_NAME: &str = "spoolbook_session";
+const SESSION_TTL_DAYS: i64 = 90;
 
-fn hex(bytes: &[u8]) -> String {
+fn hash_password(password: &str) -> String {
+    let salt = SaltString::generate(&mut PwOsRng);
+    Argon2::default().hash_password(password.as_bytes(), &salt).expect("hashing failed").to_string()
+}
+
+fn verify_password(password: &str, hash: &str) -> bool {
+    let Ok(parsed) = PasswordHash::new(hash) else { return false };
+    Argon2::default().verify_password(password.as_bytes(), &parsed).is_ok()
+}
+
+fn generate_session_token() -> String {
+    let mut bytes = [0u8; 32];
+    OsRng.fill_bytes(&mut bytes);
     bytes.iter().map(|b| format!("{b:02x}")).collect()
-}
-
-// Hand-rolled rather than pulling in the `hmac` crate: RustCrypto's published `hmac` (0.12) is
-// pinned to `digest` 0.10, but this crate already depends on `sha2` 0.11 (digest 0.11) elsewhere
-// (projects.rs's mesh-hash) — a second, incompatible digest major version isn't worth it for one
-// call site. HMAC itself is just this fixed composition around any hash (RFC 2104), not a
-// primitive being reinvented.
-const HMAC_BLOCK_SIZE: usize = 64; // SHA-256's block size
-
-fn hmac_sha256(key: &[u8], message: &[u8]) -> Vec<u8> {
-    let mut key_block = [0u8; HMAC_BLOCK_SIZE];
-    if key.len() > HMAC_BLOCK_SIZE {
-        let hashed = Sha256::digest(key);
-        key_block[..hashed.len()].copy_from_slice(&hashed);
-    } else {
-        key_block[..key.len()].copy_from_slice(key);
-    }
-
-    let mut ipad = [0x36u8; HMAC_BLOCK_SIZE];
-    let mut opad = [0x5cu8; HMAC_BLOCK_SIZE];
-    for i in 0..HMAC_BLOCK_SIZE {
-        ipad[i] ^= key_block[i];
-        opad[i] ^= key_block[i];
-    }
-
-    let mut inner = Sha256::new();
-    inner.update(ipad);
-    inner.update(message);
-    let inner_hash = inner.finalize();
-
-    let mut outer = Sha256::new();
-    outer.update(opad);
-    outer.update(inner_hash);
-    outer.finalize().to_vec()
-}
-
-fn expected_token() -> Option<String> {
-    let secret = std::env::var("SPOOLBOOK_ADMIN_PASSWORD").ok().filter(|s| !s.is_empty())?;
-    Some(hex(&hmac_sha256(secret.as_bytes(), b"editor")))
 }
 
 fn get_cookie<'h>(headers: &'h HeaderMap, name: &str) -> Option<&'h str> {
@@ -70,95 +43,217 @@ fn get_cookie<'h>(headers: &'h HeaderMap, name: &str) -> Option<&'h str> {
     })
 }
 
-fn is_authenticated(headers: &HeaderMap) -> bool {
-    match (expected_token(), get_cookie(headers, COOKIE_NAME)) {
-        (Some(expected), Some(actual)) => expected == actual,
-        _ => false,
-    }
-}
-
-// Extractor form of the auth gate — add `_editor: Editor` as a handler parameter to require it,
-// same effect as C#'s per-route `.RequireAuthorization()`. Handlers that don't take it stay
-// public, matching every GET (read) route in the original.
-pub struct Editor;
-
-pub struct AuthError;
-
-impl IntoResponse for AuthError {
-    // Matches Program.cs's OnRedirectToLogin API branch: a clean 401 with {authenticated:false},
-    // not an HTML redirect — every route in this crate is a JSON API.
-    fn into_response(self) -> Response {
-        (StatusCode::UNAUTHORIZED, Json(json!({ "authenticated": false }))).into_response()
-    }
-}
-
-impl<S: Send + Sync> FromRequestParts<S> for Editor {
-    type Rejection = AuthError;
-
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        if is_authenticated(&parts.headers) { Ok(Editor) } else { Err(AuthError) }
-    }
-}
-
-pub fn router() -> Router<SqlitePool> {
-    Router::new().route("/api/login", axum::routing::post(login)).route("/api/logout", axum::routing::post(logout)).route("/api/me", get(me))
-}
-
-#[derive(Deserialize)]
-struct LoginRequest {
-    password: String,
-}
-
-fn set_cookie_header(value: String) -> HeaderMap {
+fn set_cookie_header(value: &str) -> HeaderMap {
     let mut headers = HeaderMap::new();
     headers.insert(header::SET_COOKIE, format!("{COOKIE_NAME}={value}; Path=/; HttpOnly; SameSite=Lax").parse().unwrap());
     headers
 }
 
-async fn login(Json(req): Json<LoginRequest>) -> Response {
-    let Some(expected_password) = std::env::var("SPOOLBOOK_ADMIN_PASSWORD").ok().filter(|s| !s.is_empty()) else {
+async fn create_session(pool: &SqlitePool, user_id: i64) -> String {
+    let token = generate_session_token();
+    let expires_at = (Utc::now() + Duration::days(SESSION_TTL_DAYS)).to_rfc3339();
+    sqlx::query("INSERT INTO sessions (id, user_id, expires_at) VALUES (?1, ?2, ?3)")
+        .bind(&token)
+        .bind(user_id)
+        .bind(expires_at)
+        .execute(pool)
+        .await
+        .expect("insert failed");
+    token
+}
+
+// Shared by the me() handler and the Editor extractor so "am I logged in" and "am I allowed to
+// mutate" can never disagree. Admin-only role check is real code now (not a placeholder) even
+// though every user is Admin today -- adding a second role later is a data change, not a rewrite.
+async fn current_user_id(pool: &SqlitePool, headers: &HeaderMap) -> Option<i64> {
+    let token = get_cookie(headers, COOKIE_NAME)?;
+    let row = sqlx::query_as::<_, (i64, String, String)>(
+        "SELECT sessions.user_id, sessions.expires_at, users.role FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.id = ?1",
+    )
+    .bind(token)
+    .fetch_optional(pool)
+    .await
+    .expect("query failed")?;
+    let (user_id, expires_at, role) = row;
+    if role != "Admin" {
+        return None;
+    }
+    let expires: DateTime<Utc> = DateTime::parse_from_rfc3339(&expires_at).ok()?.with_timezone(&Utc);
+    (Utc::now() <= expires).then_some(user_id)
+}
+
+pub struct Editor {
+    pub user_id: i64,
+}
+
+pub struct AuthError;
+
+impl IntoResponse for AuthError {
+    fn into_response(self) -> Response {
+        (StatusCode::UNAUTHORIZED, Json(json!({ "authenticated": false }))).into_response()
+    }
+}
+
+impl<S> FromRequestParts<S> for Editor
+where
+    S: Send + Sync,
+    SqlitePool: axum::extract::FromRef<S>,
+{
+    type Rejection = AuthError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let pool = SqlitePool::from_ref(state);
+        current_user_id(&pool, &parts.headers).await.map(|user_id| Editor { user_id }).ok_or(AuthError)
+    }
+}
+
+pub fn router() -> Router<SqlitePool> {
+    Router::new()
+        .route("/api/setup-status", get(setup_status))
+        .route("/api/setup", post(setup))
+        .route("/api/login", post(login))
+        .route("/api/logout", post(logout))
+        .route("/api/me", get(me))
+        .route("/api/account", put(update_account))
+}
+
+async fn user_count(pool: &SqlitePool) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM users").fetch_one(pool).await.expect("query failed")
+}
+
+async fn setup_status(axum::extract::State(pool): axum::extract::State<SqlitePool>) -> Json<serde_json::Value> {
+    Json(json!({ "needsSetup": user_count(&pool).await == 0 }))
+}
+
+#[derive(Deserialize)]
+struct SetupRequest {
+    username: String,
+    password: String,
+}
+
+const MIN_PASSWORD_LEN: usize = 8;
+
+async fn setup(axum::extract::State(pool): axum::extract::State<SqlitePool>, Json(req): Json<SetupRequest>) -> Response {
+    if user_count(&pool).await > 0 {
+        return (StatusCode::CONFLICT, Json(json!({ "ok": false, "error": "already_set_up" }))).into_response();
+    }
+    let username = req.username.trim();
+    if username.is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "ok": false, "error": "username_required" }))).into_response();
+    }
+    if req.password.len() < MIN_PASSWORD_LEN {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "ok": false, "error": "password_too_short" }))).into_response();
+    }
+
+    let hash = hash_password(&req.password);
+    let user_id: i64 = sqlx::query_scalar("INSERT INTO users (username, password_hash, role) VALUES (?1, ?2, 'Admin') RETURNING id")
+        .bind(username)
+        .bind(hash)
+        .fetch_one(&pool)
+        .await
+        .expect("insert failed");
+
+    let token = create_session(&pool, user_id).await;
+    (set_cookie_header(&token), Json(json!({ "ok": true }))).into_response()
+}
+
+#[derive(Deserialize)]
+struct LoginRequest {
+    username: String,
+    password: String,
+}
+
+async fn login(axum::extract::State(pool): axum::extract::State<SqlitePool>, Json(req): Json<LoginRequest>) -> Response {
+    let row = sqlx::query_as::<_, (i64, String)>("SELECT id, password_hash FROM users WHERE username = ?1")
+        .bind(&req.username)
+        .fetch_optional(&pool)
+        .await
+        .expect("query failed");
+
+    let Some((user_id, hash)) = row else {
         return (StatusCode::UNAUTHORIZED, Json(json!({ "ok": false }))).into_response();
     };
-    if req.password != expected_password {
+    if !verify_password(&req.password, &hash) {
         return (StatusCode::UNAUTHORIZED, Json(json!({ "ok": false }))).into_response();
     }
 
-    let token = expected_token().expect("password just verified non-empty above");
-    (set_cookie_header(token), Json(json!({ "ok": true }))).into_response()
+    let token = create_session(&pool, user_id).await;
+    (set_cookie_header(&token), Json(json!({ "ok": true }))).into_response()
 }
 
-async fn logout() -> Response {
-    let mut headers = HeaderMap::new();
-    headers.insert(header::SET_COOKIE, format!("{COOKIE_NAME}=; Path=/; Max-Age=0").parse().unwrap());
-    (headers, Json(json!({ "ok": true }))).into_response()
-}
-
-async fn me(headers: HeaderMap) -> Json<serde_json::Value> {
-    Json(json!({ "authenticated": is_authenticated(&headers) }))
-}
-
-// Test-support only: computes the cookie value a real /api/login with this password would
-// produce, so integration tests can skip the login round-trip. Nothing in the app itself calls
-// this.
-pub fn test_only_cookie_value(password: &str) -> String {
-    hex(&hmac_sha256(password.as_bytes(), b"editor"))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::hmac_sha256;
-
-    // RFC 4231 test case 1 — the one runnable check on the hand-rolled HMAC construction itself,
-    // independent of the login/cookie plumbing exercised in tests/auth.rs.
-    #[test]
-    fn matches_rfc_4231_test_case_1() {
-        let key = [0x0bu8; 20];
-        let data = b"Hi There";
-        let expected = "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7";
-
-        let result = hmac_sha256(&key, data);
-        let hex: String = result.iter().map(|b| format!("{b:02x}")).collect();
-
-        assert_eq!(hex, expected);
+async fn logout(axum::extract::State(pool): axum::extract::State<SqlitePool>, headers: HeaderMap) -> Response {
+    if let Some(token) = get_cookie(&headers, COOKIE_NAME) {
+        sqlx::query("DELETE FROM sessions WHERE id = ?1").bind(token).execute(&pool).await.expect("delete failed");
     }
+    let mut response_headers = HeaderMap::new();
+    response_headers.insert(header::SET_COOKIE, format!("{COOKIE_NAME}=; Path=/; Max-Age=0").parse().unwrap());
+    (response_headers, Json(json!({ "ok": true }))).into_response()
+}
+
+async fn me(axum::extract::State(pool): axum::extract::State<SqlitePool>, headers: HeaderMap) -> Json<serde_json::Value> {
+    Json(json!({ "authenticated": current_user_id(&pool, &headers).await.is_some() }))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateAccountRequest {
+    current_password: String,
+    new_username: Option<String>,
+    new_password: Option<String>,
+}
+
+async fn update_account(editor: Editor, axum::extract::State(pool): axum::extract::State<SqlitePool>, Json(req): Json<UpdateAccountRequest>) -> Response {
+    let current_hash: String = sqlx::query_scalar("SELECT password_hash FROM users WHERE id = ?1")
+        .bind(editor.user_id)
+        .fetch_one(&pool)
+        .await
+        .expect("query failed");
+    if !verify_password(&req.current_password, &current_hash) {
+        return (StatusCode::UNAUTHORIZED, Json(json!({ "ok": false, "error": "wrong_current_password" }))).into_response();
+    }
+
+    if let Some(username) = req.new_username.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        sqlx::query("UPDATE users SET username = ?1 WHERE id = ?2").bind(username).bind(editor.user_id).execute(&pool).await.expect("update failed");
+    }
+    if let Some(password) = req.new_password.as_deref().filter(|p| p.len() >= MIN_PASSWORD_LEN) {
+        let hash = hash_password(password);
+        sqlx::query("UPDATE users SET password_hash = ?1 WHERE id = ?2").bind(hash).bind(editor.user_id).execute(&pool).await.expect("update failed");
+    }
+
+    (StatusCode::OK, Json(json!({ "ok": true }))).into_response()
+}
+
+// Called once at startup (main.rs), before the server starts accepting requests. Existing
+// installs running on SPOOLBOOK_ADMIN_PASSWORD before this feature shipped get a seamless
+// upgrade: no wizard, same login they already had, just backed by a real users row now instead
+// of an env-var comparison. A fresh install with no env var set falls through to the wizard.
+pub async fn migrate_env_var_admin_if_needed(pool: &SqlitePool) {
+    if user_count(pool).await > 0 {
+        return;
+    }
+    let Some(password) = std::env::var("SPOOLBOOK_ADMIN_PASSWORD").ok().filter(|s| !s.is_empty()) else {
+        return;
+    };
+    let hash = hash_password(&password);
+    sqlx::query("INSERT INTO users (username, password_hash, role) VALUES ('admin', ?1, 'Admin')")
+        .bind(hash)
+        .execute(pool)
+        .await
+        .expect("insert failed");
+}
+
+// Test-support only: creates a throwaway admin user + session directly against the given pool
+// and returns the cookie header value other test files send to get past the Editor gate --
+// mirrors the old test_only_cookie_value, but now requires a real DB row since sessions are
+// stateful. Nothing in the app itself calls this.
+pub async fn test_only_create_session(pool: &SqlitePool) -> String {
+    let hash = hash_password("test-password-not-used-directly");
+    let user_id: i64 = sqlx::query_scalar("INSERT INTO users (username, password_hash, role) VALUES (?1, ?2, 'Admin') RETURNING id")
+        .bind(format!("test-user-{}", generate_session_token()))
+        .bind(hash)
+        .fetch_one(pool)
+        .await
+        .expect("insert failed");
+    let token = create_session(pool, user_id).await;
+    format!("{COOKIE_NAME}={token}")
 }
