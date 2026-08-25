@@ -4,6 +4,7 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { createPrinter, getPrinter, testPrinterConnection, updatePrinter } from '$lib/api/client';
 	import type { PrinterInput } from '$lib/api/client';
+	import { KNOWN_PRINTER_MODELS } from '$lib/printer-image';
 	import { goto } from '$app/navigation';
 
 	let { id }: { id: number | null } = $props();
@@ -77,7 +78,12 @@
 	</div>
 	<div class="flex flex-col gap-1">
 		<Label for="model">Model</Label>
-		<Input id="model" bind:value={model} />
+		<Input id="model" bind:value={model} list="known-printer-models" placeholder="Pick or type a model" />
+		<datalist id="known-printer-models">
+			{#each KNOWN_PRINTER_MODELS as m (m)}
+				<option value={m}></option>
+			{/each}
+		</datalist>
 	</div>
 
 	<h3 class="pt-2 text-sm font-semibold">Live telemetry (optional)</h3>
