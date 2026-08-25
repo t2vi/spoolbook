@@ -18,6 +18,19 @@ async fn main() {
     spoolbook_rs::printer_mqtt::spawn_all(pool.clone(), live_status.clone()).await;
     let camera_registry = spoolbook_rs::printer_camera::new_registry();
 
+    // Throttled to once/24h via app_settings.last_filament_sync_at, same as the .NET app's
+    // Program.cs startup block — silent on failure, the Filaments page's manual sync button
+    // surfaces errors for an explicit attempt.
+    {
+        let settings = spoolbook_rs::settings::fetch(&pool).await;
+        if spoolbook_rs::filament_catalog_sync::should_sync(settings.last_filament_sync_at.as_deref(), chrono::Utc::now()) {
+            let sync_pool = pool.clone();
+            tokio::spawn(async move {
+                let _ = spoolbook_rs::filament_catalog_sync::run_sync(&sync_pool).await;
+            });
+        }
+    }
+
     // spoolbook-web-svelte's static build (adapter-static output) — a sibling checkout
     // directory, not copied in, so a frontend rebuild doesn't require rebuilding this crate.
     // SPOOLBOOK_STATIC_ROOT overrides this for Docker/LXC packaging, where the build output

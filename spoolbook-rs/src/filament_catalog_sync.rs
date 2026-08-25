@@ -29,8 +29,19 @@ pub async fn import_many(pool: &SqlitePool, entries: &[FilamentInput]) -> (i64, 
     (added, skipped)
 }
 
-async fn sync(_editor: crate::auth::Editor, State(pool): State<SqlitePool>) -> (StatusCode, Json<serde_json::Value>) {
-    let settings = settings::fetch(&pool).await;
+// True when the catalog has never been synced, or the last sync was over 24h ago — shared by
+// the manual /api/filaments/sync button and the startup auto-sync in main.rs, same throttle
+// AppSettings.LastFilamentSyncAt gave the .NET app.
+pub fn should_sync(last_filament_sync_at: Option<&str>, now: chrono::DateTime<chrono::Utc>) -> bool {
+    match last_filament_sync_at.and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok()) {
+        Some(last) => now - last.with_timezone(&chrono::Utc) > chrono::Duration::hours(24),
+        None => true,
+    }
+}
+
+// Shared by the manual /api/filaments/sync button and main.rs's startup auto-sync.
+pub async fn run_sync(pool: &SqlitePool) -> Result<(i64, i64), String> {
+    let settings = settings::fetch(pool).await;
     let additional_urls: Vec<&str> = settings
         .additional_filament_source_urls
         .as_deref()
@@ -43,9 +54,9 @@ async fn sync(_editor: crate::auth::Editor, State(pool): State<SqlitePool>) -> (
     let mut entries = match reqwest::get(settings::CATALOG_URL).await {
         Ok(resp) => match resp.text().await {
             Ok(body) => parse_catalog(&body),
-            Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+            Err(e) => return Err(e.to_string()),
         },
-        Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+        Err(e) => return Err(e.to_string()),
     };
 
     // An additional source failing just means that one source is skipped this run — one broken
@@ -58,12 +69,19 @@ async fn sync(_editor: crate::auth::Editor, State(pool): State<SqlitePool>) -> (
         }
     }
 
-    let (added, skipped) = import_many(&pool, &entries).await;
+    let (added, skipped) = import_many(pool, &entries).await;
 
     sqlx::query("UPDATE app_settings SET last_filament_sync_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = 1")
-        .execute(&pool)
+        .execute(pool)
         .await
         .expect("update failed");
 
-    (StatusCode::OK, Json(serde_json::json!({ "ok": true, "added": added, "skipped": skipped })))
+    Ok((added, skipped))
+}
+
+async fn sync(_editor: crate::auth::Editor, State(pool): State<SqlitePool>) -> (StatusCode, Json<serde_json::Value>) {
+    match run_sync(&pool).await {
+        Ok((added, skipped)) => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "added": added, "skipped": skipped }))),
+        Err(error) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": error }))),
+    }
 }
