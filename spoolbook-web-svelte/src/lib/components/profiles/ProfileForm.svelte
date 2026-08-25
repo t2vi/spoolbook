@@ -4,6 +4,7 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import Picker from '$lib/components/picker.svelte';
+	import FilamentPicker from '$lib/components/filament-picker.svelte';
 	import {
 		createProfile,
 		getProfileFieldSpec,
@@ -109,14 +110,7 @@
 	{#if id === null}
 		<div class="flex flex-col gap-1">
 			<Label for="filament-select">Filament</Label>
-			<Picker
-				id="filament-select"
-				bind:value={selectedFilamentId}
-				options={[
-					{ value: 0, label: '-- pick a filament --' },
-					...filaments.map((f) => ({ value: f.id, label: `${f.brand} ${f.material} ${f.variant ?? ''} — ${f.color}` }))
-				]}
-			/>
+			<FilamentPicker id="filament-select" bind:value={selectedFilamentId} {filaments} />
 		</div>
 
 		<div class="flex flex-col gap-1">

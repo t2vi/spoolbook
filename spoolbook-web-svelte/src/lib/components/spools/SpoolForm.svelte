@@ -3,11 +3,12 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
-	import Picker from '$lib/components/picker.svelte';
+	import FilamentPicker from '$lib/components/filament-picker.svelte';
 	import { createSpool, getSpool, listAllFilaments, updateSpool } from '$lib/api/client';
 	import type { SpoolInput } from '$lib/api/client';
 	import type { Filament } from '$lib/api/types';
 	import { goto } from '$app/navigation';
+	import { numOrNull } from '$lib/utils.js';
 
 	let { id }: { id: number | null } = $props();
 
@@ -17,8 +18,8 @@
 	let purchasedAt = $state('');
 	let openedAt = $state('');
 	let emptiedAt = $state('');
-	let weightGrams = $state('');
-	let diameterMm = $state('');
+	let weightGrams = $state<number | string>('');
+	let diameterMm = $state<number | string>('');
 	let notes = $state('');
 	let errorMessage = $state<string | null>(null);
 
@@ -45,8 +46,8 @@
 			purchasedAt: purchasedAt || null,
 			openedAt: openedAt || null,
 			emptiedAt: emptiedAt || null,
-			weightGrams: weightGrams.trim() ? Number(weightGrams) : null,
-			diameterMm: diameterMm.trim() ? Number(diameterMm) : null,
+			weightGrams: numOrNull(weightGrams),
+			diameterMm: numOrNull(diameterMm),
 			notes: notes.trim() || null
 		};
 
@@ -83,14 +84,7 @@
 	{#if id === null}
 		<div class="flex flex-col gap-1">
 			<Label for="filament">Filament</Label>
-			<Picker
-				id="filament"
-				bind:value={selectedFilamentId}
-				options={[
-					{ value: 0, label: '-- pick a filament --' },
-					...filaments.map((f) => ({ value: f.id, label: `${f.brand} ${f.material} ${f.variant ?? ''} — ${f.color}` }))
-				]}
-			/>
+			<FilamentPicker id="filament" bind:value={selectedFilamentId} {filaments} />
 		</div>
 	{/if}
 

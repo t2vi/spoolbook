@@ -7,7 +7,6 @@
 	import {
 		amsSlotNumber,
 		getProjectPlates,
-		importProjectFromUrl,
 		listProjects,
 		listProfilesForFilament,
 		listSpools,
@@ -62,7 +61,6 @@
 	let selectedAmsTrayKey = $state<string | null>(null);
 	let uploading = $state(false);
 	let uploadError = $state<string | null>(null);
-	let importUrl = $state('');
 	let recommended = $state<PrintProfile | null>(null);
 	let sending = $state(false);
 	let sendError = $state<string | null>(null);
@@ -137,19 +135,6 @@
 		uploadError = null;
 		try {
 			await applyUploadResult(await uploadProject(file));
-		} finally {
-			uploading = false;
-		}
-	}
-
-	async function fetchFromUrl() {
-		if (!importUrl.trim()) return;
-		uploading = true;
-		uploadError = null;
-		try {
-			const result = await importProjectFromUrl(importUrl);
-			await applyUploadResult(result);
-			if (result.ok) importUrl = '';
 		} finally {
 			uploading = false;
 		}
@@ -241,16 +226,13 @@
 				/>
 
 				<div class="mt-1 flex items-center gap-2">
-					<input type="file" accept=".3mf" onchange={onThreeMfSelected} class="text-sm" />
-					{#if uploading}<span class="text-xs text-muted-foreground">Uploading…</span>{/if}
-				</div>
-				<div class="mt-1 flex items-center gap-2">
 					<input
-						bind:value={importUrl}
-						placeholder="or paste a direct .3mf URL"
-						class="flex-1 rounded-md border px-2 py-1 text-xs"
+						type="file"
+						accept=".3mf"
+						onchange={onThreeMfSelected}
+						class="text-sm file:mr-3 file:cursor-pointer file:rounded-md file:border file:bg-background file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-accent"
 					/>
-					<Button variant="outline" size="sm" disabled={uploading || !importUrl.trim()} onclick={fetchFromUrl}>Fetch</Button>
+					{#if uploading}<span class="text-xs text-muted-foreground">Uploading…</span>{/if}
 				</div>
 				{#if uploadError}<p class="text-xs text-destructive">{uploadError}</p>{/if}
 

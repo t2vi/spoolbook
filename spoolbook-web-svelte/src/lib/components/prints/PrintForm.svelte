@@ -10,7 +10,6 @@
 		findVersionCandidate,
 		getPrint,
 		getProjectPlates,
-		importProjectFromUrl,
 		linkProjectVersion,
 		listPrinters,
 		listProjects,
@@ -22,6 +21,7 @@
 	import type { PrintInput } from '$lib/api/client';
 	import type { FailureMode, Printer, PrinterJob, PrintProfile, PrintStatus, Project, ProjectPlate, Spool } from '$lib/api/types';
 	import { goto } from '$app/navigation';
+	import { numOrNull } from '$lib/utils.js';
 
 	let { id }: { id: number | null } = $props();
 
@@ -51,15 +51,14 @@
 	let uploading = $state(false);
 	let uploadError = $state<string | null>(null);
 	let versionCandidate = $state<Project | null>(null);
-	let importUrl = $state('');
 	let matchedJob = $state<PrinterJob | null>(null);
 	let matchDismissed = $state(false);
 	let startedAt = $state('');
 	let endedAt = $state('');
 	let status = $state<PrintStatus>('Success');
 	let selectedFailureModes = $state<Set<FailureMode>>(new Set());
-	let amsHumidityPct = $state('');
-	let actualRoomTempC = $state('');
+	let amsHumidityPct = $state<number | string>('');
+	let actualRoomTempC = $state<number | string>('');
 	let ambientTempC = $state<number | null>(null);
 	let ambientHumidityPct = $state<number | null>(null);
 	let cleanBuildPlate = $state(false);
@@ -147,20 +146,6 @@
 		}
 	}
 
-	async function fetchFromUrl() {
-		if (!importUrl.trim()) return;
-		uploading = true;
-		uploadError = null;
-		versionCandidate = null;
-		try {
-			const result = await importProjectFromUrl(importUrl);
-			await applyUploadResult(result);
-			if (result.ok) importUrl = '';
-		} finally {
-			uploading = false;
-		}
-	}
-
 	async function linkVersion() {
 		if (!versionCandidate) return;
 		await linkProjectVersion(selectedProjectId, versionCandidate.id);
@@ -197,8 +182,8 @@
 			endedAt,
 			status,
 			notes: notes.trim() || null,
-			amsHumidityPct: amsHumidityPct.trim() ? Number(amsHumidityPct) : null,
-			actualRoomTempC: actualRoomTempC.trim() ? Number(actualRoomTempC) : null,
+			amsHumidityPct: numOrNull(amsHumidityPct),
+			actualRoomTempC: numOrNull(actualRoomTempC),
 			cleanBuildPlate,
 			projectId: selectedProjectId === 0 ? null : selectedProjectId,
 			projectPlaterId: selectedProjectId === 0 ? null : selectedPlaterId,
@@ -239,12 +224,13 @@
 		/>
 
 		<div class="mt-1 flex items-center gap-2">
-			<input type="file" accept=".3mf" onchange={onThreeMfSelected} class="text-sm" />
+			<input
+				type="file"
+				accept=".3mf"
+				onchange={onThreeMfSelected}
+				class="text-sm file:mr-3 file:cursor-pointer file:rounded-md file:border file:bg-background file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-accent"
+			/>
 			{#if uploading}<span class="text-xs text-muted-foreground">Uploading…</span>{/if}
-		</div>
-		<div class="mt-1 flex items-center gap-2">
-			<input bind:value={importUrl} placeholder="or paste a direct .3mf URL" class="flex-1 rounded-md border px-2 py-1 text-xs" />
-			<Button variant="outline" size="sm" disabled={uploading || !importUrl.trim()} onclick={fetchFromUrl}>Fetch</Button>
 		</div>
 		{#if uploadError}<p class="text-xs text-destructive">{uploadError}</p>{/if}
 
