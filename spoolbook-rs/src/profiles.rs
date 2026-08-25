@@ -14,6 +14,11 @@ use sqlx::SqlitePool;
 pub struct PrintProfile {
     pub id: i64,
     pub filament_id: i64,
+    // Not a print_profiles column — populated only by inventory() (the list view needs the
+    // brand/material/color to render without a second round trip per row); every other handler
+    // leaves this None and serde's default omits it, same as source_preset_path/version_name.
+    #[sqlx(skip)]
+    pub filament: Option<crate::filaments::Filament>,
     pub spool_id: Option<i64>,
     pub name: String,
     pub print_speed_mm_s: Option<i64>,
@@ -472,10 +477,22 @@ async fn inventory(State(pool): State<SqlitePool>) -> Json<ProfileInventoryResul
         .expect("query failed");
 
     let sql = format!("SELECT {COLUMNS} FROM print_profiles WHERE is_current_version = 1 ORDER BY name");
-    let profiles = sqlx::query_as::<_, PrintProfile>(&sql)
+    let mut profiles = sqlx::query_as::<_, PrintProfile>(&sql)
         .fetch_all(&pool)
         .await
         .expect("query failed");
+
+    // Per-row lookup rather than a join or an IN-clause batch: matches the "small personal
+    // catalog" scale this endpoint already assumes (see the pagination note below).
+    for profile in &mut profiles {
+        profile.filament = sqlx::query_as::<_, crate::filaments::Filament>(
+            "SELECT id, brand, material, variant, color FROM filaments WHERE id = ?1",
+        )
+        .bind(profile.filament_id)
+        .fetch_optional(&pool)
+        .await
+        .expect("query failed");
+    }
 
     // No pagination on this endpoint yet (matches .NET's ProfileInventoryService — small
     // personal catalog, page/pageSize are reported but not yet enforced).

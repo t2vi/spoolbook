@@ -42,3 +42,18 @@ def test_slice_produces_real_gcode():
     body = gcode.split("; EXECUTABLE_BLOCK_START", 1)[-1]
     assert "{filament_type" not in body, "unresolved {filament_type...} macro in executed gcode"
     assert "{max_layer_z" not in body, "unresolved {max_layer_z...} macro in executed gcode"
+
+
+def test_bambu_system_profiles_are_served():
+    # github.com/t2vi/spoolbook/issues/99 -- the bundled BambuStudio install's own system
+    # filament preset library, served as static files for spoolbook-rs to resolve.
+    resp = httpx.get(f"{BASE_URL}/profiles/BBL.json", timeout=10)
+    assert resp.status_code == 200, resp.text
+    manifest = resp.json()
+    entries = manifest.get("filament_list", [])
+    assert entries, "BBL.json has no filament_list"
+
+    match = next(e for e in entries if e["name"] == "Bambu PLA Basic @BBL X1C")
+    preset_resp = httpx.get(f"{BASE_URL}/profiles/BBL/{match['sub_path']}", timeout=10)
+    assert preset_resp.status_code == 200, preset_resp.text
+    assert preset_resp.json()["name"] == "Bambu PLA Basic @BBL X1C"

@@ -5,18 +5,35 @@
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import Picker from '$lib/components/picker.svelte';
 	import FilamentPicker from '$lib/components/filament-picker.svelte';
+	import SearchablePicker from '$lib/components/searchable-picker.svelte';
 	import {
 		createProfile,
 		getProfileFieldSpec,
-		importProfileFrom3mf,
+		importProfilePreset,
 		listAllFilaments,
+		listSystemPresets,
+		resolveSystemPreset,
 		updateProfile
 	} from '$lib/api/client';
 	import type { ProfileInput } from '$lib/api/client';
-	import type { Filament, ProfileFieldTab, ProfileSource, SlicerType } from '$lib/api/types';
+	import type { Filament, ImportResult, ProfileFieldTab, ProfileSource, SlicerType } from '$lib/api/types';
 	import { goto } from '$app/navigation';
 
 	let { id }: { id: number | null } = $props();
+
+	// Browsers won't let a page set the file dialog's starting folder (that'd let a site probe
+	// filesystem structure), so this is just a hint for where to navigate the first time --
+	// the browser itself remembers the last folder used for this input on subsequent uploads.
+	// Real per-OS paths lifted from the retired .NET BambuPaths.cs (only macOS was ever verified
+	// against a live install there; Windows/Linux carry the same "reasonable guess" caveat).
+	const bambuPresetsDirHint = (() => {
+		if (typeof navigator === 'undefined') return null;
+		const platform = navigator.userAgent;
+		if (/Mac/i.test(platform)) return '~/Library/Application Support/BambuStudio/user/<your account>/filament/';
+		if (/Win/i.test(platform)) return '%APPDATA%\\BambuStudio\\user\\<your account>\\filament\\';
+		if (/Linux/i.test(platform)) return '~/.config/BambuStudio/user/<your account>/filament/';
+		return null;
+	})();
 
 	let filaments = $state<Filament[]>([]);
 	let selectedFilamentId = $state(0);
@@ -29,9 +46,24 @@
 	let importMessage = $state<string | null>(null);
 	let errorMessage = $state<string | null>(null);
 
+	let systemPresetOptions = $state<{ value: string; label: string }[]>([]);
+	let selectedSystemPreset = $state('');
+
 	$effect(() => {
 		(async () => {
-			if (id === null) filaments = await listAllFilaments();
+			if (id === null) {
+				filaments = await listAllFilaments();
+				// slicer-service (source of the Bambu-defaults list) isn't always running --
+				// e.g. local dev without it started -- and that's fine, the rest of the form
+				// (including .3mf/preset import) works without it. Only that one dropdown
+				// degrades to empty, nothing else should be affected by it being down.
+				try {
+					const presets = await listSystemPresets();
+					systemPresetOptions = presets.names.map((n) => ({ value: n, label: n }));
+				} catch {
+					systemPresetOptions = [];
+				}
+			}
 
 			const spec = await getProfileFieldSpec(id);
 			name = spec.name;
@@ -53,11 +85,7 @@
 		return !field.hideWhenBlank || field.value.trim() !== '';
 	}
 
-	async function onThreeMfSelected(e: Event) {
-		const file = (e.currentTarget as HTMLInputElement).files?.[0];
-		if (!file) return;
-
-		const result = await importProfileFrom3mf(file);
+	async function applyImportResult(result: ImportResult, importedFrom: string) {
 		if (!result.ok || !result.fields) {
 			importMessage = `Import failed: ${result.error}`;
 			return;
@@ -74,12 +102,31 @@
 		tabs = spec.tabs;
 		activeTab = tabs[0]?.title ?? '';
 
-		if (!name.trim()) name = file.name.replace(/\.3mf$/i, '');
+		if (!name.trim()) name = result.suggestedName ?? importedFrom;
 
 		rawSettingsJson = result.rawSettingsJson;
 		source = 'SlicerImport';
 		sourceSlicer = 'BambuStudio';
-		importMessage = `Imported ${Object.keys(result.fields).length} settings from ${file.name}.`;
+		importMessage = `Imported ${Object.keys(result.fields).length} settings from ${importedFrom}.`;
+	}
+
+	async function onFileSelected(e: Event) {
+		const file = (e.currentTarget as HTMLInputElement).files?.[0];
+		if (!file) return;
+		try {
+			await applyImportResult(await importProfilePreset(file), file.name);
+		} catch (err) {
+			importMessage = `Import failed: ${err instanceof Error ? err.message : 'unknown error'}`;
+		}
+	}
+
+	async function onSystemPresetSelected(newValue: string) {
+		if (!newValue) return;
+		try {
+			await applyImportResult(await resolveSystemPreset(newValue), newValue);
+		} catch (err) {
+			importMessage = `Import failed: ${err instanceof Error ? err.message : 'unknown error'}`;
+		}
 	}
 
 	async function save(e: Event) {
@@ -114,8 +161,32 @@
 		</div>
 
 		<div class="flex flex-col gap-1">
-			<Label for="import-3mf">Import from a sliced .3mf (optional)</Label>
-			<input id="import-3mf" type="file" accept=".3mf" onchange={onThreeMfSelected} class="text-sm" />
+			<Label for="system-preset">Start from a Bambu Studio default (optional)</Label>
+			<SearchablePicker
+				id="system-preset"
+				bind:value={selectedSystemPreset}
+				options={systemPresetOptions}
+				placeholder="-- pick a Bambu default --"
+				searchPlaceholder="Search Bambu presets…"
+				onValueChange={onSystemPresetSelected}
+			/>
+		</div>
+
+		<div class="flex flex-col gap-1">
+			<Label for="import-preset">Or import a sliced .3mf / Bambu Studio preset (.json) (optional)</Label>
+			<input
+				id="import-preset"
+				type="file"
+				accept=".3mf,.json"
+				onchange={onFileSelected}
+				class="text-sm file:mr-3 file:cursor-pointer file:rounded-md file:border file:bg-background file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-accent"
+			/>
+			{#if bambuPresetsDirHint}
+				<p class="text-xs text-muted-foreground">
+					Your saved presets live in <code class="rounded bg-muted px-1 py-0.5">{bambuPresetsDirHint}</code> — the browser remembers this
+					folder after your first visit here.
+				</p>
+			{/if}
 			{#if importMessage}<p class="text-sm text-muted-foreground">{importMessage}</p>{/if}
 		</div>
 	{/if}

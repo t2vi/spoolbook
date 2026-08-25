@@ -1,12 +1,17 @@
 use axum::extract::Multipart;
 use axum::http::StatusCode;
-use axum::{Json, Router, routing::post};
-use serde_json::Value;
+use axum::{Json, Router, routing::{get, post}};
+use serde::Deserialize;
+use serde_json::{Map, Value, json};
 use sqlx::SqlitePool;
+use std::collections::HashSet;
 use std::io::Read;
 
 pub fn router() -> Router<SqlitePool> {
-    Router::new().route("/api/profiles/import-3mf", post(import_3mf))
+    Router::new()
+        .route("/api/profiles/import-preset", post(import_preset))
+        .route("/api/profiles/system-presets", get(list_system_presets))
+        .route("/api/profiles/system-presets/resolve", post(resolve_system_preset))
 }
 
 // Bambu's raw JSON key -> our PrintProfile property name. Mirrors BambuFilamentImportService's
@@ -200,40 +205,138 @@ fn import_from_three_mf(bytes: &[u8]) -> Result<(serde_json::Map<String, Value>,
     Ok((merged, json))
 }
 
-async fn import_3mf(_editor: crate::auth::Editor, mut multipart: Multipart) -> (StatusCode, Json<Value>) {
+// Accepts either a sliced .3mf (Bambu bakes the fully-resolved chain into
+// Metadata/project_settings.config at slice time -- nothing left to walk) or a raw Bambu Studio
+// preset export (.json, still carrying its own `inherits` chain, resolved below against the
+// system library -- github.com/t2vi/spoolbook/issues/99). One input, format auto-detected: only
+// falls through to the raw-JSON attempt when the upload isn't a zip at all, so a real .3mf with a
+// missing config entry still reports that specific error rather than a confusing JSON one.
+async fn import_preset(_editor: crate::auth::Editor, mut multipart: Multipart) -> (StatusCode, Json<Value>) {
     let field = loop {
         match multipart.next_field().await {
             Ok(Some(field)) if field.name() == Some("file") => break Some(field),
             Ok(Some(_)) => continue,
             Ok(None) => break None,
-            Err(_) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "Expected multipart form data." }))),
+            Err(_) => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Expected multipart form data." }))),
         }
     };
     let Some(field) = field else {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "No file provided." })));
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "No file provided." })));
     };
 
     let file_name = field.file_name().unwrap_or("upload.3mf").to_string();
-    let suggested_name = file_name.trim_end_matches(".3mf").trim_end_matches(".3MF").to_string();
+    let suggested_name_from_filename =
+        file_name.trim_end_matches(".3mf").trim_end_matches(".3MF").trim_end_matches(".json").trim_end_matches(".JSON").to_string();
 
     let bytes = match field.bytes().await {
         Ok(b) => b,
-        Err(_) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "Couldn't read the uploaded file." }))),
+        Err(_) => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Couldn't read the uploaded file." }))),
     };
 
     match import_from_three_mf(&bytes) {
         Ok((merged, raw_settings_json)) => {
             let fields = extract_fields(&merged);
-            (
-                StatusCode::OK,
-                Json(serde_json::json!({
-                    "ok": true,
-                    "suggestedName": suggested_name,
-                    "fields": fields,
-                    "rawSettingsJson": raw_settings_json,
-                })),
-            )
+            (StatusCode::OK, Json(json!({ "ok": true, "suggestedName": suggested_name_from_filename, "fields": fields, "rawSettingsJson": raw_settings_json })))
         }
-        Err(error) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": error }))),
+        Err("invalid_3mf") => {
+            let Some(leaf) = std::str::from_utf8(&bytes).ok().and_then(|s| serde_json::from_str::<Value>(s).ok()).and_then(|v| v.as_object().cloned()) else {
+                return (StatusCode::BAD_REQUEST, Json(json!({ "ok": false, "error": "invalid_file" })));
+            };
+            let suggested_name = leaf.get("name").and_then(|v| v.as_str()).map(str::to_string).unwrap_or(suggested_name_from_filename);
+            match resolve_inherits_chain(leaf).await {
+                Ok(merged) => {
+                    let fields = extract_fields(&merged);
+                    let raw_settings_json = serde_json::to_string(&merged).unwrap_or_default();
+                    (StatusCode::OK, Json(json!({ "ok": true, "suggestedName": suggested_name, "fields": fields, "rawSettingsJson": raw_settings_json })))
+                }
+                Err(error) => (StatusCode::BAD_GATEWAY, Json(json!({ "ok": false, "error": error }))),
+            }
+        }
+        Err(error) => (StatusCode::BAD_REQUEST, Json(json!({ "ok": false, "error": error }))),
+    }
+}
+
+fn slicer_base_url() -> String {
+    std::env::var("RESLICE_SERVICE_URL").unwrap_or_else(|_| "http://localhost:8100".to_string())
+}
+
+async fn fetch_json(url: &str) -> Result<Value, String> {
+    let resp = reqwest::get(url).await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("request to slicer-service failed: {}", resp.status()));
+    }
+    resp.json().await.map_err(|e| e.to_string())
+}
+
+async fn fetch_bbl_manifest() -> Result<Value, String> {
+    fetch_json(&format!("{}/profiles/BBL.json", slicer_base_url())).await
+}
+
+fn bbl_filament_list(manifest: &Value) -> Vec<&Value> {
+    manifest.get("filament_list").and_then(|v| v.as_array()).map(|a| a.iter().collect()).unwrap_or_default()
+}
+
+async fn fetch_system_preset_raw(name: &str) -> Result<Map<String, Value>, String> {
+    let manifest = fetch_bbl_manifest().await?;
+    let sub_path = bbl_filament_list(&manifest)
+        .iter()
+        .find(|e| e.get("name").and_then(|n| n.as_str()) == Some(name))
+        .and_then(|e| e.get("sub_path"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .ok_or_else(|| format!("system preset not found: {name}"))?;
+    let url = format!("{}/profiles/BBL/{}", slicer_base_url(), sub_path);
+    fetch_json(&url).await?.as_object().cloned().ok_or_else(|| "bad preset json from slicer-service".to_string())
+}
+
+// Walks `inherits` upward against the system library, child values winning over ancestors --
+// mirrors the retired .NET BambuPresetResolver.ResolveAsync exactly, just fetching each ancestor
+// over HTTP (slicer-service's static mount) instead of reading local disk. `leaf` is either an
+// uploaded preset's own parsed object, or a `{"inherits": <name>}` stub for browsing a system
+// preset directly (same stub trick bambuddy's own equivalent resolver uses for that case).
+async fn resolve_inherits_chain(leaf: Map<String, Value>) -> Result<Map<String, Value>, String> {
+    let mut next = leaf.get("inherits").and_then(|v| v.as_str()).map(str::to_string);
+    let mut merged = leaf;
+    let mut visited = HashSet::new();
+    while let Some(name) = next {
+        if !visited.insert(name.clone()) {
+            break;
+        }
+        let parent = fetch_system_preset_raw(&name).await?;
+        next = parent.get("inherits").and_then(|v| v.as_str()).map(str::to_string);
+        for (k, v) in parent {
+            merged.entry(k).or_insert(v);
+        }
+    }
+    Ok(merged)
+}
+
+async fn list_system_presets() -> (StatusCode, Json<Value>) {
+    match fetch_bbl_manifest().await {
+        Ok(manifest) => {
+            let mut names: Vec<String> =
+                bbl_filament_list(&manifest).iter().filter_map(|e| e.get("name").and_then(|n| n.as_str()).map(str::to_string)).collect();
+            names.sort();
+            names.dedup();
+            (StatusCode::OK, Json(json!({ "ok": true, "names": names })))
+        }
+        Err(error) => (StatusCode::BAD_GATEWAY, Json(json!({ "ok": false, "error": error }))),
+    }
+}
+
+#[derive(Deserialize)]
+struct ResolveSystemPresetRequest {
+    name: String,
+}
+
+async fn resolve_system_preset(_editor: crate::auth::Editor, Json(req): Json<ResolveSystemPresetRequest>) -> (StatusCode, Json<Value>) {
+    let mut leaf = Map::new();
+    leaf.insert("inherits".to_string(), Value::String(req.name.clone()));
+    match resolve_inherits_chain(leaf).await {
+        Ok(merged) => {
+            let fields = extract_fields(&merged);
+            (StatusCode::OK, Json(json!({ "ok": true, "suggestedName": req.name, "fields": fields })))
+        }
+        Err(error) => (StatusCode::BAD_GATEWAY, Json(json!({ "ok": false, "error": error }))),
     }
 }

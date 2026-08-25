@@ -22,12 +22,24 @@ import uuid
 
 from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.responses import Response
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="spoolbook slicer-service")
 
 # Official Linux AppImage: github.com/bambulab/BambuStudio releases (ubuntu22.04/24.04 builds).
 BAMBUSTUDIO_BIN = os.environ.get("BAMBUSTUDIO_BIN", "bambu-studio")
 SLICE_TIMEOUT_S = int(os.environ.get("SLICE_TIMEOUT_S", "120"))
+
+# The Bambu Studio install this container already carries for slicing ships its own system
+# filament preset library at this path (verified empirically against the Dockerfile's own
+# extraction: unsquashfs -> /opt/bambustudio/{bin,resources}, resources/profiles/BBL.json +
+# resources/profiles/BBL/filament/*.json, same shape spoolbook-rs's bambu_import.rs already
+# expects) -- reused as-is rather than pulling a second copy from anywhere else (github.com/t2vi/
+# spoolbook/issues/99). Served as plain static files; spoolbook-rs does the inherits-chain
+# resolution itself (see bambu_import.rs) since it needs that logic for uploaded presets too.
+BAMBU_PROFILES_DIR = os.environ.get("BAMBU_PROFILES_DIR", "/opt/bambustudio/resources/profiles")
+if os.path.isdir(BAMBU_PROFILES_DIR):
+    app.mount("/profiles", StaticFiles(directory=BAMBU_PROFILES_DIR), name="profiles")
 
 
 @app.get("/health")
