@@ -98,8 +98,10 @@ pub(crate) fn tls12_no_verify_config() -> rustls::ClientConfig {
 // buffers live telemetry via printer_telemetry. Read-only: subscribes to device/{serial}/report
 // only, never publishes to a printer's request/control topic.
 //
-// UNVERIFIED AGAINST REAL HARDWARE — this file has no reference test suite to port forward
-// (the .NET original has none either); it can only be validated against a real Bambu P2S.
+// Confirmed against a real Bambu P2S: the connection itself ConnAcks/SubAcks fine, but rumqttc's
+// default 10KB max packet size is smaller than this printer's real device/report payload
+// (~14KB) — connect_and_subscribe_loop's own set_max_packet_size call below is the fix. No
+// reference test suite to port forward (the .NET original has none either).
 pub async fn spawn_all(pool: SqlitePool, store: LiveStatusStore) {
     tokio::spawn(purge_stale_jobs_loop(pool.clone()));
 
@@ -150,6 +152,11 @@ async fn connect_and_subscribe_loop(
         mqttoptions.set_credentials("bblp", &access_code);
         mqttoptions.set_keep_alive(Duration::from_secs(30));
         mqttoptions.set_transport(Transport::tls_with_config(TlsConfiguration::Rustls(Arc::new(tls_config()))));
+        // rumqttc's default incoming limit (10KB) is smaller than this printer's real device/report
+        // payload (~14KB, confirmed against a real P2S -- the connection ConnAcks and SubAcks fine,
+        // then errors out the instant the first real status report arrives, since nothing here ever
+        // subscribed to real hardware's own report size before). 128KB is a comfortable margin.
+        mqttoptions.set_max_packet_size(128 * 1024, 128 * 1024);
 
         let (client, mut eventloop) = AsyncClient::new(mqttoptions, 10);
 

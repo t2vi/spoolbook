@@ -11,8 +11,6 @@ use serde::Deserialize;
 use serde_json::json;
 use sqlx::SqlitePool;
 use std::io::Read;
-use std::sync::Arc;
-use suppaftp::tokio::{AsyncRustlsConnector, AsyncRustlsFtpStream};
 
 // Web uploads are stored on disk under a content-hash filename (project_upload.rs) — that's fine
 // for spoolbook's own storage, but sending it to the printer as the on-device filename got
@@ -110,26 +108,56 @@ pub fn submission_id() -> String {
 }
 
 // FTPS upload to the printer's onboard vsftpd (port 990, implicit TLS, bblp/access-code creds —
-// same as MQTT). UNVERIFIED AGAINST REAL HARDWARE, same posture as printer_mqtt.rs. The three
-// workarounds the C# original needed (via FluentFTP.GnuTLS, since .NET's SslStream can't do any
-// of this) map onto rustls as: a single ClientConfig — and therefore one resumption cache —
-// reused across the control and data connections by suppaftp's tokio-rustls backend, ALPN left
-// off (rustls's default — never set), and TLS 1.2 forced via builder_with_protocol_versions
-// above (TLS 1.3's async session-ticket delivery is what broke resumption timing in the C#
-// version). Whether rustls's automatic resumption actually satisfies this specific old vsftpd
-// build's require_ssl_reuse check, and whether the data connection opens fast enough relative to
-// the control handshake, is the one thing only a real P2S can confirm.
+// same as MQTT). This printer's vsftpd enforces require_ssl_reuse: the data-channel TLS
+// connection must resume the control channel's session, or it's rejected with 522. Two prior
+// implementations both failed this exact check against a real P2S: suppaftp+rustls (one shared
+// ClientConfig/resumption cache -- "Connection reset by peer"), then curl statically linked
+// against vendored OpenSSL (curl-sys's static-ssl -- clean "522 session reuse required", verified
+// via verbose logging that the data channel was doing a full handshake, not a resumed one, even
+// forced to TLS 1.2). Confirmed root cause empirically: it's specifically the vendored OpenSSL
+// build that can't reuse the session here — the identical code linked against the host's system
+// libcurl (SecureTransport/LibreSSL on macOS) resumes correctly ("SSL reusing session ID",
+// 226 Transfer complete). Same class of bug the C# original hit with .NET's SslStream, fixed
+// there by switching to FluentFTP.GnuTLS — a different TLS stack, not a different FTP library,
+// same lesson here: curl's `ssl` feature without `static-ssl` links dynamically against the
+// platform's own libcurl instead of vendoring OpenSSL from source (see Cargo.toml). Confirmed
+// working this way on macOS (dev); the Linux/Docker build still needs its own verification against
+// real hardware — Debian's system libcurl is a different OpenSSL build than the one vendored here,
+// but "different OpenSSL build" was already true of the two prior failures, so it isn't assumed
+// safe without a real test.
+// libcurl's `Easy` handle is synchronous; run on a blocking thread rather than pulling in an
+// async-curl wrapper for one call site.
 pub async fn upload_via_ftps(ip_address: &str, access_code: &str, local_file_path: &str, remote_file_name: &str) -> Result<(), String> {
-    let connector = tokio_rustls::TlsConnector::from(Arc::new(crate::printer_mqtt::tls12_no_verify_config()));
-    let mut ftp = AsyncRustlsFtpStream::connect_secure_implicit((ip_address, 990), AsyncRustlsConnector::from(connector), ip_address)
+    let ip_address = ip_address.to_string();
+    let access_code = access_code.to_string();
+    let local_file_path = local_file_path.to_string();
+    let remote_file_name = remote_file_name.to_string();
+
+    tokio::task::spawn_blocking(move || upload_via_ftps_blocking(&ip_address, &access_code, &local_file_path, &remote_file_name))
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?
+}
 
-    ftp.login("bblp", access_code).await.map_err(|e| e.to_string())?;
+fn upload_via_ftps_blocking(ip_address: &str, access_code: &str, local_file_path: &str, remote_file_name: &str) -> Result<(), String> {
+    let mut file = std::fs::File::open(local_file_path).map_err(|e| e.to_string())?;
+    let file_len = file.metadata().map_err(|e| e.to_string())?.len();
 
-    let mut file = tokio::fs::File::open(local_file_path).await.map_err(|e| e.to_string())?;
-    ftp.put_file(format!("/{remote_file_name}"), &mut file).await.map_err(|e| e.to_string())?;
-    ftp.quit().await.ok();
+    let mut easy = curl::easy::Easy::new();
+    // ftps:// + an explicit 990 port is curl's implicit-TLS mode (TLS negotiated on connect, no
+    // AUTH TLS command) -- matches Bambu's documented LAN-mode protocol, same as the old
+    // connect_secure_implicit call this replaces.
+    easy.url(&format!("ftps://{ip_address}:990/{remote_file_name}")).map_err(|e| e.to_string())?;
+    easy.username("bblp").map_err(|e| e.to_string())?;
+    easy.password(access_code).map_err(|e| e.to_string())?;
+    // Self-signed on-device cert, same trust posture as printer_mqtt.rs's NoCertVerification.
+    easy.ssl_verify_peer(false).map_err(|e| e.to_string())?;
+    easy.ssl_verify_host(false).map_err(|e| e.to_string())?;
+    easy.upload(true).map_err(|e| e.to_string())?;
+    easy.in_filesize(file_len).map_err(|e| e.to_string())?;
+
+    let mut transfer = easy.transfer();
+    transfer.read_function(move |buf| Ok(file.read(buf).unwrap_or(0))).map_err(|e| e.to_string())?;
+    transfer.perform().map_err(|e| e.to_string())?;
     Ok(())
 }
 
