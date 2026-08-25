@@ -2,6 +2,7 @@
 
 | Version | Date | Notes |
 |---|---|---|
+| [v1.0.0](docs/releases/v1.0.0.md) | 2026-08-25 | Entire backend rewritten in Rust; .NET/EF Core deleted outright; real auth bug fixed (SvelteKit had no working login without .NET); manual DB migration required for existing installs |
 | [v0.1.8](docs/releases/v0.1.8.md) | 2026-08-15 | One-click Docker install (spoolbook + BambuStudio slicer service via GHCR); Avalonia desktop UI fully retired; repo made public |
 | [v0.1.7](docs/releases/v0.1.7.md) | 2026-08-14 | Blazor Server retired — SvelteKit is now the web UI; Recommend page removed; printer controls gate on live print state |
 | [v0.1.6](docs/releases/v0.1.6.md) | 2026-08-14 | Self-hosted web app; live printer telemetry/control; send prints from spoolbook; live camera; cohesive per-printer UI |
