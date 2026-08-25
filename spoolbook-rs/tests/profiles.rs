@@ -47,66 +47,48 @@ async fn seed_filament(pool: &sqlx::SqlitePool) -> i64 {
     body["entry"]["id"].as_i64().unwrap()
 }
 
-// Spans the whole field list (name/nozzleTempC near the start, retraction/z-hop mid-list,
-// soluble/diameter later, start/end gcode + source at the very end) to catch any bind-order
-// or column-count mismatch a full 130-field assertion would be excessive overkill for.
+// The real wire shape ProfileForm.svelte's save() sends: every profile-setting value nested as
+// a string inside `fields`, keyed by the field names in profile_field_spec.rs's GROUPS. Values
+// are spread across the early/mid/late positions of the SQL column list (temps near the start,
+// retraction/z-hop mid-list, density/soluble later, start/end gcode at the very end) to catch
+// any bind-order or column-count mismatch — a full 130-field assertion would be excessive
+// overkill for that. Every field not listed here is left unset, which parse_fields treats as
+// blank -> None, same as a freshly-opened new-profile form would send.
+fn profile_fields() -> Value {
+    json!({
+        "PrintSpeedMmS": "200",
+        "NozzleTempC": "220",
+        "NozzleTempInitialC": "215",
+        "HotPlateTempC": "55",
+        "HotPlateTempInitialC": "60",
+        "CoolingPerimeterTransitionDistanceMm": "1.5",
+        "EnableOverhangBridgeFan": "true",
+        "RetractionMm": "0.8",
+        "RetractionSpeedMmS": "30",
+        "DeretractionSpeedMmS": "30",
+        "RetractWhenChangingLayer": "true",
+        "WipeEnabled": "true",
+        "ZHopMm": "0.4",
+        "ZHopType": "Spiral Lift",
+        "DensityGCm3": "1.24",
+        "DiameterMm": "1.75",
+        "Soluble": "false",
+        "IsSupport": "false",
+        "CostPerKg": "24.99",
+        "StartGcode": "G28 ; home",
+        "EndGcode": "M104 S0 ; cool down",
+        "DefaultColourHex": "#111111"
+    })
+}
+
 fn full_profile_body() -> Value {
     json!({
         "spoolId": null,
         "name": "Cold day tune",
-        "printSpeedMmS": 200,
-        "nozzleTempC": 220,
-        "nozzleTempInitialC": 215,
-        "nozzleTempRangeHighC": null, "nozzleTempRangeLowC": null,
-        "coolPlateTempC": null, "coolPlateTempInitialC": null,
-        "hotPlateTempC": 55, "hotPlateTempInitialC": 60,
-        "texturedPlateTempC": null, "texturedPlateTempInitialC": null,
-        "engPlateTempC": null, "engPlateTempInitialC": null,
-        "supertackPlateTempC": null, "supertackPlateTempInitialC": null,
-        "fanMinSpeedPct": null, "fanMaxSpeedPct": null, "additionalCoolingFanSpeedPct": null,
-        "closeFanFirstXLayers": null, "completePrintExhaustFanSpeedPct": null,
-        "duringPrintExhaustFanSpeedPct": null, "chamberTemperatureC": null,
-        "coolingPerimeterTransitionDistanceMm": 1.5,
-        "coolingSlowdownLogic": null, "enableOverhangBridgeFan": true,
-        "fanCoolingLayerTimeS": null, "firstXLayerFanSpeedPct": null, "fullFanSpeedLayer": null,
-        "noSlowDownForCoolingOnOutwalls": null, "overhangFanSpeedPct": null,
-        "overhangFanThreshold": null, "overhangThresholdParticipatingCooling": null,
-        "overrideProcessOverhangSpeed": null, "preStartFanTimeS": null,
-        "reduceFanStopStartFreq": null, "slowDownForLayerCooling": null,
-        "slowDownLayerTimeS": null, "slowDownMinSpeedMmS": null, "activateAirFiltration": null,
-        "retractionMm": 0.8, "retractionSpeedMmS": 30.0, "deretractionSpeedMmS": 30.0,
-        "retractionMinimumTravelMm": null, "retractBeforeWipe": null, "retractRestartExtraMm": null,
-        "retractWhenChangingLayer": true, "retractionDistancesWhenCutMm": null,
-        "retractLengthNcMm": null, "longRetractionsWhenCut": null, "longRetractionsWhenEc": null,
-        "retractionDistancesWhenEcMm": null,
-        "wipeEnabled": true, "wipeDistanceMm": null, "zHopMm": 0.4, "zHopType": "Spiral Lift",
-        "changeLengthMm": null, "changeLengthNcMm": null, "coolingBeforeTowerS": null,
-        "minimalPurgeOnWipeTowerMm3": null, "primeVolumeMm3": null, "primeVolumeNcMm3": null,
-        "rammingTravelTimeS": null, "rammingTravelTimeNcS": null,
-        "rammingVolumetricSpeedMm3S": null, "rammingVolumetricSpeedNcMm3S": null,
-        "towerInterfacePreExtrusionDistMm": null, "towerInterfacePreExtrusionLengthMm": null,
-        "towerInterfacePrintTempC": null, "towerInterfacePurgeVolumeMm3": null,
-        "towerIroningAreaMm2": null, "flushTempC": null, "flushVolumetricSpeedMm3S": null,
-        "adaptiveVolumetricSpeed": null, "maxVolumetricSpeedMm3S": null, "bridgeSpeedMmS": null,
-        "enableOverhangSpeed": null, "overhang14SpeedMmS": null, "overhang24SpeedMmS": null,
-        "overhang34SpeedMmS": null, "overhang44SpeedMmS": null, "overhangTotallySpeedMmS": null,
-        "circleCompensationSpeedMmS": null, "velocityAdaptationFactor": null,
-        "volumetricSpeedCoefficients": null,
-        "densityGCm3": 1.24, "diameterMm": 1.75, "diameterLimitMm": null, "shrinkPct": null,
-        "soluble": false, "isSupport": false, "printable": null, "adhesivenessCategory": null,
-        "impactStrengthZ": null, "costPerKg": 24.99, "flowRatio": null, "extruderVariant": null,
-        "slicerNotes": null, "requiredNozzleHrc": null,
-        "enablePressureAdvance": null, "pressureAdvance": null,
-        "dryingAmsLimitations": null, "dryingAmsHeatDistortionTempC": null, "dryingAmsTempC": null,
-        "dryingAmsTimeH": null, "dryingChamberBedTempC": null, "dryingChamberTimeH": null,
-        "dryingCoolingTempC": null, "dryingSofteningTempC": null, "softeningTempC": null,
-        "scarfSeamType": null, "scarfGapPct": null, "scarfHeightPct": null, "scarfLengthMm": null,
-        "holeCoef1": null, "holeCoef2": null, "holeCoef3": null, "holeLimitMax": null, "holeLimitMin": null,
-        "counterCoef1": null, "counterCoef2": null, "counterCoef3": null, "counterLimitMax": null, "counterLimitMin": null,
-        "startGcode": "G28 ; home", "endGcode": "M104 S0 ; cool down",
-        "defaultColourHex": "#111111",
-        "source": "Manual", "sourceSlicer": null, "rawSettingsJson": null, "sourcePresetPath": null,
-        "versionName": null, "notes": "winter settings"
+        "source": "Manual",
+        "sourceSlicer": null,
+        "rawSettingsJson": null,
+        "fields": profile_fields()
     })
 }
 
@@ -135,9 +117,32 @@ async fn create_persists_and_round_trips_fields_across_the_whole_column_list() {
     assert_eq!(p["endGcode"], "M104 S0 ; cool down");
     assert_eq!(p["defaultColourHex"], "#111111");
     assert_eq!(p["source"], "Manual");
-    assert_eq!(p["notes"], "winter settings");
     assert_eq!(p["versionNumber"], 1);
     assert_eq!(p["isCurrentVersion"], true);
+    // Fields never present in the wire shape (no `fields` entry, no top-level key either) —
+    // blank/absent must land as None, not a stale default.
+    assert_eq!(p["printSpeedMmS"], 200);
+    assert_eq!(p["notes"], Value::Null);
+    assert_eq!(p["nozzleTempRangeHighC"], Value::Null);
+}
+
+#[tokio::test]
+async fn create_leaves_blank_fields_as_none() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let mut body = full_profile_body();
+    // Blank string (as a freshly-opened form's untouched field sends) must become None, not 0/false.
+    body["fields"]["PrintSpeedMmS"] = json!("");
+    body["fields"]["Soluble"] = json!("");
+    body["fields"]["ShrinkPct"] = json!("");
+
+    let (status, body) = send(&pool, "POST", &format!("/api/profiles?filamentId={filament_id}"), Some(body)).await;
+
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    let p = &body["profile"];
+    assert_eq!(p["printSpeedMmS"], Value::Null);
+    assert_eq!(p["soluble"], Value::Null);
+    assert_eq!(p["shrinkPct"], Value::Null);
 }
 
 #[tokio::test]
@@ -151,6 +156,48 @@ async fn create_rejects_blank_name() {
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(resp["ok"], false);
+}
+
+#[tokio::test]
+async fn create_rejects_blank_nozzle_temp_c() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let mut body = full_profile_body();
+    body["fields"]["NozzleTempC"] = json!("");
+
+    let (status, resp) = send(&pool, "POST", &format!("/api/profiles?filamentId={filament_id}"), Some(body)).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(resp["ok"], false);
+    assert!(resp["errors"]["NozzleTempC"].is_string(), "{resp:?}");
+}
+
+#[tokio::test]
+async fn create_rejects_unparseable_nozzle_temp_c() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let mut body = full_profile_body();
+    body["fields"]["NozzleTempC"] = json!("abc");
+
+    let (status, resp) = send(&pool, "POST", &format!("/api/profiles?filamentId={filament_id}"), Some(body)).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(resp["ok"], false);
+    assert!(resp["errors"]["NozzleTempC"].is_string(), "{resp:?}");
+}
+
+#[tokio::test]
+async fn create_rejects_an_unparseable_optional_numeric_field_instead_of_defaulting() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let mut body = full_profile_body();
+    body["fields"]["RetractionMm"] = json!("not-a-number");
+
+    let (status, resp) = send(&pool, "POST", &format!("/api/profiles?filamentId={filament_id}"), Some(body)).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(resp["ok"], false);
+    assert!(resp["errors"]["RetractionMm"].is_string(), "{resp:?}");
 }
 
 #[tokio::test]
@@ -197,11 +244,10 @@ async fn update_persists_changes_across_the_column_list() {
 
     let mut updated = full_profile_body();
     updated["name"] = json!("Warmer day tune");
-    updated["nozzleTempC"] = json!(210);
-    updated["retractionMm"] = json!(0.6);
-    updated["soluble"] = json!(true);
-    updated["endGcode"] = json!("M104 S0 ; updated");
-    updated["notes"] = json!("summer settings");
+    updated["fields"]["NozzleTempC"] = json!("210");
+    updated["fields"]["RetractionMm"] = json!("0.6");
+    updated["fields"]["Soluble"] = json!("true");
+    updated["fields"]["EndGcode"] = json!("M104 S0 ; updated");
 
     let (status, body) = send(&pool, "PUT", &format!("/api/profiles/{id}"), Some(updated)).await;
 
@@ -212,9 +258,25 @@ async fn update_persists_changes_across_the_column_list() {
     assert_eq!(p["retractionMm"], 0.6);
     assert_eq!(p["soluble"], true);
     assert_eq!(p["endGcode"], "M104 S0 ; updated");
-    assert_eq!(p["notes"], "summer settings");
     // version_number/is_current_version untouched by update, matching .NET.
     assert_eq!(p["versionNumber"], 1);
+}
+
+#[tokio::test]
+async fn update_rejects_blank_nozzle_temp_c() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let (_, created) = send(&pool, "POST", &format!("/api/profiles?filamentId={filament_id}"), Some(full_profile_body())).await;
+    let id = created["profile"]["id"].as_i64().unwrap();
+
+    let mut updated = full_profile_body();
+    updated["fields"]["NozzleTempC"] = json!("");
+
+    let (status, resp) = send(&pool, "PUT", &format!("/api/profiles/{id}"), Some(updated)).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(resp["ok"], false);
+    assert!(resp["errors"]["NozzleTempC"].is_string(), "{resp:?}");
 }
 
 #[tokio::test]
@@ -346,7 +408,7 @@ async fn field_spec_returns_the_profiles_name_and_populated_values() {
     let pool = test_pool().await;
     let filament_id = seed_filament(&pool).await;
     let mut body = full_profile_body();
-    body["defaultColourHex"] = json!("#abcdef");
+    body["fields"]["DefaultColourHex"] = json!("#abcdef");
     let (_, created) = send(&pool, "POST", &format!("/api/profiles?filamentId={filament_id}"), Some(body)).await;
     let id = created["profile"]["id"].as_i64().unwrap();
 
@@ -369,6 +431,37 @@ async fn field_spec_returns_the_profiles_name_and_populated_values() {
     let default_colour = all_fields.iter().find(|f| f["name"] == "DefaultColourHex").unwrap();
     assert_eq!(default_colour["value"], "#abcdef");
     assert_eq!(default_colour["showRow"], true);
+}
+
+// Round-trips the exact form flow: load blank spec -> save -> reload same profile's spec (now
+// pre-filled) -> edit -> save again, all through the same create/parse/update code path.
+#[tokio::test]
+async fn field_spec_round_trips_through_create_then_edit_then_update() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+
+    let (_, blank_spec) = send(&pool, "GET", "/api/profiles/field-spec", None).await;
+    assert_eq!(blank_spec["name"], "");
+
+    let (_, created) = send(&pool, "POST", &format!("/api/profiles?filamentId={filament_id}"), Some(full_profile_body())).await;
+    let id = created["profile"]["id"].as_i64().unwrap();
+
+    let (_, filled_spec) = send(&pool, "GET", &format!("/api/profiles/field-spec?profileId={id}"), None).await;
+    assert_eq!(filled_spec["name"], "Cold day tune");
+
+    let mut updated = full_profile_body();
+    updated["fields"]["NozzleTempC"] = json!("205");
+    let (status, updated_body) = send(&pool, "PUT", &format!("/api/profiles/{id}"), Some(updated)).await;
+    assert_eq!(status, StatusCode::OK, "{updated_body:?}");
+    assert_eq!(updated_body["profile"]["nozzleTempC"], 205);
+
+    let (_, refetched_spec) = send(&pool, "GET", &format!("/api/profiles/field-spec?profileId={id}"), None).await;
+    let nozzle_temp = refetched_spec["tabs"].as_array().unwrap().iter()
+        .flat_map(|t| t["sections"].as_array().unwrap().iter())
+        .flat_map(|s| s["fields"].as_array().unwrap().iter().cloned())
+        .find(|f| f["name"] == "NozzleTempC")
+        .unwrap();
+    assert_eq!(nozzle_temp["value"], "205");
 }
 
 #[tokio::test]
