@@ -28,15 +28,18 @@ creates the print-history entry automatically, filling in its outcome once the p
 the job finished.</p>
 <h2 id="adding-your-first-spool">Adding your first spool</h2>
 <ol>
-<li>Go to <strong>Filaments</strong>, find or add the filament type on your roll (brand + material + variant + color).</li>
-<li>Go to <strong>Spools</strong>, create a Spool against that Filament — this represents the physical roll.</li>
-<li>Go to <strong>Profiles</strong>, create a Print Profile for it — start from a Bambu Studio default preset,
-import a sliced <code>.3mf</code> or your own saved Bambu Studio <code>.json</code> preset, or fill it in by hand.</li>
-<li>After a print, log it under <strong>Prints</strong> — the exact settings from the Profile version you used
-are locked in permanently, so editing the Profile later (e.g. a seasonal temperature tweak)
-never rewrites what a past print recorded. Optionally attach the <code>.3mf</code> project file you sliced
-— spoolbook reads the plate thumbnail straight out of it, and if the file has more than one
-build-plate layout you can pick which one this Print corresponds to.</li>
+<li>Go to <strong>Filaments → List</strong>, find or add the filament type on your roll (brand + material +
+variant + color).</li>
+<li>Go to <strong>Filaments → Spools</strong>, create a Spool against that Filament — this represents the
+physical roll.</li>
+<li>Go to <strong>Print workflow → Profiles</strong>, create a Print Profile for it — start from a Bambu Studio
+default preset, import a sliced <code>.3mf</code> or your own saved Bambu Studio <code>.json</code> preset, or fill
+it in by hand.</li>
+<li>Send the print (see above) — spoolbook creates the Print record automatically and locks in the
+exact settings from the Profile version you used, so editing the Profile later (e.g. a seasonal
+temperature tweak) never rewrites what a past print recorded. <strong>Print workflow → Prints</strong> shows
+the full history; each entry is read-only, including the plate thumbnail spoolbook read out of
+the project at send time.</li>
 </ol> </article>  </main> <footer class="mt-24 border-t border-border"> <p class="mx-auto max-w-4xl px-6 py-8 text-sm text-muted-foreground">
 spoolbook is a personal project — single-user, no account needed.
 </p> </footer> </body></html>
