@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
 use std::path::{Path, PathBuf};
 
-const MAX_BYTES: usize = 100 * 1024 * 1024;
+pub(crate) const MAX_BYTES: usize = 100 * 1024 * 1024;
 
 pub fn router() -> Router<SqlitePool> {
     Router::new()

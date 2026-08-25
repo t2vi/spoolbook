@@ -115,6 +115,22 @@ async fn upload_the_same_bytes_twice_dedupes_to_one_project() {
     assert_eq!(all.as_array().unwrap().len(), 1);
 }
 
+// Reproduces the real bug: axum's DefaultBodyLimit defaults to 2MB, well below a real sliced
+// .3mf's size (embedded gcode + thumbnails). Padding fake_3mf_bytes() past that line without a
+// real DefaultBodyLimit::max() layer on the app used to fail the multipart read entirely with a
+// generic "Couldn't read the uploaded file." error, not just reject cleanly.
+#[tokio::test]
+async fn upload_accepts_a_file_larger_than_axums_default_2mb_body_limit() {
+    let pool = test_pool().await;
+    let mut bytes = fake_3mf_bytes();
+    bytes.extend(std::iter::repeat_n(0u8, 3 * 1024 * 1024));
+
+    let (status, body) = post_multipart(&pool, "/api/projects/upload", "file", "big.3mf", &bytes).await;
+
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(body["ok"], true);
+}
+
 #[tokio::test]
 async fn upload_rejects_a_request_with_no_file_field() {
     let pool = test_pool().await;

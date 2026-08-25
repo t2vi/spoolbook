@@ -23,6 +23,7 @@ pub mod settings;
 pub mod spools;
 pub mod weather;
 
+use axum::extract::DefaultBodyLimit;
 use axum::{Extension, Router};
 use sqlx::SqlitePool;
 
@@ -57,5 +58,9 @@ pub fn app_with_camera(pool: SqlitePool, live_status: printer_mqtt::LiveStatusSt
         .merge(google_oauth::router())
         .layer(Extension(live_status))
         .layer(Extension(camera_registry))
+        // axum's own default (2MB) is well below a real sliced .3mf's size (embedded gcode +
+        // thumbnails) -- match project_upload's own MAX_BYTES, the limit it already validates
+        // import-url downloads against but this layer is what actually enforces it for uploads.
+        .layer(DefaultBodyLimit::max(project_upload::MAX_BYTES))
         .with_state(pool)
 }
