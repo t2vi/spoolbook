@@ -30,7 +30,7 @@ fn verify_password(password: &str, hash: &str) -> bool {
     Argon2::default().verify_password(password.as_bytes(), &parsed).is_ok()
 }
 
-fn generate_session_token() -> String {
+pub(crate) fn generate_session_token() -> String {
     let mut bytes = [0u8; 32];
     OsRng.fill_bytes(&mut bytes);
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -43,13 +43,13 @@ fn get_cookie<'h>(headers: &'h HeaderMap, name: &str) -> Option<&'h str> {
     })
 }
 
-fn set_cookie_header(value: &str) -> HeaderMap {
+pub(crate) fn set_cookie_header(value: &str) -> HeaderMap {
     let mut headers = HeaderMap::new();
     headers.insert(header::SET_COOKIE, format!("{COOKIE_NAME}={value}; Path=/; HttpOnly; SameSite=Lax").parse().unwrap());
     headers
 }
 
-async fn create_session(pool: &SqlitePool, user_id: i64) -> String {
+pub(crate) async fn create_session(pool: &SqlitePool, user_id: i64) -> String {
     let token = generate_session_token();
     let expires_at = (Utc::now() + Duration::days(SESSION_TTL_DAYS)).to_rfc3339();
     sqlx::query("INSERT INTO sessions (id, user_id, expires_at) VALUES (?1, ?2, ?3)")
@@ -65,7 +65,7 @@ async fn create_session(pool: &SqlitePool, user_id: i64) -> String {
 // Shared by the me() handler and the Editor extractor so "am I logged in" and "am I allowed to
 // mutate" can never disagree. Admin-only role check is real code now (not a placeholder) even
 // though every user is Admin today -- adding a second role later is a data change, not a rewrite.
-async fn current_user_id(pool: &SqlitePool, headers: &HeaderMap) -> Option<i64> {
+pub(crate) async fn current_user_id(pool: &SqlitePool, headers: &HeaderMap) -> Option<i64> {
     let token = get_cookie(headers, COOKIE_NAME)?;
     let row = sqlx::query_as::<_, (i64, String, String)>(
         "SELECT sessions.user_id, sessions.expires_at, users.role FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.id = ?1",
@@ -191,7 +191,12 @@ async fn logout(axum::extract::State(pool): axum::extract::State<SqlitePool>, he
 }
 
 async fn me(axum::extract::State(pool): axum::extract::State<SqlitePool>, headers: HeaderMap) -> Json<serde_json::Value> {
-    Json(json!({ "authenticated": current_user_id(&pool, &headers).await.is_some() }))
+    let Some(user_id) = current_user_id(&pool, &headers).await else {
+        return Json(json!({ "authenticated": false }));
+    };
+    let google_sub: Option<String> =
+        sqlx::query_scalar("SELECT google_sub FROM users WHERE id = ?1").bind(user_id).fetch_one(&pool).await.expect("query failed");
+    Json(json!({ "authenticated": true, "googleLinked": google_sub.is_some() }))
 }
 
 #[derive(Deserialize)]

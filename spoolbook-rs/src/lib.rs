@@ -5,6 +5,7 @@ pub mod colors;
 pub mod dashboard;
 pub mod filament_catalog_sync;
 pub mod filaments;
+pub mod google_oauth;
 pub mod jpeg_frame_extractor;
 pub mod printers;
 pub mod prints;
@@ -52,6 +53,7 @@ pub fn app_with_camera(pool: SqlitePool, live_status: printer_mqtt::LiveStatusSt
         .merge(send_print::router())
         .merge(printer_camera::router())
         .merge(auth::router())
+        .merge(google_oauth::router())
         .layer(Extension(live_status))
         .layer(Extension(camera_registry))
         .with_state(pool)

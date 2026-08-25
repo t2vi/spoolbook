@@ -53,7 +53,7 @@ async function requestAllowingError<T>(path: string, init: RequestInit): Promise
 	return (await res.json()) as T;
 }
 
-export const me = () => request<{ authenticated: boolean }>('/api/me');
+export const me = () => request<{ authenticated: boolean; googleLinked?: boolean }>('/api/me');
 export const setupStatus = () => request<{ needsSetup: boolean }>('/api/setup-status');
 // requestAllowingError, not request: a wrong password / already-set-up is a normal error response
 // the caller needs to show inline, not throw-and-catch.
@@ -68,6 +68,27 @@ export const updateAccount = (currentPassword: string, newUsername?: string, new
 		body: JSON.stringify({ currentPassword, newUsername, newPassword })
 	});
 export const getDashboard = () => request<DashboardSnapshot>('/api/dashboard');
+
+// Google OAuth is link-only for this release: an already-authenticated admin links their
+// account from Settings, and /login's "Sign in with Google" only works if that link already
+// exists. Login/link itself is a plain browser navigation (redirects to Google, then back to
+// the callback), not a fetch -- callers just set window.location.href to '/api/auth/google/login'.
+export const googleStatus = () => request<{ configured: boolean }>('/api/auth/google/status');
+
+export interface GoogleConfig {
+	clientId: string | null;
+	redirectUri: string | null;
+	secretSet: boolean;
+}
+
+export const getGoogleConfig = () => request<GoogleConfig>('/api/auth/google/config');
+// Blank clientSecret means "keep the existing one" -- the GET endpoint never returns it.
+export const saveGoogleConfig = (clientId: string, clientSecret: string, redirectUri: string) =>
+	requestAllowingError<ApiResult>('/api/auth/google/config', {
+		method: 'PUT',
+		body: JSON.stringify({ clientId, clientSecret, redirectUri })
+	});
+export const unlinkGoogle = () => request<ApiResult>('/api/auth/google', { method: 'DELETE' });
 
 export interface SettingsResponse {
 	additionalFilamentSourceUrls: string | null;

@@ -2,19 +2,54 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
-	import { getSettings, me, saveSettings, updateAccount } from '$lib/api/client';
+	import {
+		getGoogleConfig,
+		getSettings,
+		me,
+		saveGoogleConfig,
+		saveSettings,
+		unlinkGoogle,
+		updateAccount
+	} from '$lib/api/client';
 
 	let additionalUrls = $state('');
 	let catalogUrl = $state('');
 	let lastSyncedAt = $state<string | null>(null);
 	let savedMessage = $state<string | null>(null);
 	let authenticated = $state(false);
+	let googleLinked = $state(false);
 
 	let currentPassword = $state('');
 	let newUsername = $state('');
 	let newPassword = $state('');
 	let accountError = $state<string | null>(null);
 	let accountSavedMessage = $state<string | null>(null);
+
+	let googleClientId = $state('');
+	let googleClientSecret = $state('');
+	let googleRedirectUri = $state('');
+	let googleSecretSet = $state(false);
+	let googleConfigError = $state<string | null>(null);
+	let googleConfigSavedMessage = $state<string | null>(null);
+
+	async function saveGoogleSso() {
+		googleConfigError = null;
+		googleConfigSavedMessage = null;
+		const result = await saveGoogleConfig(googleClientId.trim(), googleClientSecret, googleRedirectUri.trim());
+		if (!result.ok) {
+			googleConfigError = 'Save failed.';
+			return;
+		}
+		googleClientSecret = '';
+		googleConfigSavedMessage = 'Saved.';
+		const config = await getGoogleConfig();
+		googleSecretSet = config.secretSet;
+	}
+
+	async function disconnectGoogle() {
+		await unlinkGoogle();
+		googleLinked = false;
+	}
 
 	async function save() {
 		await saveSettings(additionalUrls.trim() || null);
@@ -41,7 +76,17 @@
 			catalogUrl = s.catalogUrl;
 			lastSyncedAt = s.lastFilamentSyncAt;
 		});
-		me().then((r) => (authenticated = r.authenticated));
+		me().then((r) => {
+			authenticated = r.authenticated;
+			googleLinked = r.googleLinked ?? false;
+			if (authenticated) {
+				getGoogleConfig().then((c) => {
+					googleClientId = c.clientId ?? '';
+					googleRedirectUri = c.redirectUri ?? '';
+					googleSecretSet = c.secretSet;
+				});
+			}
+		});
 	});
 </script>
 
@@ -93,6 +138,36 @@
 						{#if accountSavedMessage}<span class="ml-3 text-sm text-muted-foreground">{accountSavedMessage}</span>{/if}
 					</div>
 				</div>
+			</div>
+
+			<div class="border-t pt-6">
+				<h2 class="mb-1 text-lg font-semibold">Single sign-on</h2>
+				<p class="mb-3 text-xs text-muted-foreground">
+					Register your own OAuth client in the
+					<a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer" class="underline">Google Cloud Console</a>
+					and paste its details here to let admins sign in with Google instead of a password.
+				</p>
+				<div class="space-y-3">
+					<Input bind:value={googleClientId} placeholder="Client ID" />
+					<Input type="password" bind:value={googleClientSecret} placeholder={googleSecretSet ? 'Client secret (set — leave blank to keep it)' : 'Client secret'} />
+					<Input bind:value={googleRedirectUri} placeholder="Redirect URI (e.g. https://spoolbook.example.com/api/auth/google/callback)" />
+					{#if googleConfigError}<p class="text-sm text-destructive">{googleConfigError}</p>{/if}
+					<div>
+						<Button onclick={saveGoogleSso} disabled={!googleClientId || !googleRedirectUri}>Save</Button>
+						{#if googleConfigSavedMessage}<span class="ml-3 text-sm text-muted-foreground">{googleConfigSavedMessage}</span>{/if}
+					</div>
+				</div>
+
+				{#if googleSecretSet}
+					<div class="mt-4 border-t pt-4">
+						{#if googleLinked}
+							<p class="mb-2 text-sm text-muted-foreground">Your account is linked to Google.</p>
+							<Button variant="outline" onclick={disconnectGoogle}>Unlink Google account</Button>
+						{:else}
+							<Button variant="outline" onclick={() => (window.location.href = '/api/auth/google/login')}>Link Google account</Button>
+						{/if}
+					</div>
+				{/if}
 			</div>
 		{/if}
 	</div>
