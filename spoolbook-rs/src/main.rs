@@ -1,6 +1,7 @@
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::str::FromStr;
 use tokio::net::TcpListener;
+use tower_http::services::{ServeDir, ServeFile};
 
 #[tokio::main]
 async fn main() {
@@ -17,7 +18,20 @@ async fn main() {
     spoolbook_rs::printer_mqtt::spawn_all(pool.clone(), live_status.clone()).await;
     let camera_registry = spoolbook_rs::printer_camera::new_registry();
 
-    let app = spoolbook_rs::app_with_camera(pool, live_status, camera_registry);
+    // spoolbook-web-svelte's static build (adapter-static output) — a sibling checkout
+    // directory, not copied in, so a frontend rebuild doesn't require rebuilding this crate.
+    // SPOOLBOOK_STATIC_ROOT overrides this for Docker/LXC packaging, where the build output
+    // won't sit next to this crate on disk the way it does in a plain repo pull. Anything not
+    // matched by an API route above falls back to index.html, letting SvelteKit's own
+    // client-side router take over (e.g. /prints/edit/5) — plain `.fallback()`, not
+    // `.not_found_service()`, so the response is 200 (matching MapFallbackToFile's own status),
+    // not a 404 the browser would treat as a failed navigation.
+    let static_root =
+        std::env::var("SPOOLBOOK_STATIC_ROOT").unwrap_or_else(|_| "../spoolbook-web-svelte/build".to_string());
+    let index_path = std::path::Path::new(&static_root).join("index.html");
+    let serve_static = ServeDir::new(&static_root).fallback(ServeFile::new(index_path));
+
+    let app = spoolbook_rs::app_with_camera(pool, live_status, camera_registry).fallback_service(serve_static);
 
     let listener = TcpListener::bind("127.0.0.1:8090").await.unwrap();
     println!("spoolbook-rs listening on http://127.0.0.1:8090");
