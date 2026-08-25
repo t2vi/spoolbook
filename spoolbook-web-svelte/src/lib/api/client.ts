@@ -224,11 +224,18 @@ export const getProfileFieldSpec = (profileId: number | null) =>
 	request<ProfileFieldSpecResponse>(`/api/profiles/field-spec${profileId === null ? '' : `?profileId=${profileId}`}`);
 export const deleteProfile = (id: number) => request<ApiResult>(`/api/profiles/${id}`, { method: 'DELETE' });
 
-export async function importProfileFrom3mf(file: File): Promise<ImportResult> {
+// Accepts a sliced .3mf or a raw Bambu Studio preset export (.json) -- format is auto-detected
+// server-side (github.com/t2vi/spoolbook/issues/99).
+export async function importProfilePreset(file: File): Promise<ImportResult> {
 	const form = new FormData();
 	form.append('file', file);
-	return request<ImportResult>('/api/profiles/import-3mf', { method: 'POST', body: form });
+	return request<ImportResult>('/api/profiles/import-preset', { method: 'POST', body: form });
 }
+
+// Bambu Studio's bundled system filament preset library (via slicer-service, see bambu_import.rs).
+export const listSystemPresets = () => request<{ ok: boolean; names: string[] }>('/api/profiles/system-presets');
+export const resolveSystemPreset = (name: string) =>
+	request<ImportResult>('/api/profiles/system-presets/resolve', json({ name }));
 
 export interface ProfileInput {
 	name: string;

@@ -233,6 +233,8 @@ async fn inventory_returns_total_and_profiles() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["total"], 1);
     assert_eq!(body["profiles"].as_array().unwrap().len(), 1);
+    assert_eq!(body["profiles"][0]["filament"]["brand"], "Bambu Lab", "{body:?}");
+    assert_eq!(body["profiles"][0]["filament"]["material"], "PLA");
 }
 
 #[tokio::test]
