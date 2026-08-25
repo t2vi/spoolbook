@@ -60,6 +60,8 @@
 	let selectedFailureModes = $state<Set<FailureMode>>(new Set());
 	let amsHumidityPct = $state('');
 	let actualRoomTempC = $state('');
+	let ambientTempC = $state<number | null>(null);
+	let ambientHumidityPct = $state<number | null>(null);
 	let cleanBuildPlate = $state(false);
 	let notes = $state('');
 	let errorMessage = $state<string | null>(null);
@@ -83,6 +85,8 @@
 			selectedFailureModes = new Set(existing.failureModes.map((f) => f.mode));
 			amsHumidityPct = existing.amsHumidityPct?.toString() ?? '';
 			actualRoomTempC = existing.actualRoomTempC?.toString() ?? '';
+			ambientTempC = existing.ambientTempC;
+			ambientHumidityPct = existing.ambientHumidityPct;
 			cleanBuildPlate = existing.cleanBuildPlate ?? false;
 			notes = existing.notes ?? '';
 
@@ -354,6 +358,12 @@
 		<label class="text-sm font-medium" for="room-temp">Actual room temp (°C)</label>
 		<input id="room-temp" type="number" step="0.1" bind:value={actualRoomTempC} class="rounded-md border px-3 py-2 text-sm" />
 	</div>
+	{#if ambientTempC !== null || ambientHumidityPct !== null}
+		<div class="flex flex-col gap-1 text-sm text-muted-foreground">
+			<span class="text-sm font-medium text-foreground">Ambient weather (auto-fetched)</span>
+			<span>{ambientTempC !== null ? `${ambientTempC.toFixed(1)}°C` : '—'} / {ambientHumidityPct !== null ? `${ambientHumidityPct.toFixed(0)}% humidity` : '—'}</span>
+		</div>
+	{/if}
 	<div>
 		<label class="flex items-center gap-2 text-sm">
 			<Checkbox bind:checked={cleanBuildPlate} />

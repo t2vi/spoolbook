@@ -94,11 +94,13 @@ export interface SettingsResponse {
 	additionalFilamentSourceUrls: string | null;
 	lastFilamentSyncAt: string | null;
 	catalogUrl: string;
+	latitude: number | null;
+	longitude: number | null;
 }
 
 export const getSettings = () => request<SettingsResponse>('/api/settings');
-export const saveSettings = (additionalFilamentSourceUrls: string | null) =>
-	request<{ ok: boolean }>('/api/settings', json({ additionalFilamentSourceUrls }));
+export const saveSettings = (additionalFilamentSourceUrls: string | null, latitude: number | null, longitude: number | null) =>
+	request<{ ok: boolean }>('/api/settings', json({ additionalFilamentSourceUrls, latitude, longitude }));
 
 export interface PrinterInput {
 	name: string;

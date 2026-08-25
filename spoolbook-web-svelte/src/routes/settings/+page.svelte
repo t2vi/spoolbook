@@ -16,6 +16,8 @@
 	let catalogUrl = $state('');
 	let lastSyncedAt = $state<string | null>(null);
 	let savedMessage = $state<string | null>(null);
+	let latitude = $state('');
+	let longitude = $state('');
 	let authenticated = $state(false);
 	let googleLinked = $state(false);
 
@@ -52,7 +54,9 @@
 	}
 
 	async function save() {
-		await saveSettings(additionalUrls.trim() || null);
+		const lat = latitude.trim() ? Number(latitude) : null;
+		const lon = longitude.trim() ? Number(longitude) : null;
+		await saveSettings(additionalUrls.trim() || null, lat, lon);
 		savedMessage = 'Saved.';
 	}
 
@@ -75,6 +79,8 @@
 			additionalUrls = s.additionalFilamentSourceUrls ?? '';
 			catalogUrl = s.catalogUrl;
 			lastSyncedAt = s.lastFilamentSyncAt;
+			latitude = s.latitude?.toString() ?? '';
+			longitude = s.longitude?.toString() ?? '';
 		});
 		me().then((r) => {
 			authenticated = r.authenticated;
@@ -108,6 +114,15 @@
 			<label class="text-sm font-medium" for="urls">Additional filament catalog sources</label>
 			<p class="text-xs text-muted-foreground">One URL per line. Fetched alongside the default catalog on every sync.</p>
 			<Textarea id="urls" bind:value={additionalUrls} disabled={!authenticated} placeholder="https://example.com/my-catalog.json" class="min-h-[100px] font-mono text-sm" />
+		</div>
+
+		<div class="flex flex-col gap-1">
+			<label class="text-sm font-medium" for="lat">Location</label>
+			<p class="text-xs text-muted-foreground">Latitude/longitude of this printer's location, used to auto-fetch ambient weather for each print.</p>
+			<div class="flex gap-2">
+				<Input id="lat" bind:value={latitude} disabled={!authenticated} placeholder="Latitude, e.g. -37.8136" />
+				<Input bind:value={longitude} disabled={!authenticated} placeholder="Longitude, e.g. 144.9631" />
+			</div>
 		</div>
 
 		{#if authenticated}
