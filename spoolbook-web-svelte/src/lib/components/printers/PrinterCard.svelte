@@ -277,7 +277,10 @@
 				{#each recentPrints as p (p.id)}
 					<li class="flex items-center justify-between px-3 py-2 text-sm">
 						<span>{new Date(p.startedAt).toLocaleString()} — {p.spool?.filament?.brand} {p.spool?.filament?.material}</span>
-						<Badge class={statusBadgeClass(p.status)}>{p.status}</Badge>
+						<div class="flex items-center gap-3">
+							<Badge class={statusBadgeClass(p.status)}>{p.status}</Badge>
+							<a href="/prints/{p.id}" class="text-muted-foreground hover:text-foreground hover:underline">View</a>
+						</div>
 					</li>
 				{/each}
 			</ul>
