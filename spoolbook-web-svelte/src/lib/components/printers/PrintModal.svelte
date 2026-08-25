@@ -135,6 +135,8 @@
 		uploadError = null;
 		try {
 			await applyUploadResult(await uploadProject(file));
+		} catch (err) {
+			uploadError = `Import failed: ${err instanceof Error ? err.message : 'unknown error'}`;
 		} finally {
 			uploading = false;
 		}
