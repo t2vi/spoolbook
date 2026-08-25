@@ -123,7 +123,11 @@ pub fn router() -> Router<SqlitePool> {
         .route("/api/projects/{id}/plates", get(plates))
         .route("/api/projects/version-candidate", get(version_candidate))
         .route("/api/projects/{id}/link-version", axum::routing::post(link_version))
-        .route("/api/projects/{id}", axum::routing::put(rename).delete(delete))
+        .route("/api/projects/{id}", get(get_one).put(rename).delete(delete))
+}
+
+async fn get_one(State(pool): State<SqlitePool>, Path(id): Path<i64>) -> Result<Json<Project>, StatusCode> {
+    get_by_id(&pool, id).await.map(Json).ok_or(StatusCode::NOT_FOUND)
 }
 
 async fn has_prints(pool: &SqlitePool, project_id: i64) -> bool {

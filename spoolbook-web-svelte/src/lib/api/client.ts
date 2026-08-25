@@ -154,6 +154,7 @@ export function subscribeToPrinterLiveStatus(
 }
 
 export const listProjects = () => request<Project[]>('/api/projects');
+export const getProject = (id: number) => request<Project>(`/api/projects/${id}`);
 export const getProjectPlates = (projectId: number) => request<ProjectPlate[]>(`/api/projects/${projectId}/plates`);
 
 export async function uploadProject(file: File): Promise<ProjectResult> {
@@ -172,6 +173,7 @@ export const resliceProject = (projectId: number, profileId: number) =>
 	request<ReslicingResult>(`/api/projects/${projectId}/reslice`, json({ profileId }));
 
 export const listRecentPrints = (printerId: number) => request<Print[]>(`/api/prints?printerId=${printerId}`);
+export const listPrintsForProject = (projectId: number) => request<Print[]>(`/api/prints?projectId=${projectId}`);
 export const recommendProfile = (projectId: number) =>
 	request<PrintProfile | null>(`/api/prints/recommend-profile?projectId=${projectId}`);
 

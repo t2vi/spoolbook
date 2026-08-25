@@ -1,8 +1,11 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
+	import * as Card from '$lib/components/ui/card/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import * as InputGroup from '$lib/components/ui/input-group/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
+	import { Separator } from '$lib/components/ui/separator/index.js';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import Picker from '$lib/components/picker.svelte';
@@ -149,95 +152,125 @@
 
 <h1 class="mb-6 text-2xl font-semibold">{id === null ? 'Add profile' : 'Edit profile'}</h1>
 
-<div class="max-w-3xl space-y-4">
+<div class="max-w-3xl space-y-6">
 	{#if id === null}
-		<div class="flex flex-col gap-1">
-			<Label for="filament-select">Filament</Label>
-			<FilamentPicker id="filament-select" bind:value={selectedFilamentId} {filaments} />
-		</div>
+		<Card.Root>
+			<Card.Header>
+				<Card.Title>Start from</Card.Title>
+				<Card.Description>Pick a filament, then optionally seed the fields below from a Bambu Studio default or an imported preset.</Card.Description>
+			</Card.Header>
+			<Card.Content class="space-y-4">
+				<div class="flex flex-col gap-1">
+					<Label for="filament-select">Filament</Label>
+					<FilamentPicker id="filament-select" bind:value={selectedFilamentId} {filaments} />
+				</div>
 
-		<div class="flex flex-col gap-1">
-			<Label for="system-preset">Start from a Bambu Studio default (optional)</Label>
-			<SearchablePicker
-				id="system-preset"
-				bind:value={selectedSystemPreset}
-				options={systemPresetOptions}
-				placeholder="-- pick a Bambu default --"
-				searchPlaceholder="Search Bambu presets…"
-				onValueChange={onSystemPresetSelected}
-			/>
-		</div>
+				<div class="flex flex-col gap-1">
+					<Label for="system-preset">Start from a Bambu Studio default (optional)</Label>
+					<SearchablePicker
+						id="system-preset"
+						bind:value={selectedSystemPreset}
+						options={systemPresetOptions}
+						placeholder="-- pick a Bambu default --"
+						searchPlaceholder="Search Bambu presets…"
+						onValueChange={onSystemPresetSelected}
+					/>
+				</div>
 
-		<div class="flex flex-col gap-1">
-			<Label for="import-preset">Or import a sliced .3mf / Bambu Studio preset (.json) (optional)</Label>
-			<input
-				id="import-preset"
-				type="file"
-				accept=".3mf,.json"
-				onchange={onFileSelected}
-				class="text-sm file:mr-3 file:cursor-pointer file:rounded-md file:border file:bg-background file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-accent"
-			/>
-			{#if bambuPresetsDirHint}
-				<p class="text-xs text-muted-foreground">
-					Your saved presets live in <code class="rounded bg-muted px-1 py-0.5">{bambuPresetsDirHint}</code> — the browser remembers this
-					folder after your first visit here.
-				</p>
-			{/if}
-			{#if importMessage}<p class="text-sm text-muted-foreground">{importMessage}</p>{/if}
-		</div>
+				<div class="flex flex-col gap-1">
+					<Label for="import-preset">Or import a sliced .3mf / Bambu Studio preset (.json) (optional)</Label>
+					<input
+						id="import-preset"
+						type="file"
+						accept=".3mf,.json"
+						onchange={onFileSelected}
+						class="text-sm file:mr-3 file:cursor-pointer file:rounded-md file:border file:bg-background file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-accent"
+					/>
+					{#if bambuPresetsDirHint}
+						<p class="text-xs text-muted-foreground">
+							Your saved presets live in <code class="rounded bg-muted px-1 py-0.5">{bambuPresetsDirHint}</code> — the browser remembers this
+							folder after your first visit here.
+						</p>
+					{/if}
+					{#if importMessage}<p class="text-sm text-muted-foreground">{importMessage}</p>{/if}
+				</div>
+			</Card.Content>
+		</Card.Root>
 	{/if}
 
-	<div class="flex flex-col gap-1">
-		<Label for="name">Name</Label>
-		<Input id="name" bind:value={name} />
-	</div>
+	<Card.Root>
+		<Card.Content class="pt-6">
+			<div class="flex flex-col gap-1">
+				<Label for="name">Name</Label>
+				<Input id="name" bind:value={name} />
+			</div>
+		</Card.Content>
+	</Card.Root>
 
-	<Tabs.Root bind:value={activeTab}>
-		<Tabs.List>
-			{#each tabs as tab (tab.title)}
-				<Tabs.Trigger value={tab.title}>{tab.title}</Tabs.Trigger>
-			{/each}
-		</Tabs.List>
+	<Card.Root>
+		<Card.Content class="pt-6">
+			<Tabs.Root bind:value={activeTab}>
+				<Tabs.List class="mb-4">
+					{#each tabs as tab (tab.title)}
+						<Tabs.Trigger value={tab.title}>{tab.title}</Tabs.Trigger>
+					{/each}
+				</Tabs.List>
 
-		{#each tabs as tab (tab.title)}
-			<Tabs.Content value={tab.title} class="space-y-4">
-				{#each tab.sections as section (section.title)}
-					<div>
-						<h3 class="mb-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase">{section.title}</h3>
-						<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-							{#each section.fields.filter(showRow) as field (field.name)}
-								<div class="flex flex-col gap-1">
-									<Label for="field-{field.name}">{field.label}{field.unit ? ` (${field.unit})` : ''}</Label>
-									{#if field.isBool}
-										<Checkbox
-											id="field-{field.name}"
-											checked={field.value === 'true'}
-											onCheckedChange={(v: boolean) => (field.value = v ? 'true' : 'false')}
-											class="self-start"
-										/>
-									{:else if field.isEnum}
-										<Picker
-											id="field-{field.name}"
-											bind:value={field.value}
-											options={[{ value: '', label: '--' }, ...(field.options ?? []).map((opt) => ({ value: opt, label: opt }))]}
-										/>
-									{:else if field.isTextArea}
-										<Textarea id="field-{field.name}" bind:value={field.value} rows={4} class="font-mono text-xs" />
-									{:else}
-										<Input id="field-{field.name}" bind:value={field.value} />
-									{/if}
+				{#each tabs as tab (tab.title)}
+					<Tabs.Content value={tab.title} class="min-h-[420px] space-y-6">
+						{#each tab.sections as section, i (section.title)}
+							{#if i > 0}<Separator />{/if}
+							<div>
+								<h3 class="mb-3 text-sm font-semibold tracking-wide text-muted-foreground uppercase">{section.title}</h3>
+								<div class="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+									{#each section.fields.filter(showRow) as field (field.name)}
+										{#if field.isBool}
+											<div class="flex items-center gap-2">
+												<Checkbox
+													id="field-{field.name}"
+													checked={field.value === 'true'}
+													onCheckedChange={(v: boolean) => (field.value = v ? 'true' : 'false')}
+												/>
+												<Label for="field-{field.name}">{field.label}{field.unit ? ` (${field.unit})` : ''}</Label>
+											</div>
+										{:else}
+											<div class="flex flex-col gap-1">
+												<Label for="field-{field.name}">
+													{field.label}{field.unit && (field.isEnum || field.isTextArea) ? ` (${field.unit})` : ''}
+												</Label>
+												{#if field.isEnum}
+													<Picker
+														id="field-{field.name}"
+														bind:value={field.value}
+														options={[{ value: '', label: '--' }, ...(field.options ?? []).map((opt) => ({ value: opt, label: opt }))]}
+													/>
+												{:else if field.isTextArea}
+													<Textarea id="field-{field.name}" bind:value={field.value} rows={4} class="font-mono text-xs" />
+												{:else if field.unit}
+													<InputGroup.Root>
+														<InputGroup.Input id="field-{field.name}" bind:value={field.value} />
+														<InputGroup.Addon align="inline-end">
+															<InputGroup.Text>{field.unit}</InputGroup.Text>
+														</InputGroup.Addon>
+													</InputGroup.Root>
+												{:else}
+													<Input id="field-{field.name}" bind:value={field.value} />
+												{/if}
+											</div>
+										{/if}
+									{/each}
 								</div>
-							{/each}
-						</div>
-					</div>
+							</div>
+						{/each}
+					</Tabs.Content>
 				{/each}
-			</Tabs.Content>
-		{/each}
-	</Tabs.Root>
+			</Tabs.Root>
+		</Card.Content>
+	</Card.Root>
 
 	{#if errorMessage}<p class="text-sm text-destructive">{errorMessage}</p>{/if}
 
-	<form onsubmit={save} class="flex items-center gap-3 pt-2">
+	<form onsubmit={save} class="flex items-center gap-3">
 		<Button type="submit">Save</Button>
 		<a href="/profiles" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
 	</form>

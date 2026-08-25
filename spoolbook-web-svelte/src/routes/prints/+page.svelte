@@ -7,6 +7,7 @@
 	import { deletePrint, me, searchPrints } from '$lib/api/client';
 	import type { PrintInventoryResult, PrintStatus } from '$lib/api/types';
 	import { page } from '$app/state';
+	import { formatDate } from '$lib/utils.js';
 
 	let printerId = $derived(page.url.searchParams.get('printerId') ? Number(page.url.searchParams.get('printerId')) : null);
 
@@ -110,7 +111,7 @@
 				{:else}
 					{#each result.prints as p (p.id)}
 						<Table.Row>
-							<Table.Cell>{new Date(p.startedAt).toLocaleString()}</Table.Cell>
+							<Table.Cell>{formatDate(p.startedAt)}</Table.Cell>
 							<Table.Cell>{p.spool?.filament?.brand} {p.spool?.filament?.material} — {p.spool?.filament?.color}</Table.Cell>
 							<Table.Cell>{p.profile?.name}</Table.Cell>
 							<Table.Cell>{p.printer?.name}</Table.Cell>

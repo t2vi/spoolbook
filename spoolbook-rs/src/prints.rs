@@ -222,16 +222,21 @@ async fn attach_job(
 struct ListQuery {
     #[serde(rename = "printerId")]
     printer_id: Option<i64>,
+    #[serde(rename = "projectId")]
+    project_id: Option<i64>,
 }
 
 async fn list(State(pool): State<SqlitePool>, Query(q): Query<ListQuery>) -> Json<Vec<Print>> {
-    let sql = match q.printer_id {
-        Some(_) => "SELECT * FROM prints WHERE printer_id = ?1 ORDER BY started_at DESC LIMIT 5",
-        None => "SELECT * FROM prints ORDER BY started_at DESC",
+    let sql = match (q.printer_id, q.project_id) {
+        (Some(_), _) => "SELECT * FROM prints WHERE printer_id = ?1 ORDER BY started_at DESC LIMIT 5",
+        (None, Some(_)) => "SELECT * FROM prints WHERE project_id = ?1 ORDER BY started_at DESC",
+        (None, None) => "SELECT * FROM prints ORDER BY started_at DESC",
     };
     let mut query = sqlx::query_as::<_, PrintRow>(sql);
     if let Some(printer_id) = q.printer_id {
         query = query.bind(printer_id);
+    } else if let Some(project_id) = q.project_id {
+        query = query.bind(project_id);
     }
     let rows = query.fetch_all(&pool).await.expect("query failed");
 

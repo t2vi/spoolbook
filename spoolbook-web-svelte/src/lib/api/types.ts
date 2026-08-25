@@ -188,7 +188,12 @@ export interface Project {
 	id: number;
 	fileName: string;
 	filePath: string;
+	lastKnownWriteTimeUtc: string;
+	lastKnownFileSizeBytes: number;
 	meshHash: string | null;
+	previousVersionProjectId: number | null;
+	versionNumber: number;
+	isCurrentVersion: boolean;
 }
 
 export interface ProjectPlate {
