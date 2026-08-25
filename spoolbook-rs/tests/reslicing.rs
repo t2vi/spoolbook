@@ -227,3 +227,34 @@ async fn reslice_patches_settings_and_saves_the_sliced_result() {
 
     std::fs::remove_file(fixture_path).ok();
 }
+
+// A real slicer's output is never byte-identical run to run, so project_upload's content-hash
+// dedup alone can never catch "re-sliced the same project again" -- reslicing.rs chains the
+// result onto the source project instead (docs/adr/0031's sibling gap, filed as issue #114).
+#[tokio::test]
+async fn reslice_chains_the_result_as_a_new_version_of_the_source_project() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    unsafe { std::env::set_var("RESLICE_SERVICE_URL", spawn_echo_slicer_service().await) };
+
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let profile_id = seed_profile(&pool, filament_id, 260).await;
+    let fixture_path = write_fixture_3mf("spoolbook_rs_test_reslice_chains_version.3mf");
+    let project_id = seed_project(&pool, fixture_path.to_str().unwrap()).await;
+
+    let (status, body) = send(&pool, "POST", &format!("/api/projects/{project_id}/reslice"), Some(json!({ "profileId": profile_id }))).await;
+
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    let new_id = body["project"]["id"].as_i64().unwrap();
+    assert_ne!(new_id, project_id, "reslicing patches settings, so the output is never byte-identical to the source");
+    assert_eq!(body["project"]["previousVersionProjectId"], project_id);
+    assert_eq!(body["project"]["versionNumber"], 2);
+    assert_eq!(body["project"]["isCurrentVersion"], true);
+
+    let (_, all) = send(&pool, "GET", "/api/projects", None).await;
+    let ids: Vec<i64> = all.as_array().unwrap().iter().map(|p| p["id"].as_i64().unwrap()).collect();
+    assert!(!ids.contains(&project_id), "superseded source shouldn't clutter the list: {ids:?}");
+    assert!(ids.contains(&new_id), "{ids:?}");
+
+    std::fs::remove_file(fixture_path).ok();
+}

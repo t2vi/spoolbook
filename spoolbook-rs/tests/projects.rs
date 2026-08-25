@@ -190,11 +190,121 @@ async fn link_version_marks_previous_superseded_and_bumps_version_number() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["ok"], true);
 
+    // list() only returns current versions (link_version_hides_superseded_versions_from_list
+    // covers that behavior) -- check the superseded row's own state directly.
+    let old_is_current = sqlx::query_scalar::<_, i64>("SELECT is_current_version FROM projects WHERE id = ?1")
+        .bind(old_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(old_is_current, 0);
+
     let (_, all) = send(&pool, "GET", "/api/projects", None).await;
-    let old = all.as_array().unwrap().iter().find(|p| p["id"] == old_id).unwrap();
     let new = all.as_array().unwrap().iter().find(|p| p["id"] == new_id).unwrap();
-    assert_eq!(old["isCurrentVersion"], false);
     assert_eq!(new["isCurrentVersion"], true);
     assert_eq!(new["versionNumber"], 2);
     assert_eq!(new["previousVersionProjectId"], old_id);
+}
+
+#[tokio::test]
+async fn link_version_hides_superseded_versions_from_list() {
+    let pool = test_pool().await;
+    let old_id = seed_project(&pool, "/tmp/v1.3mf", None).await;
+    let new_id = seed_project(&pool, "/tmp/v2.3mf", None).await;
+
+    send(&pool, "POST", &format!("/api/projects/{new_id}/link-version"), Some(serde_json::json!({ "previousVersionProjectId": old_id }))).await;
+
+    let (_, all) = send(&pool, "GET", "/api/projects", None).await;
+    let ids: Vec<i64> = all.as_array().unwrap().iter().map(|p| p["id"].as_i64().unwrap()).collect();
+    assert!(!ids.contains(&old_id), "{ids:?}");
+    assert!(ids.contains(&new_id), "{ids:?}");
+}
+
+#[tokio::test]
+async fn rename_updates_the_display_name() {
+    let pool = test_pool().await;
+    let id = seed_project(&pool, "/tmp/rename_me.3mf", None).await;
+
+    let (status, body) = send(&pool, "PUT", &format!("/api/projects/{id}"), Some(serde_json::json!({ "fileName": "Better name.3mf" }))).await;
+
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(body["project"]["fileName"], "Better name.3mf");
+
+    let (_, all) = send(&pool, "GET", "/api/projects", None).await;
+    assert_eq!(all[0]["fileName"], "Better name.3mf");
+}
+
+#[tokio::test]
+async fn rename_rejects_a_blank_name() {
+    let pool = test_pool().await;
+    let id = seed_project(&pool, "/tmp/blank.3mf", None).await;
+
+    let (status, body) = send(&pool, "PUT", &format!("/api/projects/{id}"), Some(serde_json::json!({ "fileName": "   " }))).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+}
+
+#[tokio::test]
+async fn rename_returns_not_found_for_missing_project() {
+    let pool = test_pool().await;
+    let (status, _) = send(&pool, "PUT", "/api/projects/999", Some(serde_json::json!({ "fileName": "x.3mf" }))).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn delete_removes_an_unreferenced_project() {
+    let pool = test_pool().await;
+    let id = seed_project(&pool, "/tmp/deleteme.3mf", None).await;
+
+    let (status, body) = send(&pool, "DELETE", &format!("/api/projects/{id}"), None).await;
+
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    let (_, all) = send(&pool, "GET", "/api/projects", None).await;
+    assert_eq!(all.as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
+async fn delete_returns_not_found_for_missing_project() {
+    let pool = test_pool().await;
+    let (status, _) = send(&pool, "DELETE", "/api/projects/999", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+async fn seed_print_referencing_project(pool: &sqlx::SqlitePool, project_id: i64) {
+    let filament_id =
+        sqlx::query_scalar::<_, i64>("INSERT INTO filaments (brand, material, variant, color) VALUES ('Bambu Lab', 'PLA', 'Basic', 'Black') RETURNING id")
+            .fetch_one(pool)
+            .await
+            .unwrap();
+    let spool_id = sqlx::query_scalar::<_, i64>("INSERT INTO spools (filament_id) VALUES (?1) RETURNING id").bind(filament_id).fetch_one(pool).await.unwrap();
+    let profile_id = sqlx::query_scalar::<_, i64>("INSERT INTO print_profiles (filament_id, name, nozzle_temp_c) VALUES (?1, 'Standard', 230) RETURNING id")
+        .bind(filament_id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    let printer_id = sqlx::query_scalar::<_, i64>("INSERT INTO printers (name) VALUES ('Garage P2S') RETURNING id").fetch_one(pool).await.unwrap();
+
+    sqlx::query("INSERT INTO prints (profile_id, spool_id, printer_id, project_id, started_at, status) VALUES (?1, ?2, ?3, ?4, '2026-01-01T00:00:00Z', 'InProgress')")
+        .bind(profile_id)
+        .bind(spool_id)
+        .bind(printer_id)
+        .bind(project_id)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn delete_rejects_a_project_referenced_by_a_print() {
+    let pool = test_pool().await;
+    let id = seed_project(&pool, "/tmp/inuse.3mf", None).await;
+    seed_print_referencing_project(&pool, id).await;
+
+    let (status, body) = send(&pool, "DELETE", &format!("/api/projects/{id}"), None).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    assert_eq!(body["error"], "has_prints");
+
+    let (_, all) = send(&pool, "GET", "/api/projects", None).await;
+    assert_eq!(all.as_array().unwrap().len(), 1);
 }
