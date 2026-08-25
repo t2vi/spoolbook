@@ -4,8 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'Spoolbook.Web/**'
-      - 'Spoolbook.Desktop/**'
+      - 'spoolbook-rs/**'
       - 'spoolbook-web-svelte/**'
       - 'slicer-service/**'
       - 'docker-compose.yml'
@@ -72,7 +71,7 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Build spoolbook image
-        run: docker build -t spoolbook:ci -f Spoolbook.Web/Dockerfile .
+        run: docker build -t spoolbook:ci -f spoolbook-rs/Dockerfile .
 
       - name: Run spoolbook container
         run: docker run -d --name spoolbook -p 5070:5070 -e SPOOLBOOK_ADMIN_PASSWORD=ci-test spoolbook:ci

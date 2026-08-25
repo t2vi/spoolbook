@@ -7,12 +7,11 @@ Personal FDM 3D-printing notebook. Tracks filaments, spools, print profiles, and
 prints, so print outcomes can be correlated against settings and ambient conditions over time —
 built for one person, dealing with Melbourne's weather swings affecting print quality.
 
-Self-hosted web app: SvelteKit frontend (`spoolbook-web-svelte`) + a .NET JSON API
-(`Spoolbook.Web`), local SQLite via EF Core. Single user, shared-secret auth on mutating routes
-only (reads stay open), no network dependency beyond two read-only public HTTP calls (weather
-lookup, filament catalog sync — see below). The original Avalonia desktop app is retired —
-`Spoolbook.Desktop` is now just the shared domain/data layer the web API builds on, not something
-you run directly.
+Self-hosted web app: SvelteKit frontend (`spoolbook-web-svelte`) + a Rust JSON API
+(`spoolbook-rs`, axum + sqlx), local SQLite. Single user, shared-secret auth on mutating routes
+only (reads stay open), no network dependency beyond a read-only public HTTP call for the
+filament catalog sync (see below). The original Avalonia desktop app and the .NET/EF Core backend
+it grew into are both retired.
 
 ## Domain
 
@@ -38,11 +37,9 @@ you run directly.
   locked from further in-place edits, so "which settings I used" stays accurate without
   duplicating data. Records status (success/failed/partial), the Printer used, optionally a
   Project (the `.3mf` that was actually sliced), start/end time, notes, and ambient conditions —
-  temp/humidity auto-fetched from Open-Meteo for the print window (fixed Melbourne coordinates, no
-  location picker — single-user app), or entered manually. Printer telemetry (Bambu Lab P2S) is
-  manual start/end entry for now — Bambu has no official local API, only unofficial/
-  reverse-engineered LAN MQTT, which isn't worth building against yet; automatic logging is
-  deferred.
+  currently entered manually; `ambient_temp_c`/`ambient_humidity_pct` auto-fetch from Open-Meteo
+  existed in the retired .NET backend but hasn't been ported to `spoolbook-rs` yet. Printer
+  telemetry (Bambu Lab P2S) is live via LAN MQTT — status, AMS, camera feed.
 
 ## Features
 
@@ -85,19 +82,18 @@ service layout if you'd rather run it by hand.
 
 ```sh
 cd spoolbook-web-svelte && npm run dev   # frontend, port 5173, proxies /api to :5070
-dotnet run --project Spoolbook.Web       # backend, port 5070
+cd spoolbook-rs && cargo run             # backend, port 5070, sqlite at spoolbook-rs/dev.db
 ```
 
 ## Testing
 
 ```sh
-dotnet test
+cd spoolbook-rs && cargo test
 ```
 
 ## Releasing
 
-See the "Release checklist" in `CLAUDE.md`. Version bump lives in
-`Spoolbook.Desktop/Spoolbook.Desktop.csproj`. `.github/workflows/docker-images.yml` builds and
+See the "Release checklist" in `CLAUDE.md`. `.github/workflows/docker-images.yml` builds and
 pushes the `spoolbook`/`spoolbook-slicer` images to GHCR (gated on a real slicing smoke test
 against the latest-stable BambuStudio). Release notes go in `docs/releases/`, indexed by
 `CHANGELOG.md`. `.github/workflows/tests.yml` runs the test suite on every push/PR.

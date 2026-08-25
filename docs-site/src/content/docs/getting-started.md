@@ -30,7 +30,7 @@ the background (throttled to once every 24 hours).
 
 ```
 cd spoolbook-web-svelte && npm run build   # frontend, needed once before first run
-dotnet run --project Spoolbook.Web -c Release
+cd ../spoolbook-rs && cargo run --release
 ```
 
 Set `SPOOLBOOK_ADMIN_PASSWORD` first. Useful for development or if you'd rather not use Docker;

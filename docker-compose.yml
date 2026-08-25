@@ -7,7 +7,7 @@ services:
     image: ghcr.io/t2vi/spoolbook:latest
     build:
       context: .
-      dockerfile: Spoolbook.Web/Dockerfile
+      dockerfile: spoolbook-rs/Dockerfile
     ports:
       - "5070:5070"
     environment:
