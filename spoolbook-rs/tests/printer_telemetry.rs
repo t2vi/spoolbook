@@ -3,6 +3,37 @@ use spoolbook_rs::printer_telemetry::{attach_job_to_print, end_job, find_match_f
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::str::FromStr;
 
+// ARCHIVE_URL is process-global env state; every test in this file that touches it holds this
+// lock for its whole request sequence (tests in other files run in separate processes,
+// unaffected) -- same pattern tests/reslicing.rs and tests/google_oauth.rs already use.
+static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+async fn spawn_mock_archive() -> String {
+    use axum::Json;
+    use tokio::net::TcpListener;
+
+    async fn archive() -> Json<serde_json::Value> {
+        Json(serde_json::json!({
+            "hourly": {
+                "time": ["2026-01-01T07:00", "2026-01-01T08:00", "2026-01-01T09:00"],
+                "temperature_2m": [20.0, 22.0, 24.0],
+                "relative_humidity_2m": [50.0, 52.0, 54.0]
+            }
+        }))
+    }
+
+    let app = axum::Router::new().route("/v1/archive", axum::routing::get(archive));
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    format!("http://{addr}/v1/archive")
+}
+
+async fn set_location(pool: &sqlx::SqlitePool, latitude: f64, longitude: f64) {
+    sqlx::query("INSERT INTO app_settings (id) VALUES (1)").execute(pool).await.ok();
+    sqlx::query("UPDATE app_settings SET latitude = ?1, longitude = ?2 WHERE id = 1").bind(latitude).bind(longitude).execute(pool).await.unwrap();
+}
+
 async fn test_pool() -> sqlx::SqlitePool {
     let options = SqliteConnectOptions::from_str("sqlite::memory:").unwrap().foreign_keys(true);
     let pool = SqlitePoolOptions::new().max_connections(1).connect_with(options).await.unwrap();
@@ -175,6 +206,43 @@ async fn end_job_sets_attached_print_status_from_terminal_gcode_state() {
         assert_eq!(status, expected_status, "gcode_state {gcode_state:?}");
         assert!(ended_at.is_some());
     }
+}
+
+#[tokio::test]
+async fn end_job_fetches_and_stores_ambient_weather_when_location_is_configured() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let pool = test_pool().await;
+    unsafe { std::env::set_var("ARCHIVE_URL", spawn_mock_archive().await) };
+    set_location(&pool, -37.8, 144.9).await;
+    let printer_id = seed_printer(&pool).await;
+    let (profile_id, spool_id) = seed_print_deps(&pool).await;
+    let print_id = seed_in_progress_print(&pool, profile_id, spool_id, printer_id, "2026-01-01T07:00:00Z").await;
+    record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
+
+    end_job(&pool, printer_id, "job-1", Some("FINISH"), Some("2026-01-01T09:00:00Z")).await;
+
+    let (temp, humidity, source): (Option<f64>, Option<f64>, Option<String>) =
+        sqlx::query_as("SELECT ambient_temp_c, ambient_humidity_pct, ambient_source FROM prints WHERE id = ?1").bind(print_id).fetch_one(&pool).await.unwrap();
+    assert!((temp.unwrap() - 22.0).abs() < 0.01, "{temp:?}");
+    assert!((humidity.unwrap() - 52.0).abs() < 0.01, "{humidity:?}");
+    assert_eq!(source.as_deref(), Some("open-meteo"));
+}
+
+#[tokio::test]
+async fn end_job_leaves_ambient_weather_null_when_no_location_is_configured() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let pool = test_pool().await;
+    let printer_id = seed_printer(&pool).await;
+    let (profile_id, spool_id) = seed_print_deps(&pool).await;
+    let print_id = seed_in_progress_print(&pool, profile_id, spool_id, printer_id, "2026-01-01T07:00:00Z").await;
+    record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
+
+    end_job(&pool, printer_id, "job-1", Some("FINISH"), Some("2026-01-01T09:00:00Z")).await;
+
+    let (temp, source): (Option<f64>, Option<String>) =
+        sqlx::query_as("SELECT ambient_temp_c, ambient_source FROM prints WHERE id = ?1").bind(print_id).fetch_one(&pool).await.unwrap();
+    assert_eq!(temp, None);
+    assert_eq!(source, None);
 }
 
 #[tokio::test]

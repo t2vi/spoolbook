@@ -29,6 +29,9 @@ struct PrintRow {
     ams_humidity_pct: Option<i64>,
     actual_room_temp_c: Option<f64>,
     clean_build_plate: Option<bool>,
+    ambient_temp_c: Option<f64>,
+    ambient_humidity_pct: Option<f64>,
+    ambient_source: Option<String>,
 }
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -64,6 +67,11 @@ pub struct Print {
     ams_humidity_pct: Option<i64>,
     actual_room_temp_c: Option<f64>,
     clean_build_plate: Option<bool>,
+    // Auto-fetched only (issues/94) -- never client-writable, so these have no counterpart in
+    // PrintInputBody.
+    ambient_temp_c: Option<f64>,
+    ambient_humidity_pct: Option<f64>,
+    ambient_source: Option<String>,
     failure_modes: Vec<PrintFailureModeEntry>,
 }
 
@@ -113,6 +121,9 @@ async fn hydrate(pool: &SqlitePool, row: PrintRow) -> Print {
         ams_humidity_pct: row.ams_humidity_pct,
         actual_room_temp_c: row.actual_room_temp_c,
         clean_build_plate: row.clean_build_plate,
+        ambient_temp_c: row.ambient_temp_c,
+        ambient_humidity_pct: row.ambient_humidity_pct,
+        ambient_source: row.ambient_source,
         failure_modes,
     }
 }

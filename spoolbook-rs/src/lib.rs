@@ -21,6 +21,7 @@ pub mod reslicing;
 pub mod send_print;
 pub mod settings;
 pub mod spools;
+pub mod weather;
 
 use axum::{Extension, Router};
 use sqlx::SqlitePool;

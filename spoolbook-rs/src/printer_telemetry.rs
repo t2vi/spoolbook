@@ -137,6 +137,8 @@ pub async fn end_job(pool: &SqlitePool, printer_id: i64, external_job_id: &str, 
         .execute(pool)
         .await
         .expect("update failed");
+
+        crate::weather::fetch_and_store(pool, print_id).await;
     }
 }
 

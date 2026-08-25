@@ -160,6 +160,10 @@ export interface Print {
 	amsHumidityPct: number | null;
 	actualRoomTempC: number | null;
 	cleanBuildPlate: boolean | null;
+	// Auto-fetched from Open-Meteo when the print ends (issues/94) -- never manually entered.
+	ambientTempC: number | null;
+	ambientHumidityPct: number | null;
+	ambientSource: string | null;
 	failureModes: PrintFailureModeEntry[];
 }
 
