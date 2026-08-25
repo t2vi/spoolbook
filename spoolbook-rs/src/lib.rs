@@ -24,7 +24,8 @@ pub mod spools;
 pub mod weather;
 
 use axum::extract::DefaultBodyLimit;
-use axum::{Extension, Router};
+use axum::routing::get;
+use axum::{Extension, Json, Router};
 use sqlx::SqlitePool;
 
 // Tests (and anything else that doesn't care about live MQTT status) get a fresh, empty store —
@@ -56,6 +57,7 @@ pub fn app_with_camera(pool: SqlitePool, live_status: printer_mqtt::LiveStatusSt
         .merge(printer_camera::router())
         .merge(auth::router())
         .merge(google_oauth::router())
+        .route("/api/version", get(|| async { Json(serde_json::json!({ "version": env!("CARGO_PKG_VERSION") })) }))
         .layer(Extension(live_status))
         .layer(Extension(camera_registry))
         // axum's own default (2MB) is well below a real sliced .3mf's size (embedded gcode +

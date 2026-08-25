@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { deleteSpool, listSpools, me } from '$lib/api/client';
 	import type { Spool } from '$lib/api/types';
@@ -45,30 +47,32 @@
 
 	<div class="mb-4">
 		{#if authenticated}
-			<a href="/spools/new" class="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/80">
-				+ Add spool
-			</a>
+			<Button href="/spools/new">+ Add spool</Button>
 		{:else}
 			<a href="/login" class="text-sm text-muted-foreground underline">Sign in to edit</a>
 		{/if}
 	</div>
 
-	{#if spools === null}
-		<p class="text-muted-foreground">Loading…</p>
-	{:else}
-		<div class="rounded-lg border bg-card shadow-sm">
-			<Table.Root>
-				<Table.Header>
-					<Table.Row>
-						<Table.Head>Filament</Table.Head>
-						<Table.Head>Lot code</Table.Head>
-						<Table.Head>Purchased</Table.Head>
-						<Table.Head>Opened</Table.Head>
-						<Table.Head>Emptied</Table.Head>
-						<Table.Head></Table.Head>
-					</Table.Row>
-				</Table.Header>
-				<Table.Body>
+	<div class="rounded-lg border bg-card shadow-sm">
+		<Table.Root>
+			<Table.Header>
+				<Table.Row>
+					<Table.Head>Filament</Table.Head>
+					<Table.Head>Lot code</Table.Head>
+					<Table.Head>Purchased</Table.Head>
+					<Table.Head>Opened</Table.Head>
+					<Table.Head>Emptied</Table.Head>
+					<Table.Head></Table.Head>
+				</Table.Row>
+			</Table.Header>
+			<Table.Body>
+				{#if spools === null}
+					{#each Array(5) as _, i (i)}
+						<Table.Row>
+							<Table.Cell colspan={6}><Skeleton class="h-5 w-full" /></Table.Cell>
+						</Table.Row>
+					{/each}
+				{:else}
 					{#each spools as s (s.id)}
 						<Table.Row>
 							<Table.Cell>{s.filament?.brand} {s.filament?.material} {s.filament?.variant ?? ''} — {s.filament?.color}</Table.Cell>
@@ -84,10 +88,10 @@
 							</Table.Cell>
 						</Table.Row>
 					{/each}
-				</Table.Body>
-			</Table.Root>
-		</div>
-	{/if}
+				{/if}
+			</Table.Body>
+		</Table.Root>
+	</div>
 
 	{#if errorMessage}<p class="mt-3 text-sm text-destructive">{errorMessage}</p>{/if}
 </div>

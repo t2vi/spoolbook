@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { deleteProfile, me, searchProfiles } from '$lib/api/client';
 	import type { ProfileInventoryResult } from '$lib/api/types';
@@ -40,29 +42,31 @@
 
 	<div class="mb-4">
 		{#if authenticated}
-			<a href="/profiles/new" class="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/80">
-				+ Add profile
-			</a>
+			<Button href="/profiles/new">+ Add profile</Button>
 		{:else}
 			<a href="/login" class="text-sm text-muted-foreground underline">Sign in to edit</a>
 		{/if}
 	</div>
 
-	{#if result === null}
-		<p class="text-muted-foreground">Loading…</p>
-	{:else}
-		<div class="rounded-lg border bg-card shadow-sm">
-			<Table.Root>
-				<Table.Header>
-					<Table.Row>
-						<Table.Head>Name</Table.Head>
-						<Table.Head>Filament</Table.Head>
-						<Table.Head>Nozzle temp</Table.Head>
-						<Table.Head>Source</Table.Head>
-						<Table.Head></Table.Head>
-					</Table.Row>
-				</Table.Header>
-				<Table.Body>
+	<div class="rounded-lg border bg-card shadow-sm">
+		<Table.Root>
+			<Table.Header>
+				<Table.Row>
+					<Table.Head>Name</Table.Head>
+					<Table.Head>Filament</Table.Head>
+					<Table.Head>Nozzle temp</Table.Head>
+					<Table.Head>Source</Table.Head>
+					<Table.Head></Table.Head>
+				</Table.Row>
+			</Table.Header>
+			<Table.Body>
+				{#if result === null}
+					{#each Array(5) as _, i (i)}
+						<Table.Row>
+							<Table.Cell colspan={5}><Skeleton class="h-5 w-full" /></Table.Cell>
+						</Table.Row>
+					{/each}
+				{:else}
 					{#each result.profiles as p (p.id)}
 						<Table.Row>
 							<Table.Cell>{p.name}</Table.Cell>
@@ -77,10 +81,10 @@
 							</Table.Cell>
 						</Table.Row>
 					{/each}
-				</Table.Body>
-			</Table.Root>
-		</div>
-	{/if}
+				{/if}
+			</Table.Body>
+		</Table.Root>
+	</div>
 
 	{#if errorMessage}<p class="mt-3 text-sm text-destructive">{errorMessage}</p>{/if}
 </div>

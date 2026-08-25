@@ -194,9 +194,9 @@ async fn me(axum::extract::State(pool): axum::extract::State<SqlitePool>, header
     let Some(user_id) = current_user_id(&pool, &headers).await else {
         return Json(json!({ "authenticated": false }));
     };
-    let google_sub: Option<String> =
-        sqlx::query_scalar("SELECT google_sub FROM users WHERE id = ?1").bind(user_id).fetch_one(&pool).await.expect("query failed");
-    Json(json!({ "authenticated": true, "googleLinked": google_sub.is_some() }))
+    let (username, google_sub): (String, Option<String>) =
+        sqlx::query_as("SELECT username, google_sub FROM users WHERE id = ?1").bind(user_id).fetch_one(&pool).await.expect("query failed");
+    Json(json!({ "authenticated": true, "username": username, "googleLinked": google_sub.is_some() }))
 }
 
 #[derive(Deserialize)]

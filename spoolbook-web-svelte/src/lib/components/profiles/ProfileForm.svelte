@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
+	import * as Tabs from '$lib/components/ui/tabs/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import Picker from '$lib/components/picker.svelte';
 	import FilamentPicker from '$lib/components/filament-picker.svelte';
@@ -71,12 +73,6 @@
 			activeTab = tabs[0]?.title ?? '';
 		})();
 	});
-
-	function tabButtonClass(title: string) {
-		return title === activeTab
-			? 'rounded-t-md border border-b-0 bg-card px-3 py-1.5 text-sm font-medium text-foreground'
-			: 'rounded-t-md border border-b-0 border-transparent px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground';
-	}
 
 	// ShowRow/BoolValue are computed live off the current value in the Blazor original
 	// (ProfileFieldEntry is a mutable ObservableObject) — recomputed inline here for the same
@@ -196,45 +192,48 @@
 		<Input id="name" bind:value={name} />
 	</div>
 
-	<div class="flex flex-wrap gap-1 border-b">
-		{#each tabs as tab (tab.title)}
-			<button type="button" onclick={() => (activeTab = tab.title)} class={tabButtonClass(tab.title)}>{tab.title}</button>
-		{/each}
-	</div>
+	<Tabs.Root bind:value={activeTab}>
+		<Tabs.List>
+			{#each tabs as tab (tab.title)}
+				<Tabs.Trigger value={tab.title}>{tab.title}</Tabs.Trigger>
+			{/each}
+		</Tabs.List>
 
-	{#each tabs.filter((t) => t.title === activeTab) as tab (tab.title)}
-		{#each tab.sections as section (section.title)}
-			<div class="pt-2">
-				<h3 class="mb-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase">{section.title}</h3>
-				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-					{#each section.fields.filter(showRow) as field (field.name)}
-						<div class="flex flex-col gap-1">
-							<Label for="field-{field.name}">{field.label}{field.unit ? ` (${field.unit})` : ''}</Label>
-							{#if field.isBool}
-								<input
-									id="field-{field.name}"
-									type="checkbox"
-									checked={field.value === 'true'}
-									onchange={(e) => (field.value = e.currentTarget.checked ? 'true' : 'false')}
-									class="h-4 w-4 self-start"
-								/>
-							{:else if field.isEnum}
-								<Picker
-									id="field-{field.name}"
-									bind:value={field.value}
-									options={[{ value: '', label: '--' }, ...(field.options ?? []).map((opt) => ({ value: opt, label: opt }))]}
-								/>
-							{:else if field.isTextArea}
-								<Textarea id="field-{field.name}" bind:value={field.value} rows={4} class="font-mono text-xs" />
-							{:else}
-								<Input id="field-{field.name}" bind:value={field.value} />
-							{/if}
+		{#each tabs as tab (tab.title)}
+			<Tabs.Content value={tab.title} class="space-y-4">
+				{#each tab.sections as section (section.title)}
+					<div>
+						<h3 class="mb-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase">{section.title}</h3>
+						<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+							{#each section.fields.filter(showRow) as field (field.name)}
+								<div class="flex flex-col gap-1">
+									<Label for="field-{field.name}">{field.label}{field.unit ? ` (${field.unit})` : ''}</Label>
+									{#if field.isBool}
+										<Checkbox
+											id="field-{field.name}"
+											checked={field.value === 'true'}
+											onCheckedChange={(v: boolean) => (field.value = v ? 'true' : 'false')}
+											class="self-start"
+										/>
+									{:else if field.isEnum}
+										<Picker
+											id="field-{field.name}"
+											bind:value={field.value}
+											options={[{ value: '', label: '--' }, ...(field.options ?? []).map((opt) => ({ value: opt, label: opt }))]}
+										/>
+									{:else if field.isTextArea}
+										<Textarea id="field-{field.name}" bind:value={field.value} rows={4} class="font-mono text-xs" />
+									{:else}
+										<Input id="field-{field.name}" bind:value={field.value} />
+									{/if}
+								</div>
+							{/each}
 						</div>
-					{/each}
-				</div>
-			</div>
+					</div>
+				{/each}
+			</Tabs.Content>
 		{/each}
-	{/each}
+	</Tabs.Root>
 
 	{#if errorMessage}<p class="text-sm text-destructive">{errorMessage}</p>{/if}
 
