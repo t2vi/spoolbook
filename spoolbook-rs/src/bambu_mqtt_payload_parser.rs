@@ -25,6 +25,12 @@ pub struct AmsTrayReading {
 #[serde(rename_all = "camelCase")]
 pub struct AmsUnitReading {
     pub unit_id: String,
+    // Bambu's newer AMS units (AMS 2 Pro, AMS-HT -- what a P2S ships with) have a real hygrometer
+    // and report it as humidity_raw, a genuine relative-humidity percentage. Older/original AMS
+    // units only have humidity: a coarse 1-5 index driving the physical unit's LED ring, not a
+    // percentage. Confirmed against maziggy/bambuddy (backend/app/services/printer_manager.py),
+    // which resolves the same way: prefer humidity_raw, humidity is index-only fallback.
+    pub humidity_pct: Option<i64>,
     pub humidity_level: Option<i64>,
     pub trays: Vec<AmsTrayReading>,
 }
@@ -95,7 +101,8 @@ fn parse_ams_unit(unit_el: &Value) -> AmsUnitReading {
 
     AmsUnitReading {
         unit_id: unit_el.get("id").and_then(Value::as_str).unwrap_or("").to_string(),
-        // Bambu reports humidity as a string digit, not a number, unlike most other fields here.
+        // Both reported as string digits, not numbers, unlike most other fields here.
+        humidity_pct: unit_el.get("humidity_raw").and_then(Value::as_str).and_then(|s| s.parse().ok()),
         humidity_level: unit_el.get("humidity").and_then(Value::as_str).and_then(|s| s.parse().ok()),
         trays,
     }

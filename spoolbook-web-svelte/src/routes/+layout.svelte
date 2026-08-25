@@ -1,6 +1,7 @@
 <script lang="ts">
 	import './layout.css';
-	import favicon from '$lib/assets/favicon.svg';
+	import favicon from '$lib/assets/spoolbook.ico';
+	import spoolbookIcon from '$lib/assets/spoolbook-icon.png';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { getVersion, me, logout, setupStatus } from '$lib/api/client';
@@ -68,9 +69,7 @@
 	<Sidebar.Root>
 		<Sidebar.Header>
 			<div class="flex items-center gap-2 px-2 py-1.5">
-				<div class="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-					<CylinderIcon class="size-4" />
-				</div>
+				<img src={spoolbookIcon} alt="Spoolbook" class="size-8 rounded-lg" />
 				<div class="flex flex-col leading-tight">
 					<span class="text-sm font-semibold">Spoolbook</span>
 					<span class="text-xs text-sidebar-foreground/70">{version ? `v${version}` : ''}</span>
