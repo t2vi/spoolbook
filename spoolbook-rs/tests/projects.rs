@@ -102,6 +102,27 @@ async fn list_returns_seeded_projects() {
 }
 
 #[tokio::test]
+async fn get_one_returns_the_project() {
+    let pool = test_pool().await;
+    let id = seed_project(&pool, "/tmp/detail.3mf", None).await;
+
+    let (status, body) = send(&pool, "GET", &format!("/api/projects/{id}"), None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["id"], id);
+    assert_eq!(body["filePath"], "/tmp/detail.3mf");
+}
+
+#[tokio::test]
+async fn get_one_returns_not_found_for_missing_project() {
+    let pool = test_pool().await;
+
+    let (status, _) = send(&pool, "GET", "/api/projects/999", None).await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn plates_reads_real_zip_and_returns_plate_metadata_and_thumbnail() {
     let pool = test_pool().await;
     let fixture_path = write_fixture_3mf("spoolbook_rs_test_projects_plates.3mf");

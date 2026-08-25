@@ -209,6 +209,25 @@ async fn list_filters_by_printer_and_caps_at_five() {
 }
 
 #[tokio::test]
+async fn list_filters_by_project_id() {
+    let pool = test_pool().await;
+    let f = seed_all(&pool).await;
+    let project_id = seed_project(&pool).await;
+    let mut body = print_body(&f, "Success", vec![]);
+    body["input"]["projectId"] = json!(project_id);
+    body["input"]["projectPlaterId"] = json!("1");
+    send(&pool, "POST", "/api/prints", Some(body)).await;
+    send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
+
+    let (status, body) = send(&pool, "GET", &format!("/api/prints?projectId={project_id}"), None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    let prints = body.as_array().unwrap();
+    assert_eq!(prints.len(), 1, "excludes the print with no project");
+    assert_eq!(prints[0]["projectId"], project_id);
+}
+
+#[tokio::test]
 async fn list_without_printer_id_returns_everything() {
     let pool = test_pool().await;
     let f = seed_all(&pool).await;

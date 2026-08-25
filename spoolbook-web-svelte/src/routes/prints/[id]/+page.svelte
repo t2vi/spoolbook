@@ -7,6 +7,7 @@
 	import { getPrint, getProjectPlates } from '$lib/api/client';
 	import type { FailureMode, Print, ProjectPlate } from '$lib/api/types';
 	import { page } from '$app/state';
+	import { formatDateTime } from '$lib/utils.js';
 
 	const FAILURE_MODE_LABELS: Record<FailureMode, string> = {
 		Stringing: 'Stringing',
@@ -106,11 +107,11 @@
 					</div>
 					<div class="flex flex-col gap-1">
 						<span class="font-medium text-muted-foreground">Started</span>
-						<span>{new Date(print.startedAt).toLocaleString()}</span>
+						<span>{formatDateTime(print.startedAt)}</span>
 					</div>
 					<div class="flex flex-col gap-1">
 						<span class="font-medium text-muted-foreground">Ended</span>
-						<span>{print.endedAt ? new Date(print.endedAt).toLocaleString() : '—'}</span>
+						<span>{print.endedAt ? formatDateTime(print.endedAt) : '—'}</span>
 					</div>
 					<div class="flex flex-col gap-1">
 						<span class="font-medium text-muted-foreground">AMS humidity</span>

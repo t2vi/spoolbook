@@ -4,6 +4,7 @@
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { deleteSpool, listSpools, me } from '$lib/api/client';
 	import type { Spool } from '$lib/api/types';
+	import { formatDate } from '$lib/utils.js';
 
 	let spools = $state<Spool[] | null>(null);
 	let errorMessage = $state<string | null>(null);
@@ -77,9 +78,9 @@
 						<Table.Row>
 							<Table.Cell>{s.filament?.brand} {s.filament?.material} {s.filament?.variant ?? ''} — {s.filament?.color}</Table.Cell>
 							<Table.Cell>{s.lotCode}</Table.Cell>
-							<Table.Cell>{s.purchasedAt}</Table.Cell>
-							<Table.Cell>{s.openedAt}</Table.Cell>
-							<Table.Cell>{s.emptiedAt}</Table.Cell>
+							<Table.Cell>{s.purchasedAt ? formatDate(s.purchasedAt) : ''}</Table.Cell>
+							<Table.Cell>{s.openedAt ? formatDate(s.openedAt) : ''}</Table.Cell>
+							<Table.Cell>{s.emptiedAt ? formatDate(s.emptiedAt) : ''}</Table.Cell>
 							<Table.Cell>
 								{#if authenticated}
 									<a href="/spools/edit/{s.id}" class="hover:underline">Edit</a>

@@ -3,6 +3,7 @@
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { getDashboard } from '$lib/api/client';
 	import type { DashboardSnapshot } from '$lib/api/types';
+	import { formatDateTime } from '$lib/utils.js';
 
 	let snapshot = $state<DashboardSnapshot | null>(null);
 
@@ -62,7 +63,7 @@
 
 		{#if metrics.lastFilamentSyncAt}
 			<p class="mb-6 text-sm text-muted-foreground">
-				Filament catalog last synced {new Date(metrics.lastFilamentSyncAt).toLocaleString()}
+				Filament catalog last synced {formatDateTime(metrics.lastFilamentSyncAt)}
 			</p>
 		{/if}
 

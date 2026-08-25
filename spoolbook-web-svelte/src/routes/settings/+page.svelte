@@ -5,6 +5,7 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
+	import { formatDateTime } from '$lib/utils.js';
 	import {
 		getGoogleConfig,
 		getSettings,
@@ -139,7 +140,7 @@
 					<div class="flex justify-between py-1"><span>Default catalog source</span><span class="text-foreground">{catalogUrl}</span></div>
 					<div class="flex justify-between py-1">
 						<span>Catalog last synced</span>
-						<span class="text-foreground">{lastSyncedAt ? new Date(lastSyncedAt).toLocaleString() : 'never'}</span>
+						<span class="text-foreground">{lastSyncedAt ? formatDateTime(lastSyncedAt) : 'never'}</span>
 					</div>
 				</div>
 			</Card.Content>

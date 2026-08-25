@@ -156,13 +156,16 @@
 										<button type="button" class="text-sm text-muted-foreground hover:text-foreground" onclick={() => (renamingId = null)}>Cancel</button>
 									</div>
 								{:else}
-									{p.fileName}
+									<a href="/projects/{p.id}" class="hover:underline">{p.fileName}</a>
 								{/if}
 							</Table.Cell>
 							<Table.Cell>
-								{#if authenticated && renamingId !== p.id}
-									<button type="button" onclick={() => startRename(p)} class="hover:underline">Rename</button>
-									<button type="button" onclick={() => askDelete(p.id)} class="ml-3 text-destructive hover:underline">Delete</button>
+								{#if renamingId !== p.id}
+									<a href="/projects/{p.id}" class="hover:underline">View</a>
+									{#if authenticated}
+										<button type="button" onclick={() => startRename(p)} class="ml-3 hover:underline">Rename</button>
+										<button type="button" onclick={() => askDelete(p.id)} class="ml-3 text-destructive hover:underline">Delete</button>
+									{/if}
 								{/if}
 							</Table.Cell>
 						</Table.Row>

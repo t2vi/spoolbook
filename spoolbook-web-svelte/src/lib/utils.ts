@@ -13,6 +13,17 @@ export function numOrNull(v: number | string): number | null {
 	return typeof v === 'number' ? v : Number(v);
 }
 
+// App-wide date format: "MMM DD, YYYY" (e.g. "Aug 25, 2026"). Table cells use formatDate alone
+// (no time, per the tables convention); other date+time displays append formatTime's output.
+export function formatDate(iso: string): string {
+	return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+}
+
+export function formatDateTime(iso: string): string {
+	const time = new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+	return `${formatDate(iso)}, ${time}`;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type WithoutChild<T> = T extends { child?: any } ? Omit<T, "child"> : T;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
