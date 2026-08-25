@@ -57,6 +57,11 @@ pub(crate) fn compute_mesh_hash(file_path: &str) -> Option<String> {
     Some(hex(&Sha256::digest(&buf)))
 }
 
+pub(crate) async fn get_by_id(pool: &SqlitePool, id: i64) -> Option<Project> {
+    let sql = format!("SELECT {COLUMNS} FROM projects WHERE id = ?1");
+    sqlx::query_as::<_, Project>(&sql).bind(id).fetch_optional(pool).await.expect("query failed")
+}
+
 pub(crate) struct UpsertResult {
     pub project: Project,
     pub created: bool,
@@ -118,10 +123,69 @@ pub fn router() -> Router<SqlitePool> {
         .route("/api/projects/{id}/plates", get(plates))
         .route("/api/projects/version-candidate", get(version_candidate))
         .route("/api/projects/{id}/link-version", axum::routing::post(link_version))
+        .route("/api/projects/{id}", axum::routing::put(rename).delete(delete))
 }
 
+async fn has_prints(pool: &SqlitePool, project_id: i64) -> bool {
+    sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM prints WHERE project_id = ?1")
+        .bind(project_id)
+        .fetch_one(pool)
+        .await
+        .expect("query failed")
+        > 0
+}
+
+#[derive(Deserialize)]
+struct RenameInput {
+    #[serde(rename = "fileName")]
+    file_name: String,
+}
+
+async fn rename(
+    _editor: crate::auth::Editor,
+    State(pool): State<SqlitePool>,
+    Path(id): Path<i64>,
+    Json(input): Json<RenameInput>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    if input.file_name.trim().is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "Name is required" })));
+    }
+
+    let result = sqlx::query("UPDATE projects SET file_name = ?1 WHERE id = ?2")
+        .bind(input.file_name.trim())
+        .bind(id)
+        .execute(&pool)
+        .await
+        .expect("update failed");
+
+    if result.rows_affected() == 0 {
+        return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "ok": false, "error": "not_found" })));
+    }
+
+    let project = get_by_id(&pool, id).await;
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true, "project": project })))
+}
+
+async fn delete(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Path(id): Path<i64>) -> (StatusCode, Json<serde_json::Value>) {
+    if has_prints(&pool, id).await {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "has_prints" })));
+    }
+
+    let result = sqlx::query("DELETE FROM projects WHERE id = ?1").bind(id).execute(&pool).await.expect("delete failed");
+
+    if result.rows_affected() == 0 {
+        return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "ok": false, "error": "not_found" })));
+    }
+
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true })))
+}
+
+// Current versions only — every re-slice used to create a permanent, unlinked row (mesh_hash was
+// computed but nothing chained on it), so this list piled up with near-duplicates from repeated
+// re-slice attempts. reslicing.rs now chains those via link_version_chain, so old versions exist
+// only as history (previous_version_project_id), same as PrintProfile's is_current_version.
 async fn list(State(pool): State<SqlitePool>) -> Json<Vec<Project>> {
-    let sql = format!("SELECT {COLUMNS} FROM projects ORDER BY file_name");
+    let sql = format!("SELECT {COLUMNS} FROM projects WHERE is_current_version = 1 ORDER BY file_name");
     let projects = sqlx::query_as::<_, Project>(&sql).fetch_all(&pool).await.expect("query failed");
     Json(projects)
 }
@@ -247,21 +311,30 @@ async fn link_version(
     Path(new_id): Path<i64>,
     Json(input): Json<LinkVersionInput>,
 ) -> (StatusCode, Json<serde_json::Value>) {
-    let not_found = (StatusCode::NOT_FOUND, Json(serde_json::json!({ "ok": false, "error": "not_found" })));
+    if link_version_chain(&pool, new_id, input.previous_version_project_id).await {
+        (StatusCode::OK, Json(serde_json::json!({ "ok": true })))
+    } else {
+        (StatusCode::NOT_FOUND, Json(serde_json::json!({ "ok": false, "error": "not_found" })))
+    }
+}
 
+// Shared by the manual "looks like a new version — link it?" flow (PrintForm.svelte, matched by
+// mesh_hash/file_name since the upload there has no known source project) and reslicing.rs's
+// automatic chaining (source project is already known exactly, no matching/confirmation needed).
+pub(crate) async fn link_version_chain(pool: &SqlitePool, new_id: i64, previous_version_project_id: i64) -> bool {
     let mut tx = pool.begin().await.expect("begin failed");
 
     let previous_version_number = sqlx::query_scalar::<_, i64>("SELECT version_number FROM projects WHERE id = ?1")
-        .bind(input.previous_version_project_id)
+        .bind(previous_version_project_id)
         .fetch_optional(&mut *tx)
         .await
         .expect("query failed");
     let Some(previous_version_number) = previous_version_number else {
-        return not_found;
+        return false;
     };
 
     sqlx::query("UPDATE projects SET is_current_version = 0 WHERE id = ?1")
-        .bind(input.previous_version_project_id)
+        .bind(previous_version_project_id)
         .execute(&mut *tx)
         .await
         .expect("update failed");
@@ -270,7 +343,7 @@ async fn link_version(
         "UPDATE projects SET previous_version_project_id = ?1, version_number = ?2, is_current_version = 1
          WHERE id = ?3",
     )
-    .bind(input.previous_version_project_id)
+    .bind(previous_version_project_id)
     .bind(previous_version_number + 1)
     .bind(new_id)
     .execute(&mut *tx)
@@ -278,9 +351,9 @@ async fn link_version(
     .expect("update failed");
 
     if updated.rows_affected() == 0 {
-        return not_found;
+        return false;
     }
 
     tx.commit().await.expect("commit failed");
-    (StatusCode::OK, Json(serde_json::json!({ "ok": true })))
+    true
 }

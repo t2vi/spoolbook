@@ -164,6 +164,10 @@ export async function uploadProject(file: File): Promise<ProjectResult> {
 
 export const importProjectFromUrl = (url: string) => request<ProjectResult>('/api/projects/import-url', json({ url }));
 
+export const renameProject = (projectId: number, fileName: string) =>
+	request<ProjectResult>(`/api/projects/${projectId}`, { method: 'PUT', body: JSON.stringify({ fileName }) });
+export const deleteProject = (projectId: number) => request<{ ok: boolean; error?: string }>(`/api/projects/${projectId}`, { method: 'DELETE' });
+
 export const resliceProject = (projectId: number, profileId: number) =>
 	request<ReslicingResult>(`/api/projects/${projectId}/reslice`, json({ profileId }));
 

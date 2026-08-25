@@ -39,6 +39,7 @@
 		<a href="/profiles" class="rounded-md px-3 py-1.5 hover:bg-slate-800 hover:text-white">Profiles</a>
 		<a href="/prints" class="rounded-md px-3 py-1.5 hover:bg-slate-800 hover:text-white">Prints</a>
 		<a href="/printers" class="rounded-md px-3 py-1.5 hover:bg-slate-800 hover:text-white">Printers</a>
+		<a href="/projects" class="rounded-md px-3 py-1.5 hover:bg-slate-800 hover:text-white">Projects</a>
 		<a href="/settings" class="rounded-md px-3 py-1.5 hover:bg-slate-800 hover:text-white">Settings</a>
 		{#if authenticated}
 			<button type="button" onclick={signOut} class="ml-auto rounded-md px-3 py-1.5 hover:bg-slate-800 hover:text-white">Sign out</button>

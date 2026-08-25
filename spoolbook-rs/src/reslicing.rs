@@ -48,19 +48,37 @@ async fn reslice(
         Err(e) => return (StatusCode::BAD_REQUEST, Json(err_response(&format!("Couldn't prepare project for re-slicing: {e}")))),
     };
 
-    let result = slice_and_save(&pool, &patched_path, &file_name).await;
+    let result = slice_and_save(&pool, &patched_path, &file_name, id).await;
     std::fs::remove_file(&patched_path).ok();
 
     let status = if result["ok"] == true { StatusCode::OK } else { StatusCode::BAD_REQUEST };
     (status, Json(result))
 }
 
-async fn slice_and_save(pool: &SqlitePool, patched_path: &std::path::Path, display_name: &str) -> serde_json::Value {
+// A real slicer's output is never byte-identical run to run (embedded timestamps, re-rendered
+// thumbnail, ...), so project_upload's content-hash dedup can never catch "re-sliced the same
+// project again" — every call used to insert a brand-new, permanently unlinked project row. Chain
+// it as a new version of the project being re-sliced instead (same mechanism PrintForm.svelte's
+// manual "looks like a new version — link it?" flow uses, just automatic here since the source
+// project is already known exactly, no mesh_hash/file_name matching needed).
+async fn slice_and_save(pool: &SqlitePool, patched_path: &std::path::Path, display_name: &str, source_project_id: i64) -> serde_json::Value {
     let sliced_bytes = match slice_via_service(patched_path).await {
         Ok(b) => b,
         Err(e) => return err_response(&format!("Re-slice failed: {e}")),
     };
-    project_upload::save_bytes(&project_upload::storage_dir(), pool, &sliced_bytes, display_name).await
+    let mut result = project_upload::save_bytes(&project_upload::storage_dir(), pool, &sliced_bytes, display_name).await;
+
+    let new_id = result["project"]["id"].as_i64();
+    if result["created"] == true && new_id.is_some_and(|new_id| new_id != source_project_id) {
+        let new_id = new_id.unwrap();
+        if crate::projects::link_version_chain(pool, new_id, source_project_id).await {
+            if let Some(project) = crate::projects::get_by_id(pool, new_id).await {
+                result["project"] = serde_json::to_value(project).unwrap();
+            }
+        }
+    }
+
+    result
 }
 
 async fn slice_via_service(patched_path: &std::path::Path) -> Result<Vec<u8>, String> {
