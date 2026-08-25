@@ -14,7 +14,7 @@ first launch it seeds a starter filament catalog and begins syncing fresh data a
 the background (throttled to once every 24 hours).</p>
 <h2 id="building-from-source-instead">Building from source instead</h2>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>cd spoolbook-web-svelte &#x26;&#x26; npm run build   # frontend, needed once before first run</span></span>
-<span class="line"><span>dotnet run --project Spoolbook.Web -c Release</span></span></code></pre>
+<span class="line"><span>cd ../spoolbook-rs &#x26;&#x26; cargo run --release</span></span></code></pre>
 <p>Set <code>SPOOLBOOK_ADMIN_PASSWORD</code> first. Useful for development or if you’d rather not use Docker;
 see the <a href="https://github.com/t2vi/spoolbook">repo README</a> for the full dev workflow.</p>
 <h2 id="printer-control-and-live-camera">Printer control and live camera</h2>
