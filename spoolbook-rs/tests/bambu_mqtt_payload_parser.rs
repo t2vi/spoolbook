@@ -31,8 +31,10 @@ fn parse_extracts_core_fields_from_running_status() {
     assert_eq!(result.reading.progress_pct, Some(8));
 }
 
-// Community-documented Bambu AMS schema (not yet verified against a captured payload from this
-// user's own P2S) — confirm field names against a live capture before shipping AMS UI on top.
+// Field names/types confirmed against maziggy/bambuddy (a mature, actively-maintained Bambu
+// self-host project) rather than this user's own P2S directly -- humidity_raw + humidity as
+// sibling string fields matches their backend/tests/unit/services/test_bambu_mqtt.py fixtures
+// exactly (line 6306: humidity_raw "16"; line 692: humidity "3").
 const RUNNING_STATUS_WITH_FULL_AMS_JSON: &str = r##"{
     "print": {
         "gcode_state": "RUNNING",
@@ -46,6 +48,7 @@ const RUNNING_STATUS_WITH_FULL_AMS_JSON: &str = r##"{
                 {
                     "id": "0",
                     "humidity": "5",
+                    "humidity_raw": "38",
                     "tray": [
                         { "id": "0", "tray_type": "PLA", "tray_color": "FFFFFFFF", "remain": 72 },
                         { "id": "1", "tray_type": "PETG", "tray_color": "1A1A1AFF", "remain": 40 },
@@ -65,6 +68,7 @@ fn parse_extracts_full_ams_inventory_when_present() {
     assert_eq!(result.ams_units.len(), 1);
     let unit = &result.ams_units[0];
     assert_eq!(unit.unit_id, "0");
+    assert_eq!(unit.humidity_pct, Some(38), "humidity_raw (real %) preferred over the coarse index");
     assert_eq!(unit.humidity_level, Some(5));
     assert_eq!(unit.trays.len(), 4);
 
@@ -75,6 +79,26 @@ fn parse_extracts_full_ams_inventory_when_present() {
     assert_eq!(unit.trays[2].material_type, None);
     assert_eq!(unit.trays[2].color_hex, None);
     assert_eq!(unit.trays[2].remain_percent, None, "-1 is Bambu's unknown sentinel");
+}
+
+// Older/original AMS units have no hygrometer, so the printer never sends humidity_raw for
+// them -- only the coarse 1-5 LED-ring index.
+#[test]
+fn parse_falls_back_to_the_coarse_index_when_humidity_raw_is_absent() {
+    let json = r##"{
+        "print": {
+            "gcode_state": "RUNNING",
+            "ams": {
+                "tray_now": "0",
+                "ams": [{ "id": "0", "humidity": "3", "tray": [] }]
+            }
+        }
+    }"##;
+
+    let result = parse(json).unwrap();
+    let unit = &result.ams_units[0];
+    assert_eq!(unit.humidity_pct, None);
+    assert_eq!(unit.humidity_level, Some(3));
 }
 
 #[test]

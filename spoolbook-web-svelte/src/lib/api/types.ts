@@ -21,6 +21,10 @@ export interface AmsTrayReading {
 
 export interface AmsUnitReading {
 	unitId: string;
+	// humidityPct is a real relative-humidity percentage (newer AMS 2 Pro / AMS-HT hardware).
+	// Older AMS units have no hygrometer -- humidityLevel (a coarse 1-5 index driving the
+	// physical unit's LED ring, not a percentage) is the only signal available for those.
+	humidityPct: number | null;
 	humidityLevel: number | null;
 	trays: AmsTrayReading[];
 }

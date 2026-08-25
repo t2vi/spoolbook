@@ -126,6 +126,23 @@
 	function trayFill(colorHex: string | null): string | undefined {
 		return colorHex ? `#${colorHex.length >= 6 ? colorHex.slice(0, 6) : 'cccccc'}` : undefined;
 	}
+
+	// Thresholds match maziggy/bambuddy's own AmsUnitCard defaults (goodThreshold=40,
+	// fairThreshold=60) -- reused rather than picked arbitrarily.
+	function humidityPctClass(pct: number): string {
+		if (pct <= 40) return 'text-green-600';
+		if (pct <= 60) return 'text-amber-600';
+		return 'text-red-600';
+	}
+
+	// Older AMS units have no hygrometer, so humidityPct is null and this 1-5 index (the physical
+	// unit's own LED ring, not a percentage) is all that's available -- 1 is driest, 5 is most
+	// humid. Shown as "n/5" rather than a bare number so it doesn't read as a percentage.
+	function humidityLevelClass(level: number): string {
+		if (level <= 2) return 'text-green-600';
+		if (level === 3) return 'text-amber-600';
+		return 'text-red-600';
+	}
 </script>
 
 <Card.Root class="gap-4 p-5">
@@ -241,8 +258,17 @@
 					<div class="rounded-lg border p-3">
 						<div class="mb-2 flex items-center justify-between">
 							<span class="text-sm font-medium">AMS-{unit.unitId}</span>
-							{#if unit.humidityLevel !== null}
-								<span class="flex items-center gap-1 text-xs text-muted-foreground"><Droplets class="h-3 w-3" />{unit.humidityLevel}</span>
+							{#if unit.humidityPct !== null}
+								<span class="flex items-center gap-1 text-xs {humidityPctClass(unit.humidityPct)}" title="AMS humidity {unit.humidityPct}%">
+									<Droplets class="h-3 w-3" />{unit.humidityPct}%
+								</span>
+							{:else if unit.humidityLevel !== null}
+								<span
+									class="flex items-center gap-1 text-xs {humidityLevelClass(unit.humidityLevel)}"
+									title="AMS humidity level {unit.humidityLevel}/5 (1 = driest, 5 = most humid)"
+								>
+									<Droplets class="h-3 w-3" />{unit.humidityLevel}/5
+								</span>
 							{/if}
 						</div>
 						<div class="grid grid-cols-4 gap-2">
