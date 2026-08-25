@@ -49,12 +49,15 @@ the job finished.
 
 ## Adding your first spool
 
-1. Go to **Filaments**, find or add the filament type on your roll (brand + material + variant + color).
-2. Go to **Spools**, create a Spool against that Filament — this represents the physical roll.
-3. Go to **Profiles**, create a Print Profile for it — start from a Bambu Studio default preset,
-   import a sliced `.3mf` or your own saved Bambu Studio `.json` preset, or fill it in by hand.
-4. After a print, log it under **Prints** — the exact settings from the Profile version you used
-   are locked in permanently, so editing the Profile later (e.g. a seasonal temperature tweak)
-   never rewrites what a past print recorded. Optionally attach the `.3mf` project file you sliced
-   — spoolbook reads the plate thumbnail straight out of it, and if the file has more than one
-   build-plate layout you can pick which one this Print corresponds to.
+1. Go to **Filaments → List**, find or add the filament type on your roll (brand + material +
+   variant + color).
+2. Go to **Filaments → Spools**, create a Spool against that Filament — this represents the
+   physical roll.
+3. Go to **Print workflow → Profiles**, create a Print Profile for it — start from a Bambu Studio
+   default preset, import a sliced `.3mf` or your own saved Bambu Studio `.json` preset, or fill
+   it in by hand.
+4. Send the print (see above) — spoolbook creates the Print record automatically and locks in the
+   exact settings from the Profile version you used, so editing the Profile later (e.g. a seasonal
+   temperature tweak) never rewrites what a past print recorded. **Print workflow → Prints** shows
+   the full history; each entry is read-only, including the plate thumbnail spoolbook read out of
+   the project at send time.
