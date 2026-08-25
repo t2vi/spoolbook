@@ -1,8 +1,7 @@
-// Mirrors the JSON shapes returned by Spoolbook.Web/Api/*Endpoints.cs — camelCase (the app's
-// configured System.Text.Json options), enums as strings (JsonStringEnumConverter). Entities are
-// returned directly (no DTO layer, per the migration plan), so these interfaces only declare the
-// fields actually used here rather than every property EF Core happens to expose — TS doesn't
-// object-literal-check a fetch() response, so extra runtime fields are harmless.
+// Mirrors the JSON shapes returned by spoolbook-rs's API — camelCase (serde's rename_all), enums
+// as their Rust variant name string. These interfaces only declare the fields actually used here
+// rather than every column the backend happens to return — TS doesn't object-literal-check a
+// fetch() response, so extra runtime fields are harmless.
 
 export interface Printer {
 	id: number;

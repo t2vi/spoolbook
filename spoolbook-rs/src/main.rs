@@ -5,13 +5,17 @@ use tower_http::services::{ServeDir, ServeFile};
 
 #[tokio::main]
 async fn main() {
-    let options = SqliteConnectOptions::from_str("sqlite://dev.db?mode=rwc")
+    // SPOOLBOOK_DB_PATH overrides this for production (Docker/LXC, where it points at the
+    // mounted data volume) or a second local instance run alongside a live one. Unset defaults
+    // to the relative dev.db every earlier session in this repo already assumes.
+    let db_path = std::env::var("SPOOLBOOK_DB_PATH").unwrap_or_else(|_| "dev.db".to_string());
+    let options = SqliteConnectOptions::from_str(&format!("sqlite://{db_path}?mode=rwc"))
         .unwrap()
         .foreign_keys(true);
     let pool = SqlitePoolOptions::new()
         .connect_with(options)
         .await
-        .expect("failed to open dev.db");
+        .unwrap_or_else(|e| panic!("failed to open {db_path}: {e}"));
     sqlx::migrate!().run(&pool).await.expect("migration failed");
 
     let live_status = spoolbook_rs::printer_mqtt::new_store();
@@ -46,7 +50,9 @@ async fn main() {
 
     let app = spoolbook_rs::app_with_camera(pool, live_status, camera_registry).fallback_service(serve_static);
 
-    let listener = TcpListener::bind("127.0.0.1:8090").await.unwrap();
-    println!("spoolbook-rs listening on http://127.0.0.1:8090");
+    // 0.0.0.0, not 127.0.0.1: matches .NET's ASPNETCORE_URLS=http://0.0.0.0:5070 (self-hosted,
+    // LAN-accessible per CLAUDE.md) and is required for Docker port publishing to reach it at all.
+    let listener = TcpListener::bind("0.0.0.0:5070").await.unwrap();
+    println!("spoolbook-rs listening on http://0.0.0.0:5070");
     axum::serve(listener, app).await.unwrap();
 }

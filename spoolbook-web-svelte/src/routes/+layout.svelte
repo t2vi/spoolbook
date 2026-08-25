@@ -1,7 +1,7 @@
 <script lang="ts">
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
-	import { me } from '$lib/api/client';
+	import { me, logout } from '$lib/api/client';
 
 	let { children } = $props();
 
@@ -10,6 +10,11 @@
 	$effect(() => {
 		me().then((r) => (authenticated = r.authenticated));
 	});
+
+	async function signOut() {
+		await logout();
+		authenticated = false;
+	}
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
@@ -25,9 +30,7 @@
 		<a href="/printers" class="rounded-md px-3 py-1.5 hover:bg-slate-800 hover:text-white">Printers</a>
 		<a href="/settings" class="rounded-md px-3 py-1.5 hover:bg-slate-800 hover:text-white">Settings</a>
 		{#if authenticated}
-			<form method="post" action="/logout" class="ml-auto">
-				<button type="submit" class="rounded-md px-3 py-1.5 hover:bg-slate-800 hover:text-white">Sign out</button>
-			</form>
+			<button type="button" onclick={signOut} class="ml-auto rounded-md px-3 py-1.5 hover:bg-slate-800 hover:text-white">Sign out</button>
 		{:else}
 			<a href="/login" class="ml-auto rounded-md px-3 py-1.5 hover:bg-slate-800 hover:text-white">Sign in</a>
 		{/if}

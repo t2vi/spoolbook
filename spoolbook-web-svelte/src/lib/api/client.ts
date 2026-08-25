@@ -1,6 +1,6 @@
-// Thin fetch wrappers over Spoolbook.Web/Api/*Endpoints.cs. Relative paths only — same-origin in
-// prod, proxied to the .NET backend by vite.config.ts's dev server so cookie auth just works with
-// no CORS setup (see the migration plan).
+// Thin fetch wrappers over spoolbook-rs's JSON API. Relative paths only — same-origin in prod,
+// proxied to the backend by vite.config.ts's dev server so cookie auth just works with no CORS
+// setup.
 import type {
 	ApiResult,
 	DashboardSnapshot,
@@ -54,6 +54,10 @@ async function requestAllowingError<T>(path: string, init: RequestInit): Promise
 }
 
 export const me = () => request<{ authenticated: boolean }>('/api/me');
+// requestAllowingError, not request: a wrong password is a normal 401 the caller needs to show
+// inline, not throw-and-catch.
+export const login = (password: string) => requestAllowingError<ApiResult>('/api/login', json({ password }));
+export const logout = () => request<ApiResult>('/api/logout', { method: 'POST' });
 export const getDashboard = () => request<DashboardSnapshot>('/api/dashboard');
 
 export interface SettingsResponse {

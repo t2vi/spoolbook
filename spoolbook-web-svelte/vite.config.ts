@@ -14,20 +14,18 @@ export default defineConfig({
 
 			// Every page here fetches client-side (see every route's $effect-based data loading) —
 			// nothing depends on SvelteKit's SSR data loading, so a static SPA build + fallback.html
-			// is enough. Spoolbook.Web serves the build/ output directly (Program.cs) — no Node
-			// process needed. ssr disabled in src/routes/+layout.ts to match.
+			// is enough. spoolbook-rs serves the build/ output directly (main.rs) — no Node process
+			// needed. ssr disabled in src/routes/+layout.ts to match.
 			adapter: adapter({ fallback: 'index.html' })
 		})
 	],
 	server: {
-		// Dev-time proxy to Spoolbook.Web (dotnet run, port 5070) — keeps every request
-		// same-origin from the browser's perspective so the shared cookie auth just works,
-		// no CORS needed during the migration. Only /printers/{id}/camera proxies through
-		// (regex-keyed) — plain /printers/* is SvelteKit's own routing once that page is ported.
+		// Dev-time proxy to spoolbook-rs (cargo run, port 5070) — keeps every request same-origin
+		// from the browser's perspective so the shared cookie auth just works, no CORS needed.
+		// /login and /logout are SvelteKit's own routes (see routes/login, +layout.svelte's
+		// signOut) — only /api and the camera stream are real backend routes.
 		proxy: {
 			'/api': 'http://localhost:5070',
-			'/login': 'http://localhost:5070',
-			'/logout': 'http://localhost:5070',
 			'^/printers/\\d+/camera': 'http://localhost:5070'
 		}
 	}
