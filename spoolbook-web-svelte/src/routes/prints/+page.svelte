@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import Picker from '$lib/components/picker.svelte';
@@ -87,22 +88,26 @@
 		{/if}
 	</div>
 
-	{#if result === null}
-		<p class="text-muted-foreground">Loading…</p>
-	{:else}
-		<div class="rounded-lg border bg-card shadow-sm">
-			<Table.Root>
-				<Table.Header>
-					<Table.Row>
-						<Table.Head>Started</Table.Head>
-						<Table.Head>Filament</Table.Head>
-						<Table.Head>Profile</Table.Head>
-						<Table.Head>Printer</Table.Head>
-						<Table.Head>Status</Table.Head>
-						<Table.Head></Table.Head>
-					</Table.Row>
-				</Table.Header>
-				<Table.Body>
+	<div class="rounded-lg border bg-card shadow-sm">
+		<Table.Root>
+			<Table.Header>
+				<Table.Row>
+					<Table.Head>Started</Table.Head>
+					<Table.Head>Filament</Table.Head>
+					<Table.Head>Profile</Table.Head>
+					<Table.Head>Printer</Table.Head>
+					<Table.Head>Status</Table.Head>
+					<Table.Head></Table.Head>
+				</Table.Row>
+			</Table.Header>
+			<Table.Body>
+				{#if result === null}
+					{#each Array(5) as _, i (i)}
+						<Table.Row>
+							<Table.Cell colspan={6}><Skeleton class="h-5 w-full" /></Table.Cell>
+						</Table.Row>
+					{/each}
+				{:else}
 					{#each result.prints as p (p.id)}
 						<Table.Row>
 							<Table.Cell>{new Date(p.startedAt).toLocaleString()}</Table.Cell>
@@ -118,10 +123,12 @@
 							</Table.Cell>
 						</Table.Row>
 					{/each}
-				</Table.Body>
-			</Table.Root>
-		</div>
+				{/if}
+			</Table.Body>
+		</Table.Root>
+	</div>
 
+	{#if result}
 		<div class="mt-4 flex flex-col items-center gap-2 text-sm text-muted-foreground">
 			<span>Page {result.page} of {result.totalPages} ({result.total} total)</span>
 			<Pagination.Root count={result.total} perPage={result.pageSize} page={pageNum} onPageChange={changePage}>

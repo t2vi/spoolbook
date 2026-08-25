@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import { deleteFilament, me, searchFilaments, syncFilamentCatalog } from '$lib/api/client';
@@ -72,9 +73,7 @@
 		<Input placeholder="Filter by brand" bind:value={brandFilter} oninput={applyFilters} class="w-48" />
 		<Input placeholder="Filter by material" bind:value={materialFilter} oninput={applyFilters} class="w-48" />
 		{#if authenticated}
-			<a href="/filaments/new" class="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/80">
-				+ Add filament
-			</a>
+			<Button href="/filaments/new">+ Add filament</Button>
 			<Button variant="outline" disabled={syncing} onclick={syncCatalog}>{syncing ? 'Syncing…' : 'Sync filament catalog'}</Button>
 		{:else}
 			<a href="/login" class="text-sm text-muted-foreground underline">Sign in to edit</a>
@@ -83,21 +82,25 @@
 
 	{#if syncStatusMessage}<p class="mb-3 text-sm text-muted-foreground">{syncStatusMessage}</p>{/if}
 
-	{#if result === null}
-		<p class="text-muted-foreground">Loading…</p>
-	{:else}
-		<div class="rounded-lg border bg-card shadow-sm">
-			<Table.Root>
-				<Table.Header>
-					<Table.Row>
-						<Table.Head>Brand</Table.Head>
-						<Table.Head>Material</Table.Head>
-						<Table.Head>Variant</Table.Head>
-						<Table.Head>Color</Table.Head>
-						<Table.Head></Table.Head>
-					</Table.Row>
-				</Table.Header>
-				<Table.Body>
+	<div class="rounded-lg border bg-card shadow-sm">
+		<Table.Root>
+			<Table.Header>
+				<Table.Row>
+					<Table.Head>Brand</Table.Head>
+					<Table.Head>Material</Table.Head>
+					<Table.Head>Variant</Table.Head>
+					<Table.Head>Color</Table.Head>
+					<Table.Head></Table.Head>
+				</Table.Row>
+			</Table.Header>
+			<Table.Body>
+				{#if result === null}
+					{#each Array(5) as _, i (i)}
+						<Table.Row>
+							<Table.Cell colspan={5}><Skeleton class="h-5 w-full" /></Table.Cell>
+						</Table.Row>
+					{/each}
+				{:else}
 					{#each result.entries as f (f.id)}
 						<Table.Row>
 							<Table.Cell>{f.brand}</Table.Cell>
@@ -112,10 +115,12 @@
 							</Table.Cell>
 						</Table.Row>
 					{/each}
-				</Table.Body>
-			</Table.Root>
-		</div>
+				{/if}
+			</Table.Body>
+		</Table.Root>
+	</div>
 
+	{#if result}
 		<div class="mt-4 flex flex-col items-center gap-2 text-sm text-muted-foreground">
 			<span>Page {result.page} of {result.totalPages} ({result.total} total)</span>
 			<Pagination.Root count={result.total} perPage={result.pageSize} page={page} onPageChange={changePage}>

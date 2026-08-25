@@ -2,6 +2,7 @@
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
 	import Picker from '$lib/components/picker.svelte';
 	import {
@@ -219,7 +220,7 @@
 
 		<div class="space-y-4">
 			<div class="flex flex-col gap-1">
-				<label class="text-sm font-medium" for="project-select">Project</label>
+				<Label for="project-select">Project</Label>
 				<Picker
 					id="project-select"
 					bind:value={selectedProjectId}
@@ -239,7 +240,7 @@
 				{#if uploadError}<p class="text-xs text-destructive">{uploadError}</p>{/if}
 
 				{#if plates.length > 0}
-					<label class="mt-2 text-sm font-medium" for="plate-select">Plate</label>
+					<Label for="plate-select" class="mt-2">Plate</Label>
 					<Picker
 						id="plate-select"
 						bind:value={selectedPlaterId}
@@ -256,10 +257,10 @@
 			</div>
 
 			<div>
-				<label class="flex items-center gap-2 text-sm">
+				<Label>
 					<Checkbox bind:checked={useAms} />
 					Use AMS
-				</label>
+				</Label>
 				{#if useAms}
 					{#if amsTrays.length === 0}
 						<p class="mt-1 text-xs text-muted-foreground">No AMS data yet — printer may not be connected.</p>
@@ -270,7 +271,7 @@
 							class="mt-2 gap-1"
 						>
 							{#each amsTrays as tray (tray.key)}
-								<label class="flex items-center gap-2 text-sm">
+								<Label>
 									<RadioGroup.Item value={tray.key} disabled={tray.materialType === null} />
 									{#if tray.colorHex}
 										<span
@@ -281,7 +282,7 @@
 									<span class={tray.materialType === null ? 'text-muted-foreground' : ''}>
 										AMS {tray.unitId} slot {tray.slotId} — {tray.materialType ?? 'Empty'}
 									</span>
-								</label>
+								</Label>
 							{/each}
 						</RadioGroup.Root>
 					{/if}
@@ -289,7 +290,7 @@
 			</div>
 
 			<div class="flex flex-col gap-1">
-				<label class="text-sm font-medium" for="spool-select">Spool</label>
+				<Label for="spool-select">Spool</Label>
 				<Picker
 					id="spool-select"
 					bind:value={selectedSpoolId}
@@ -305,7 +306,7 @@
 			</div>
 
 			<div class="flex flex-col gap-1">
-				<label class="text-sm font-medium" for="profile-select">Profile</label>
+				<Label for="profile-select">Profile</Label>
 				<Picker
 					id="profile-select"
 					bind:value={selectedProfileId}

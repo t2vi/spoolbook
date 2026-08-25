@@ -1,5 +1,6 @@
 <script lang="ts">
 	import * as Card from '$lib/components/ui/card/index.js';
+	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { getDashboard } from '$lib/api/client';
 	import type { DashboardSnapshot } from '$lib/api/types';
 
@@ -18,7 +19,26 @@
 	<h1 class="mb-6 text-2xl font-semibold">Dashboard</h1>
 
 	{#if snapshot === null}
-		<p class="text-muted-foreground">Loading…</p>
+		<div class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-4">
+			{#each Array(4) as _, i (i)}
+				<div class="rounded-lg border bg-card p-5 shadow-sm">
+					<Skeleton class="h-8 w-12" />
+					<Skeleton class="mt-2 h-4 w-20" />
+				</div>
+			{/each}
+		</div>
+		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+			{#each Array(4) as _, i (i)}
+				<Card.Root class="p-5">
+					<Skeleton class="mb-3 h-4 w-32" />
+					<div class="space-y-2">
+						<Skeleton class="h-4 w-full" />
+						<Skeleton class="h-4 w-full" />
+						<Skeleton class="h-4 w-full" />
+					</div>
+				</Card.Root>
+			{/each}
+		</div>
 	{:else}
 		{@const metrics = snapshot.metrics}
 		<div class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-4">

@@ -52,8 +52,9 @@ async function requestAllowingError<T>(path: string, init: RequestInit): Promise
 	return (await res.json()) as T;
 }
 
-export const me = () => request<{ authenticated: boolean; googleLinked?: boolean }>('/api/me');
+export const me = () => request<{ authenticated: boolean; username?: string; googleLinked?: boolean }>('/api/me');
 export const setupStatus = () => request<{ needsSetup: boolean }>('/api/setup-status');
+export const getVersion = () => request<{ version: string }>('/api/version');
 // requestAllowingError, not request: a wrong password / already-set-up is a normal error response
 // the caller needs to show inline, not throw-and-catch.
 export const setup = (username: string, password: string) =>

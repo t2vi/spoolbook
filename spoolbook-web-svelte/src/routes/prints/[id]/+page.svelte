@@ -3,6 +3,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
+	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { getPrint, getProjectPlates } from '$lib/api/client';
 	import type { FailureMode, Print, ProjectPlate } from '$lib/api/types';
 	import { page } from '$app/state';
@@ -51,7 +52,17 @@
 
 <div class="mx-auto max-w-2xl px-4 py-8">
 	{#if print === null}
-		<p class="text-muted-foreground">Loading…</p>
+		<Card.Root>
+			<Card.Header>
+				<Skeleton class="h-7 w-40" />
+			</Card.Header>
+			<Card.Content class="space-y-4">
+				<Skeleton class="h-48 w-full" />
+				{#each Array(4) as _, i (i)}
+					<Skeleton class="h-4 w-full" />
+				{/each}
+			</Card.Content>
+		</Card.Root>
 	{:else}
 		<Card.Root>
 			<Card.Header>
