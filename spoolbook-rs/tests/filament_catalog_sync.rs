@@ -81,6 +81,26 @@ async fn import_many_counts_added_and_skipped_and_registers_colors() {
     assert_eq!(beige["hex"], "#F5F5DC");
 }
 
+#[test]
+fn should_sync_when_never_synced() {
+    let now = chrono::Utc::now();
+    assert!(spoolbook_rs::filament_catalog_sync::should_sync(None, now));
+}
+
+#[test]
+fn should_sync_when_last_sync_over_24h_ago() {
+    let now = chrono::Utc::now();
+    let last = (now - chrono::Duration::hours(25)).to_rfc3339();
+    assert!(spoolbook_rs::filament_catalog_sync::should_sync(Some(&last), now));
+}
+
+#[test]
+fn should_not_sync_when_last_sync_within_24h() {
+    let now = chrono::Utc::now();
+    let last = (now - chrono::Duration::hours(1)).to_rfc3339();
+    assert!(!spoolbook_rs::filament_catalog_sync::should_sync(Some(&last), now));
+}
+
 #[tokio::test]
 async fn import_many_skips_entries_that_fail_validation() {
     let pool = test_pool().await;
