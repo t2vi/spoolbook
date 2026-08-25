@@ -1,4 +1,4 @@
-use crate::profiles::PrintProfile;
+use crate::profiles::{ParsedProfileFields, PrintProfile};
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -434,4 +434,220 @@ pub fn field_strings(p: &PrintProfile) -> HashMap<&'static str, String> {
     s!("DefaultColourHex", default_colour_hex);
 
     m
+}
+
+// The inverse of field_strings: string -> typed, driven by the same field list. Blank means
+// "not set" (-> None), for every field except NozzleTempC (the one required column) where blank
+// or unparseable is a validation error rather than a silent 0. Any other field whose non-blank
+// string fails to parse is likewise collected as a field-level error instead of defaulting.
+pub fn parse_fields(fields: &HashMap<String, String>) -> Result<ParsedProfileFields, Vec<(&'static str, String)>> {
+    let mut errors: Vec<(&'static str, String)> = Vec::new();
+    let get = |name: &str| -> &str { fields.get(name).map(String::as_str).unwrap_or("").trim() };
+
+    macro_rules! b {
+        ($name:literal) => {
+            match get($name) {
+                "" => None,
+                "true" => Some(true),
+                "false" => Some(false),
+                _ => {
+                    errors.push(($name, format!("{} must be true or false", $name)));
+                    None
+                }
+            }
+        };
+    }
+    macro_rules! i {
+        ($name:literal) => {
+            match get($name) {
+                "" => None,
+                v => match v.parse::<i64>() {
+                    Ok(n) => Some(n),
+                    Err(_) => {
+                        errors.push(($name, format!("{} must be a whole number", $name)));
+                        None
+                    }
+                },
+            }
+        };
+    }
+    macro_rules! fl {
+        ($name:literal) => {
+            match get($name) {
+                "" => None,
+                v => match v.parse::<f64>() {
+                    Ok(n) => Some(n),
+                    Err(_) => {
+                        errors.push(($name, format!("{} must be a number", $name)));
+                        None
+                    }
+                },
+            }
+        };
+    }
+    macro_rules! s {
+        ($name:literal) => {
+            match get($name) {
+                "" => None,
+                v => Some(v.to_string()),
+            }
+        };
+    }
+
+    let nozzle_temp_c = match get("NozzleTempC") {
+        "" => {
+            errors.push(("NozzleTempC", "Nozzle temperature is required".to_string()));
+            0
+        }
+        v => match v.parse::<i64>() {
+            Ok(n) => n,
+            Err(_) => {
+                errors.push(("NozzleTempC", "Nozzle temperature must be a whole number".to_string()));
+                0
+            }
+        },
+    };
+
+    let parsed = ParsedProfileFields {
+        print_speed_mm_s: i!("PrintSpeedMmS"),
+        nozzle_temp_initial_c: i!("NozzleTempInitialC"),
+        nozzle_temp_range_high_c: i!("NozzleTempRangeHighC"),
+        nozzle_temp_range_low_c: i!("NozzleTempRangeLowC"),
+        cool_plate_temp_c: i!("CoolPlateTempC"),
+        cool_plate_temp_initial_c: i!("CoolPlateTempInitialC"),
+        hot_plate_temp_c: i!("HotPlateTempC"),
+        hot_plate_temp_initial_c: i!("HotPlateTempInitialC"),
+        textured_plate_temp_c: i!("TexturedPlateTempC"),
+        textured_plate_temp_initial_c: i!("TexturedPlateTempInitialC"),
+        eng_plate_temp_c: i!("EngPlateTempC"),
+        eng_plate_temp_initial_c: i!("EngPlateTempInitialC"),
+        supertack_plate_temp_c: i!("SupertackPlateTempC"),
+        supertack_plate_temp_initial_c: i!("SupertackPlateTempInitialC"),
+
+        fan_min_speed_pct: i!("FanMinSpeedPct"),
+        fan_max_speed_pct: i!("FanMaxSpeedPct"),
+        additional_cooling_fan_speed_pct: i!("AdditionalCoolingFanSpeedPct"),
+        close_fan_first_x_layers: i!("CloseFanFirstXLayers"),
+        complete_print_exhaust_fan_speed_pct: i!("CompletePrintExhaustFanSpeedPct"),
+        during_print_exhaust_fan_speed_pct: i!("DuringPrintExhaustFanSpeedPct"),
+        chamber_temperature_c: i!("ChamberTemperatureC"),
+        cooling_perimeter_transition_distance_mm: fl!("CoolingPerimeterTransitionDistanceMm"),
+        cooling_slowdown_logic: s!("CoolingSlowdownLogic"),
+        enable_overhang_bridge_fan: b!("EnableOverhangBridgeFan"),
+        fan_cooling_layer_time_s: i!("FanCoolingLayerTimeS"),
+        first_x_layer_fan_speed_pct: i!("FirstXLayerFanSpeedPct"),
+        full_fan_speed_layer: i!("FullFanSpeedLayer"),
+        no_slow_down_for_cooling_on_outwalls: b!("NoSlowDownForCoolingOnOutwalls"),
+        overhang_fan_speed_pct: i!("OverhangFanSpeedPct"),
+        overhang_fan_threshold: s!("OverhangFanThreshold"),
+        overhang_threshold_participating_cooling: s!("OverhangThresholdParticipatingCooling"),
+        override_process_overhang_speed: b!("OverrideProcessOverhangSpeed"),
+        pre_start_fan_time_s: i!("PreStartFanTimeS"),
+        reduce_fan_stop_start_freq: b!("ReduceFanStopStartFreq"),
+        slow_down_for_layer_cooling: b!("SlowDownForLayerCooling"),
+        slow_down_layer_time_s: i!("SlowDownLayerTimeS"),
+        slow_down_min_speed_mm_s: i!("SlowDownMinSpeedMmS"),
+        activate_air_filtration: b!("ActivateAirFiltration"),
+
+        retraction_mm: fl!("RetractionMm"),
+        retraction_speed_mm_s: fl!("RetractionSpeedMmS"),
+        deretraction_speed_mm_s: fl!("DeretractionSpeedMmS"),
+        retraction_minimum_travel_mm: fl!("RetractionMinimumTravelMm"),
+        retract_before_wipe: s!("RetractBeforeWipe"),
+        retract_restart_extra_mm: fl!("RetractRestartExtraMm"),
+        retract_when_changing_layer: b!("RetractWhenChangingLayer"),
+        retraction_distances_when_cut_mm: fl!("RetractionDistancesWhenCutMm"),
+        retract_length_nc_mm: fl!("RetractLengthNcMm"),
+        long_retractions_when_cut: b!("LongRetractionsWhenCut"),
+        long_retractions_when_ec: b!("LongRetractionsWhenEc"),
+        retraction_distances_when_ec_mm: fl!("RetractionDistancesWhenEcMm"),
+
+        wipe_enabled: b!("WipeEnabled"),
+        wipe_distance_mm: fl!("WipeDistanceMm"),
+        z_hop_mm: fl!("ZHopMm"),
+        z_hop_type: s!("ZHopType"),
+        change_length_mm: fl!("ChangeLengthMm"),
+        change_length_nc_mm: fl!("ChangeLengthNcMm"),
+        cooling_before_tower_s: i!("CoolingBeforeTowerS"),
+        minimal_purge_on_wipe_tower_mm3: fl!("MinimalPurgeOnWipeTowerMm3"),
+        prime_volume_mm3: fl!("PrimeVolumeMm3"),
+        prime_volume_nc_mm3: fl!("PrimeVolumeNcMm3"),
+        ramming_travel_time_s: fl!("RammingTravelTimeS"),
+        ramming_travel_time_nc_s: fl!("RammingTravelTimeNcS"),
+        ramming_volumetric_speed_mm3_s: fl!("RammingVolumetricSpeedMm3S"),
+        ramming_volumetric_speed_nc_mm3_s: fl!("RammingVolumetricSpeedNcMm3S"),
+        tower_interface_pre_extrusion_dist_mm: fl!("TowerInterfacePreExtrusionDistMm"),
+        tower_interface_pre_extrusion_length_mm: fl!("TowerInterfacePreExtrusionLengthMm"),
+        tower_interface_print_temp_c: i!("TowerInterfacePrintTempC"),
+        tower_interface_purge_volume_mm3: fl!("TowerInterfacePurgeVolumeMm3"),
+        tower_ironing_area_mm2: fl!("TowerIroningAreaMm2"),
+        flush_temp_c: i!("FlushTempC"),
+        flush_volumetric_speed_mm3_s: fl!("FlushVolumetricSpeedMm3S"),
+
+        adaptive_volumetric_speed: b!("AdaptiveVolumetricSpeed"),
+        max_volumetric_speed_mm3_s: fl!("MaxVolumetricSpeedMm3S"),
+        bridge_speed_mm_s: fl!("BridgeSpeedMmS"),
+        enable_overhang_speed: b!("EnableOverhangSpeed"),
+        overhang_14_speed_mm_s: fl!("Overhang14SpeedMmS"),
+        overhang_24_speed_mm_s: fl!("Overhang24SpeedMmS"),
+        overhang_34_speed_mm_s: fl!("Overhang34SpeedMmS"),
+        overhang_44_speed_mm_s: fl!("Overhang44SpeedMmS"),
+        overhang_totally_speed_mm_s: fl!("OverhangTotallySpeedMmS"),
+        circle_compensation_speed_mm_s: fl!("CircleCompensationSpeedMmS"),
+        velocity_adaptation_factor: fl!("VelocityAdaptationFactor"),
+        volumetric_speed_coefficients: s!("VolumetricSpeedCoefficients"),
+
+        density_g_cm3: fl!("DensityGCm3"),
+        diameter_mm: fl!("DiameterMm"),
+        diameter_limit_mm: fl!("DiameterLimitMm"),
+        shrink_pct: s!("ShrinkPct"),
+        soluble: b!("Soluble"),
+        is_support: b!("IsSupport"),
+        printable: i!("Printable"),
+        adhesiveness_category: i!("AdhesivenessCategory"),
+        impact_strength_z: fl!("ImpactStrengthZ"),
+        cost_per_kg: fl!("CostPerKg"),
+        flow_ratio: fl!("FlowRatio"),
+        extruder_variant: s!("ExtruderVariant"),
+        slicer_notes: s!("SlicerNotes"),
+        required_nozzle_hrc: i!("RequiredNozzleHrc"),
+
+        enable_pressure_advance: b!("EnablePressureAdvance"),
+        pressure_advance: fl!("PressureAdvance"),
+
+        drying_ams_limitations: s!("DryingAmsLimitations"),
+        drying_ams_heat_distortion_temp_c: i!("DryingAmsHeatDistortionTempC"),
+        drying_ams_temp_c: i!("DryingAmsTempC"),
+        drying_ams_time_h: fl!("DryingAmsTimeH"),
+        drying_chamber_bed_temp_c: i!("DryingChamberBedTempC"),
+        drying_chamber_time_h: fl!("DryingChamberTimeH"),
+        drying_cooling_temp_c: i!("DryingCoolingTempC"),
+        drying_softening_temp_c: i!("DryingSofteningTempC"),
+        softening_temp_c: fl!("SofteningTempC"),
+
+        scarf_seam_type: s!("ScarfSeamType"),
+        scarf_gap_pct: s!("ScarfGapPct"),
+        scarf_height_pct: s!("ScarfHeightPct"),
+        scarf_length_mm: fl!("ScarfLengthMm"),
+
+        hole_coef_1: fl!("HoleCoef1"),
+        hole_coef_2: fl!("HoleCoef2"),
+        hole_coef_3: fl!("HoleCoef3"),
+        hole_limit_max: fl!("HoleLimitMax"),
+        hole_limit_min: fl!("HoleLimitMin"),
+        counter_coef_1: fl!("CounterCoef1"),
+        counter_coef_2: fl!("CounterCoef2"),
+        counter_coef_3: fl!("CounterCoef3"),
+        counter_limit_max: fl!("CounterLimitMax"),
+        counter_limit_min: fl!("CounterLimitMin"),
+
+        start_gcode: s!("StartGcode"),
+        end_gcode: s!("EndGcode"),
+
+        default_colour_hex: s!("DefaultColourHex"),
+
+        nozzle_temp_c,
+    };
+
+    if errors.is_empty() { Ok(parsed) } else { Err(errors) }
 }
