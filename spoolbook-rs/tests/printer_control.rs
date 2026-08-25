@@ -21,7 +21,7 @@ async fn send(pool: &sqlx::SqlitePool, store: &spoolbook_rs::printer_mqtt::LiveS
                 .method(method)
                 .uri(uri)
                 .header("content-type", "application/json")
-                .header("cookie", common::auth_cookie_header())
+                .header("cookie", common::auth_cookie_header(pool).await)
                 .body(Body::from(body))
                 .unwrap(),
         )

@@ -1,7 +1,9 @@
 <script lang="ts">
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
-	import { me, logout } from '$lib/api/client';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
+	import { me, logout, setupStatus } from '$lib/api/client';
 
 	let { children } = $props();
 
@@ -9,6 +11,15 @@
 
 	$effect(() => {
 		me().then((r) => (authenticated = r.authenticated));
+	});
+
+	// No admin account exists yet -- every route redirects to the wizard until one does, except
+	// /setup itself (nothing to redirect to/from there).
+	$effect(() => {
+		if (page.url.pathname === '/setup') return;
+		setupStatus().then((s) => {
+			if (s.needsSetup) goto('/setup');
+		});
 	});
 
 	async function signOut() {
