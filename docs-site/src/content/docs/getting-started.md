@@ -22,9 +22,10 @@ Once it's up, it's at `http://<host-ip>:5070`.
 ## First run
 
 spoolbook is single-user. The admin password you set during install gates anything that changes
-data (editing, deleting, sending a print) — just browsing stays open to anyone on your LAN. On
-first launch it seeds a starter filament catalog and begins syncing fresh data automatically in
-the background (throttled to once every 24 hours).
+data (editing, deleting, sending a print) — just browsing stays open to anyone on your LAN.
+Optionally link a Google account under **Settings → Account** for one-click sign-in afterward —
+your password still works either way. On first launch it seeds a starter filament catalog and
+begins syncing fresh data automatically in the background (throttled to once every 24 hours).
 
 ## Building from source instead
 
@@ -50,7 +51,8 @@ the job finished.
 
 1. Go to **Filaments**, find or add the filament type on your roll (brand + material + variant + color).
 2. Go to **Spools**, create a Spool against that Filament — this represents the physical roll.
-3. Go to **Profiles**, create a Print Profile for it, or import one directly from Bambu Studio.
+3. Go to **Profiles**, create a Print Profile for it — start from a Bambu Studio default preset,
+   import a sliced `.3mf` or your own saved Bambu Studio `.json` preset, or fill it in by hand.
 4. After a print, log it under **Prints** — the exact settings from the Profile version you used
    are locked in permanently, so editing the Profile later (e.g. a seasonal temperature tweak)
    never rewrites what a past print recorded. Optionally attach the `.3mf` project file you sliced
