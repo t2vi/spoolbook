@@ -10,7 +10,6 @@ import type {
 	FilamentSearchResult,
 	ImportResult,
 	PrinterControlResult,
-	PrinterJob,
 	PrinterLiveSnapshot,
 	Print,
 	PrintInventoryResult,
@@ -185,39 +184,6 @@ export const searchPrints = (status: PrintStatus | '', printerId: number | null,
 };
 export const getPrint = (id: number) => request<Print>(`/api/prints/${id}`);
 export const deletePrint = (id: number) => request<ApiResult>(`/api/prints/${id}`, { method: 'DELETE' });
-export const findJobMatch = (printerId: number, startedAt: string) =>
-	request<PrinterJob | null>(`/api/prints/job-match?printerId=${printerId}&startedAt=${encodeURIComponent(startedAt)}`);
-export const attachJobToPrint = (printId: number, jobId: number) =>
-	request<{ ok: boolean }>(`/api/prints/${printId}/attach-job`, json({ jobId }));
-
-export interface PrintInput {
-	startedAt: string;
-	endedAt: string;
-	status: PrintStatus;
-	notes: string | null;
-	amsHumidityPct: number | null;
-	actualRoomTempC: number | null;
-	cleanBuildPlate: boolean | null;
-	projectId: number | null;
-	projectPlaterId: string | null;
-	failureModes: FailureMode[];
-}
-
-export interface PrintResult extends ApiResult {
-	print: Print | null;
-}
-
-export const createPrint = (profileId: number, spoolId: number, printerId: number, input: PrintInput) =>
-	request<PrintResult>('/api/prints', json({ profileId, spoolId, printerId, input }));
-export const updatePrint = (id: number, printerId: number, input: PrintInput) =>
-	request<PrintResult>(`/api/prints/${id}`, { method: 'PUT', body: JSON.stringify({ printerId, input }) });
-
-export const findVersionCandidate = (meshHash: string | null, fileName: string, excludeProjectId: number) =>
-	request<Project | null>(
-		`/api/projects/version-candidate?meshHash=${meshHash ?? ''}&fileName=${encodeURIComponent(fileName)}&excludeProjectId=${excludeProjectId}`
-	);
-export const linkProjectVersion = (projectId: number, previousVersionProjectId: number) =>
-	request<{ ok: boolean }>(`/api/projects/${projectId}/link-version`, json({ previousVersionProjectId }));
 
 export const listSpools = () => request<Spool[]>('/api/spools');
 export const getSpool = (id: number) => request<Spool>(`/api/spools/${id}`);

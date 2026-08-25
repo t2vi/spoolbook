@@ -70,13 +70,6 @@
 	<h1 class="mb-6 text-2xl font-semibold">Prints</h1>
 
 	<div class="mb-4 flex flex-wrap items-center gap-3">
-		{#if authenticated}
-			<a href="/prints/new" class="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/80">
-				+ Log a print
-			</a>
-		{:else}
-			<a href="/login" class="text-sm text-muted-foreground underline">Sign in to edit</a>
-		{/if}
 		<Picker
 			bind:value={statusFilter}
 			onValueChange={applyFilters}
@@ -118,8 +111,8 @@
 							<Table.Cell>{p.printer?.name}</Table.Cell>
 							<Table.Cell><Badge class={statusBadgeClass(p.status)}>{p.status}</Badge></Table.Cell>
 							<Table.Cell>
+								<a href="/prints/{p.id}" class="hover:underline">View</a>
 								{#if authenticated}
-									<a href="/prints/edit/{p.id}" class="hover:underline">Edit</a>
 									<button onclick={() => remove(p.id)} class="ml-3 text-destructive hover:underline">Delete</button>
 								{/if}
 							</Table.Cell>
