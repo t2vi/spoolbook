@@ -7,14 +7,18 @@
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { formatDateTime } from '$lib/utils.js';
 	import {
+		commitImport,
+		exportData,
 		getGoogleConfig,
 		getSettings,
 		me,
+		previewImport,
 		saveGoogleConfig,
 		saveSettings,
 		unlinkGoogle,
 		updateAccount
 	} from '$lib/api/client';
+	import type { ImportCommitResult, ImportPreview } from '$lib/api/types';
 
 	let additionalUrls = $state('');
 	let catalogUrl = $state('');
@@ -37,6 +41,46 @@
 	let googleSecretSet = $state(false);
 	let googleConfigError = $state<string | null>(null);
 	let googleConfigSavedMessage = $state<string | null>(null);
+
+	let importFile = $state<File | null>(null);
+	let importPreview = $state<ImportPreview | null>(null);
+	let importResult = $state<ImportCommitResult | null>(null);
+	let importError = $state<string | null>(null);
+	let importBusy = $state(false);
+
+	async function runPreviewImport() {
+		if (!importFile) return;
+		importError = null;
+		importResult = null;
+		importBusy = true;
+		try {
+			importPreview = await previewImport(importFile);
+		} catch (e) {
+			importError = e instanceof Error ? e.message : 'Preview failed.';
+		} finally {
+			importBusy = false;
+		}
+	}
+
+	async function confirmImport() {
+		if (!importFile) return;
+		importError = null;
+		importBusy = true;
+		try {
+			importResult = await commitImport(importFile);
+			importPreview = null;
+			importFile = null;
+		} catch (e) {
+			importError = e instanceof Error ? e.message : 'Import failed.';
+		} finally {
+			importBusy = false;
+		}
+	}
+
+	function cancelImportPreview() {
+		importPreview = null;
+		importFile = null;
+	}
 
 	async function saveGoogleSso() {
 		googleConfigError = null;
@@ -153,6 +197,67 @@
 		</Card.Root>
 
 		{#if authenticated}
+			<Card.Root>
+				<Card.Header>
+					<Card.Title>Data</Card.Title>
+					<Card.Description>Migrate filaments, spools, profiles, printers, and prints between spoolbook installs.</Card.Description>
+				</Card.Header>
+				<Card.Content class="space-y-4">
+					<div class="flex flex-col gap-1">
+						<Label>Export</Label>
+						<p class="text-xs text-muted-foreground">Downloads a zip with everything from this install.</p>
+						<div><Button variant="outline" onclick={exportData}>Export data</Button></div>
+					</div>
+
+					<Separator />
+
+					<div class="flex flex-col gap-1">
+						<Label for="import-file">Import</Label>
+						<p class="text-xs text-muted-foreground">
+							Merges an export from another install into this one — matching filaments/printers are reused, everything else is added as new.
+						</p>
+						<input
+							id="import-file"
+							type="file"
+							accept=".zip"
+							onchange={(e) => {
+								importFile = (e.currentTarget as HTMLInputElement).files?.[0] ?? null;
+								importPreview = null;
+								importResult = null;
+								importError = null;
+							}}
+							class="text-sm"
+						/>
+					</div>
+
+					{#if importError}<p class="text-sm text-destructive">{importError}</p>{/if}
+
+					{#if importPreview}
+						<div class="rounded-lg border p-3 text-sm">
+							<p class="mb-2 font-medium">This will add:</p>
+							<ul class="space-y-1">
+								{#each Object.entries(importPreview) as [table, counts] (table)}
+									{#if counts.total > 0}
+										<li class="flex justify-between text-muted-foreground">
+											<span>{table.replace(/_/g, ' ')}</span>
+											<span class="text-foreground">{counts.new} new{counts.total > counts.new ? ` (${counts.total - counts.new} already exist)` : ''}</span>
+										</li>
+									{/if}
+								{/each}
+							</ul>
+							<div class="mt-3 flex gap-2">
+								<Button size="sm" onclick={confirmImport} disabled={importBusy}>Confirm import</Button>
+								<Button size="sm" variant="ghost" onclick={cancelImportPreview} disabled={importBusy}>Cancel</Button>
+							</div>
+						</div>
+					{:else if importResult}
+						<p class="text-sm text-muted-foreground">Import complete.</p>
+					{:else if importFile}
+						<div><Button onclick={runPreviewImport} disabled={importBusy}>Preview import</Button></div>
+					{/if}
+				</Card.Content>
+			</Card.Root>
+
 			<Card.Root>
 				<Card.Header>
 					<Card.Title>Account</Card.Title>

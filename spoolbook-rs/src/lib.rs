@@ -15,6 +15,7 @@ pub mod printer_telemetry;
 pub mod profile_config_patcher;
 pub mod profile_field_spec;
 pub mod profiles;
+pub mod export_import;
 pub mod project_upload;
 pub mod projects;
 pub mod reslicing;
@@ -51,6 +52,7 @@ pub fn app_with_camera(pool: SqlitePool, live_status: printer_mqtt::LiveStatusSt
         .merge(dashboard::router())
         .merge(filament_catalog_sync::router())
         .merge(project_upload::router())
+        .merge(export_import::router())
         .merge(bambu_import::router())
         .merge(reslicing::router())
         .merge(send_print::router())

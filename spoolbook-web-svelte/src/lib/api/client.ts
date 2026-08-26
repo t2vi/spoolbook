@@ -10,6 +10,8 @@ import type {
 	FilamentSearchResult,
 	HourlyWeatherReading,
 	PrintReading,
+	ImportCommitResult,
+	ImportPreview,
 	ImportResult,
 	PrinterControlResult,
 	PrinterLiveSnapshot,
@@ -103,6 +105,19 @@ export interface SettingsResponse {
 export const getSettings = () => request<SettingsResponse>('/api/settings');
 export const saveSettings = (additionalFilamentSourceUrls: string | null, latitude: number | null, longitude: number | null) =>
 	request<{ ok: boolean }>('/api/settings', json({ additionalFilamentSourceUrls, latitude, longitude }));
+
+// A same-origin navigation carries the auth cookie same as fetch() does, and lets the browser's
+// own download handling take over — no need to fetch+blob this ourselves.
+export const exportData = () => {
+	window.location.href = '/api/export';
+};
+const importFormData = (file: File) => {
+	const body = new FormData();
+	body.append('file', file);
+	return body;
+};
+export const previewImport = (file: File) => request<ImportPreview>('/api/import/preview', { method: 'POST', body: importFormData(file) });
+export const commitImport = (file: File) => request<ImportCommitResult>('/api/import/commit', { method: 'POST', body: importFormData(file) });
 
 export interface PrinterInput {
 	name: string;
