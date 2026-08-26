@@ -47,6 +47,19 @@ you send a `.3mf` project straight to that printer — pick the plate and AMS sl
 creates the print-history entry automatically, filling in its outcome once the printer reports
 the job finished.
 
+## Migrating between installs
+
+**Settings → Data** lets you move data from one spoolbook install to another without shell or
+Docker access to either host — moving to new hardware, for example. **Export** downloads a zip of
+everything (filaments, spools, print profiles, printers, prints, and their uploaded `.3mf` project
+files). On the target install, pick that file and **Preview import** to see how many rows each
+table will add before anything is written, then **Confirm import** to merge it in. Filaments,
+printers, and filament colors that already exist (matched by name/type) aren't duplicated;
+everything else is added fresh — so importing combines two installs' data rather than overwriting
+one with the other. Re-importing the same file a second time will duplicate spools/profiles/prints,
+since those don't have a natural way to detect "already imported" — the preview step exists so you
+can catch that before confirming.
+
 ## Adding your first spool
 
 1. Go to **Filaments → List**, find or add the filament type on your roll (brand + material +
