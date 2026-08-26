@@ -87,11 +87,6 @@
 					<div class="flex flex-col gap-2">
 						<span class="text-sm font-medium text-muted-foreground">Project</span>
 						<span class="text-sm">{print.project.fileName}{plate ? ` — ${plate.platerName ?? `Plate ${plate.platerId}`}` : ''}</span>
-						{#if plate?.thumbnailBytes}
-							<div class="flex h-48 items-center justify-center overflow-hidden rounded-lg bg-slate-900">
-								<img src="data:image/png;base64,{plate.thumbnailBytes}" class="h-full w-full object-contain" alt="Plate preview" />
-							</div>
-						{/if}
 					</div>
 					<Separator />
 				{/if}
