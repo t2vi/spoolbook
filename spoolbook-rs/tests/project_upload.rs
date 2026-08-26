@@ -2,9 +2,21 @@ mod common;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use serde_json::{Value, json};
+use spoolbook_rs::project_upload::storage_dir_for;
 use sqlx::sqlite::SqlitePoolOptions;
 use std::io::Write;
+use std::path::PathBuf;
 use tower::ServiceExt;
+
+#[test]
+fn storage_dir_for_lives_alongside_the_db_file_in_docker() {
+    assert_eq!(storage_dir_for("/data/spoolbook-rs.db"), PathBuf::from("/data/projects"));
+}
+
+#[test]
+fn storage_dir_for_relative_dev_db_uses_the_current_directory() {
+    assert_eq!(storage_dir_for("dev.db"), PathBuf::from("projects"));
+}
 
 async fn test_pool() -> sqlx::SqlitePool {
     let pool = SqlitePoolOptions::new()

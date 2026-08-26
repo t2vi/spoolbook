@@ -15,11 +15,21 @@ pub fn router() -> Router<SqlitePool> {
         .route("/api/projects/import-url", post(import_url))
 }
 
-// ponytail: fixed local path, same dev-stub tier as main.rs's hardcoded dev.db — a real
-// deployment will want this configurable (persistent volume, not OS temp) once this crate has
-// a deployment story at all.
+// Lives alongside the DB file itself -- the same persistent volume in Docker/LXC
+// (SPOOLBOOK_DB_PATH=/data/spoolbook-rs.db -> /data/projects), the same repo-relative directory
+// as dev.db locally. Previously env::temp_dir(), which doesn't survive a container recreate --
+// every redeploy silently orphaned every uploaded .3mf (the Project row survived, pointing at a
+// now-dead hash path).
+pub fn storage_dir_for(db_path: &str) -> PathBuf {
+    match Path::new(db_path).parent() {
+        Some(dir) if !dir.as_os_str().is_empty() => dir.join("projects"),
+        _ => PathBuf::from("projects"),
+    }
+}
+
 pub(crate) fn storage_dir() -> PathBuf {
-    let dir = std::env::temp_dir().join("spoolbook-rs-projects");
+    let db_path = std::env::var("SPOOLBOOK_DB_PATH").unwrap_or_else(|_| "dev.db".to_string());
+    let dir = storage_dir_for(&db_path);
     std::fs::create_dir_all(&dir).ok();
     dir
 }
