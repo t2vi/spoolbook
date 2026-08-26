@@ -1,5 +1,8 @@
 use spoolbook_rs::bambu_mqtt_payload_parser::ReadingInput;
-use spoolbook_rs::printer_telemetry::{attach_job_to_print, end_job, find_match_for_print, purge_unattached_jobs_older_than, record_reading};
+use spoolbook_rs::printer_telemetry::{
+    attach_job_to_print, backfill_reading_snapshots, collapse_readings_to_snapshot, end_job, find_match_for_print,
+    purge_unattached_jobs_older_than, record_reading,
+};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::str::FromStr;
 
@@ -84,7 +87,16 @@ async fn seed_in_progress_print(pool: &sqlx::SqlitePool, profile_id: i64, spool_
 }
 
 fn reading(nozzle: f64) -> ReadingInput {
-    ReadingInput { nozzle_temp_c: Some(nozzle), bed_temp_c: None, chamber_temp_c: None, ams_slot: None, progress_pct: None }
+    ReadingInput {
+        nozzle_temp_c: Some(nozzle),
+        bed_temp_c: None,
+        chamber_temp_c: None,
+        ams_slot: None,
+        progress_pct: None,
+        ams_humidity_pct: None,
+        layer_num: None,
+        total_layer_num: None,
+    }
 }
 
 async fn job_count(pool: &sqlx::SqlitePool) -> i64 {
@@ -106,6 +118,32 @@ async fn record_reading_creates_new_job_on_first_reading_for_external_id() {
     assert_eq!(reading_count(&pool).await, 1);
     let external_id = sqlx::query_scalar::<_, String>("SELECT external_job_id FROM printer_jobs").fetch_one(&pool).await.unwrap();
     assert_eq!(external_id, "job-1");
+}
+
+#[tokio::test]
+async fn record_reading_persists_ams_humidity_and_layer_progress() {
+    let pool = test_pool().await;
+    let printer_id = seed_printer(&pool).await;
+
+    let input = ReadingInput {
+        nozzle_temp_c: None,
+        bed_temp_c: None,
+        chamber_temp_c: None,
+        ams_slot: None,
+        progress_pct: None,
+        ams_humidity_pct: Some(38),
+        layer_num: Some(21),
+        total_layer_num: Some(908),
+    };
+    record_reading(&pool, printer_id, "job-1", &input, None).await;
+
+    let row = sqlx::query_as::<_, (Option<i64>, Option<i64>, Option<i64>)>(
+        "SELECT ams_humidity_pct, layer_num, total_layer_num FROM printer_readings",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(row, (Some(38), Some(21), Some(908)));
 }
 
 #[tokio::test]
@@ -135,12 +173,48 @@ async fn record_reading_different_external_ids_create_separate_jobs() {
 async fn end_job_sets_ended_at() {
     let pool = test_pool().await;
     let printer_id = seed_printer(&pool).await;
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
     record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
 
-    end_job(&pool, printer_id, "job-1", None, None).await;
+    end_job(&pool, printer_id, "job-1", None, None, None, None, &camera_registry).await;
 
     let ended_at: Option<String> = sqlx::query_scalar("SELECT ended_at FROM printer_jobs").fetch_one(&pool).await.unwrap();
     assert!(ended_at.is_some());
+}
+
+#[tokio::test]
+async fn end_job_snapshots_chamber_temp_and_ams_humidity_onto_the_print() {
+    let pool = test_pool().await;
+    let printer_id = seed_printer(&pool).await;
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
+    let (profile_id, spool_id) = seed_print_deps(&pool).await;
+    let print_id = seed_in_progress_print(&pool, profile_id, spool_id, printer_id, "2026-01-01T08:00:00Z").await;
+    record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
+
+    end_job(&pool, printer_id, "job-1", Some("FINISH"), None, Some(38.5), Some(21), &camera_registry).await;
+
+    let (chamber_temp_c, ams_humidity_pct): (Option<f64>, Option<i64>) =
+        sqlx::query_as("SELECT chamber_temp_c, ams_humidity_pct FROM prints WHERE id = ?1").bind(print_id).fetch_one(&pool).await.unwrap();
+    assert!((chamber_temp_c.unwrap() - 38.5).abs() < 0.01);
+    assert_eq!(ams_humidity_pct, Some(21));
+}
+
+#[tokio::test]
+async fn end_job_collapses_readings_into_a_print_snapshot_and_deletes_raw_rows() {
+    let pool = test_pool().await;
+    let printer_id = seed_printer(&pool).await;
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
+    let (profile_id, spool_id) = seed_print_deps(&pool).await;
+    let print_id = seed_in_progress_print(&pool, profile_id, spool_id, printer_id, "2026-01-01T08:00:00Z").await;
+    record_reading(&pool, printer_id, "job-1", &reading(245.0), Some("2026-01-01T08:00:10Z")).await;
+    record_reading(&pool, printer_id, "job-1", &reading(246.0), Some("2026-01-01T08:00:40Z")).await;
+
+    end_job(&pool, printer_id, "job-1", Some("FINISH"), None, None, None, &camera_registry).await;
+
+    assert_eq!(reading_count(&pool).await, 0, "raw readings deleted once end_job collapses them");
+    let json: Option<String> = sqlx::query_scalar("SELECT telemetry_json FROM prints WHERE id = ?1").bind(print_id).fetch_one(&pool).await.unwrap();
+    let snapshot: Vec<serde_json::Value> = serde_json::from_str(&json.unwrap()).unwrap();
+    assert_eq!(snapshot.len(), 1, "both readings fall in the same minute");
 }
 
 #[tokio::test]
@@ -195,11 +269,12 @@ async fn end_job_sets_attached_print_status_from_terminal_gcode_state() {
     ] {
         let pool = test_pool().await;
         let printer_id = seed_printer(&pool).await;
+        let camera_registry = spoolbook_rs::printer_camera::new_registry();
         let (profile_id, spool_id) = seed_print_deps(&pool).await;
         let print_id = seed_in_progress_print(&pool, profile_id, spool_id, printer_id, "2026-01-01T08:00:00Z").await;
         record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
 
-        end_job(&pool, printer_id, "job-1", gcode_state, None).await;
+        end_job(&pool, printer_id, "job-1", gcode_state, None, None, None, &camera_registry).await;
 
         let (status, ended_at): (String, Option<String>) =
             sqlx::query_as("SELECT status, ended_at FROM prints WHERE id = ?1").bind(print_id).fetch_one(&pool).await.unwrap();
@@ -215,11 +290,12 @@ async fn end_job_fetches_and_stores_ambient_weather_when_location_is_configured(
     unsafe { std::env::set_var("ARCHIVE_URL", spawn_mock_archive().await) };
     set_location(&pool, -37.8, 144.9).await;
     let printer_id = seed_printer(&pool).await;
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
     let (profile_id, spool_id) = seed_print_deps(&pool).await;
     let print_id = seed_in_progress_print(&pool, profile_id, spool_id, printer_id, "2026-01-01T07:00:00Z").await;
     record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
 
-    end_job(&pool, printer_id, "job-1", Some("FINISH"), Some("2026-01-01T09:00:00Z")).await;
+    end_job(&pool, printer_id, "job-1", Some("FINISH"), Some("2026-01-01T09:00:00Z"), None, None, &camera_registry).await;
 
     let (temp, humidity, source): (Option<f64>, Option<f64>, Option<String>) =
         sqlx::query_as("SELECT ambient_temp_c, ambient_humidity_pct, ambient_source FROM prints WHERE id = ?1").bind(print_id).fetch_one(&pool).await.unwrap();
@@ -229,15 +305,45 @@ async fn end_job_fetches_and_stores_ambient_weather_when_location_is_configured(
 }
 
 #[tokio::test]
-async fn end_job_leaves_ambient_weather_null_when_no_location_is_configured() {
+async fn end_job_persists_every_hour_of_the_print_window_for_the_graph() {
     let _guard = ENV_LOCK.lock().unwrap();
     let pool = test_pool().await;
+    unsafe { std::env::set_var("ARCHIVE_URL", spawn_mock_archive().await) };
+    set_location(&pool, -37.8, 144.9).await;
     let printer_id = seed_printer(&pool).await;
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
     let (profile_id, spool_id) = seed_print_deps(&pool).await;
     let print_id = seed_in_progress_print(&pool, profile_id, spool_id, printer_id, "2026-01-01T07:00:00Z").await;
     record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
 
-    end_job(&pool, printer_id, "job-1", Some("FINISH"), Some("2026-01-01T09:00:00Z")).await;
+    end_job(&pool, printer_id, "job-1", Some("FINISH"), Some("2026-01-01T09:00:00Z"), None, None, &camera_registry).await;
+
+    let rows: Vec<(String, Option<f64>, Option<f64>)> =
+        sqlx::query_as("SELECT hour, temp_c, humidity_pct FROM print_hourly_weather WHERE print_id = ?1 ORDER BY hour")
+            .bind(print_id)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+
+    assert_eq!(rows.len(), 3, "{rows:?}");
+    assert_eq!(rows[0].0, "2026-01-01T07:00");
+    assert!((rows[0].1.unwrap() - 20.0).abs() < 0.01);
+    assert!((rows[0].2.unwrap() - 50.0).abs() < 0.01);
+    assert_eq!(rows[2].0, "2026-01-01T09:00");
+    assert!((rows[2].1.unwrap() - 24.0).abs() < 0.01);
+}
+
+#[tokio::test]
+async fn end_job_leaves_ambient_weather_null_when_no_location_is_configured() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let pool = test_pool().await;
+    let printer_id = seed_printer(&pool).await;
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
+    let (profile_id, spool_id) = seed_print_deps(&pool).await;
+    let print_id = seed_in_progress_print(&pool, profile_id, spool_id, printer_id, "2026-01-01T07:00:00Z").await;
+    record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
+
+    end_job(&pool, printer_id, "job-1", Some("FINISH"), Some("2026-01-01T09:00:00Z"), None, None, &camera_registry).await;
 
     let (temp, source): (Option<f64>, Option<String>) =
         sqlx::query_as("SELECT ambient_temp_c, ambient_source FROM prints WHERE id = ?1").bind(print_id).fetch_one(&pool).await.unwrap();
@@ -249,9 +355,10 @@ async fn end_job_leaves_ambient_weather_null_when_no_location_is_configured() {
 async fn end_job_does_not_touch_print_status_when_job_has_no_attached_print() {
     let pool = test_pool().await;
     let printer_id = seed_printer(&pool).await;
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
     record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
 
-    end_job(&pool, printer_id, "job-1", Some("FINISH"), None).await;
+    end_job(&pool, printer_id, "job-1", Some("FINISH"), None, None, None, &camera_registry).await;
 
     let (ended_at, print_id): (Option<String>, Option<i64>) =
         sqlx::query_as("SELECT ended_at, print_id FROM printer_jobs").fetch_one(&pool).await.unwrap();
@@ -303,6 +410,135 @@ async fn find_match_for_print_returns_none_when_no_unattached_jobs_exist() {
     let matched = find_match_for_print(&pool, printer_id, "2026-01-01T08:00:00Z").await;
 
     assert!(matched.is_none());
+}
+
+#[tokio::test]
+async fn collapse_readings_to_snapshot_keeps_last_value_per_minute_and_deletes_raw_rows() {
+    let pool = test_pool().await;
+    let printer_id = seed_printer(&pool).await;
+    let (profile_id, spool_id) = seed_print_deps(&pool).await;
+    let print_id = seed_in_progress_print(&pool, profile_id, spool_id, printer_id, "2026-01-01T08:00:00Z").await;
+
+    let early = ReadingInput {
+        chamber_temp_c: Some(30.0),
+        layer_num: Some(5),
+        ..reading(240.0)
+    };
+    let late = ReadingInput {
+        chamber_temp_c: Some(35.0),
+        layer_num: Some(6),
+        ..reading(240.0)
+    };
+    record_reading(&pool, printer_id, "job-1", &early, Some("2026-01-01T08:00:10Z")).await;
+    record_reading(&pool, printer_id, "job-1", &late, Some("2026-01-01T08:00:50Z")).await;
+    let job_id = sqlx::query_scalar::<_, i64>("SELECT id FROM printer_jobs").fetch_one(&pool).await.unwrap();
+    attach_job_to_print(&pool, job_id, print_id).await;
+
+    collapse_readings_to_snapshot(&pool, print_id, job_id).await;
+
+    assert_eq!(reading_count(&pool).await, 0, "raw readings deleted after conversion");
+    let json: String = sqlx::query_scalar("SELECT telemetry_json FROM prints WHERE id = ?1").bind(print_id).fetch_one(&pool).await.unwrap();
+    let snapshot: Vec<serde_json::Value> = serde_json::from_str(&json).unwrap();
+    assert_eq!(snapshot.len(), 1, "both readings fall in the same one-minute bucket");
+    assert_eq!(snapshot[0]["chamberTempC"], 35.0, "last value in the bucket wins, not an average");
+    assert_eq!(snapshot[0]["layerNum"], 6);
+}
+
+#[tokio::test]
+async fn collapse_readings_to_snapshot_produces_one_bucket_per_minute_spanned() {
+    let pool = test_pool().await;
+    let printer_id = seed_printer(&pool).await;
+    let (profile_id, spool_id) = seed_print_deps(&pool).await;
+    let print_id = seed_in_progress_print(&pool, profile_id, spool_id, printer_id, "2026-01-01T08:00:00Z").await;
+
+    record_reading(&pool, printer_id, "job-1", &reading(240.0), Some("2026-01-01T08:00:10Z")).await;
+    record_reading(&pool, printer_id, "job-1", &reading(241.0), Some("2026-01-01T08:01:10Z")).await;
+    record_reading(&pool, printer_id, "job-1", &reading(242.0), Some("2026-01-01T08:02:10Z")).await;
+    let job_id = sqlx::query_scalar::<_, i64>("SELECT id FROM printer_jobs").fetch_one(&pool).await.unwrap();
+    attach_job_to_print(&pool, job_id, print_id).await;
+
+    collapse_readings_to_snapshot(&pool, print_id, job_id).await;
+
+    let json: String = sqlx::query_scalar("SELECT telemetry_json FROM prints WHERE id = ?1").bind(print_id).fetch_one(&pool).await.unwrap();
+    let snapshot: Vec<serde_json::Value> = serde_json::from_str(&json).unwrap();
+    assert_eq!(snapshot.len(), 3, "three minutes spanned, three buckets");
+    assert_eq!(snapshot[0]["recordedAt"], "2026-01-01T08:00:10Z");
+    assert_eq!(snapshot[2]["recordedAt"], "2026-01-01T08:02:10Z");
+}
+
+#[tokio::test]
+async fn collapse_readings_to_snapshot_leaves_telemetry_json_null_when_no_readings_exist() {
+    let pool = test_pool().await;
+    let printer_id = seed_printer(&pool).await;
+    let (profile_id, spool_id) = seed_print_deps(&pool).await;
+    let print_id = seed_in_progress_print(&pool, profile_id, spool_id, printer_id, "2026-01-01T08:00:00Z").await;
+    // A job with zero readings -- attach_job_to_print requires a job to exist, so create one via
+    // a single reading, then delete it, leaving the job attached but reading-less.
+    record_reading(&pool, printer_id, "job-1", &reading(240.0), None).await;
+    let job_id = sqlx::query_scalar::<_, i64>("SELECT id FROM printer_jobs").fetch_one(&pool).await.unwrap();
+    sqlx::query("DELETE FROM printer_readings WHERE printer_job_id = ?1").bind(job_id).execute(&pool).await.unwrap();
+    attach_job_to_print(&pool, job_id, print_id).await;
+
+    collapse_readings_to_snapshot(&pool, print_id, job_id).await;
+
+    let json: Option<String> = sqlx::query_scalar("SELECT telemetry_json FROM prints WHERE id = ?1").bind(print_id).fetch_one(&pool).await.unwrap();
+    assert_eq!(json, None);
+}
+
+#[tokio::test]
+async fn backfill_reading_snapshots_converts_an_already_finished_print_with_no_snapshot_yet() {
+    let pool = test_pool().await;
+    let printer_id = seed_printer(&pool).await;
+    let (profile_id, spool_id) = seed_print_deps(&pool).await;
+    // A print that finished before this feature existed: status already terminal, telemetry_json
+    // still null, raw readings from that print still sitting in printer_readings untouched.
+    let print_id = sqlx::query_scalar::<_, i64>(
+        "INSERT INTO prints (profile_id, spool_id, printer_id, started_at, ended_at, status)
+         VALUES (?1, ?2, ?3, '2026-01-01T08:00:00Z', '2026-01-01T10:00:00Z', 'Success') RETURNING id",
+    )
+    .bind(profile_id)
+    .bind(spool_id)
+    .bind(printer_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    record_reading(&pool, printer_id, "job-1", &reading(240.0), Some("2026-01-01T08:00:10Z")).await;
+    let job_id = sqlx::query_scalar::<_, i64>("SELECT id FROM printer_jobs").fetch_one(&pool).await.unwrap();
+    attach_job_to_print(&pool, job_id, print_id).await;
+
+    backfill_reading_snapshots(&pool).await;
+
+    assert_eq!(reading_count(&pool).await, 0, "legacy readings collapsed and deleted");
+    let json: Option<String> = sqlx::query_scalar("SELECT telemetry_json FROM prints WHERE id = ?1").bind(print_id).fetch_one(&pool).await.unwrap();
+    assert!(json.is_some());
+}
+
+#[tokio::test]
+async fn backfill_reading_snapshots_skips_prints_that_already_have_a_snapshot() {
+    let pool = test_pool().await;
+    let printer_id = seed_printer(&pool).await;
+    let (profile_id, spool_id) = seed_print_deps(&pool).await;
+    let print_id = sqlx::query_scalar::<_, i64>(
+        "INSERT INTO prints (profile_id, spool_id, printer_id, started_at, ended_at, status)
+         VALUES (?1, ?2, ?3, '2026-01-01T08:00:00Z', '2026-01-01T10:00:00Z', 'Success') RETURNING id",
+    )
+    .bind(profile_id)
+    .bind(spool_id)
+    .bind(printer_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    record_reading(&pool, printer_id, "job-1", &reading(240.0), Some("2026-01-01T08:00:10Z")).await;
+    let job_id = sqlx::query_scalar::<_, i64>("SELECT id FROM printer_jobs").fetch_one(&pool).await.unwrap();
+    attach_job_to_print(&pool, job_id, print_id).await;
+    backfill_reading_snapshots(&pool).await;
+    // A stray reading that shows up after the print already has a snapshot -- should be left
+    // alone, not silently collapsed/deleted by a second backfill pass.
+    record_reading(&pool, printer_id, "job-1", &reading(241.0), Some("2026-01-01T08:05:00Z")).await;
+
+    backfill_reading_snapshots(&pool).await;
+
+    assert_eq!(reading_count(&pool).await, 1, "second pass skips prints that already have telemetry_json");
 }
 
 #[tokio::test]

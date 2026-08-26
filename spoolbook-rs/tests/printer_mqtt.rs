@@ -33,9 +33,10 @@ async fn handle_message_records_a_reading_and_updates_the_live_store_on_active_s
     let pool = test_pool().await;
     let printer_id = seed_printer(&pool).await;
     let store = new_store();
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
     let mut active_task_id = None;
 
-    handle_message(printer_id, &running_payload("1725"), &pool, &store, &mut active_task_id).await;
+    handle_message(printer_id, &running_payload("1725"), &pool, &store, &mut active_task_id, &camera_registry).await;
 
     assert_eq!(active_task_id.as_deref(), Some("1725"));
     let job_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM printer_jobs").fetch_one(&pool).await.unwrap();
@@ -51,10 +52,11 @@ async fn handle_message_ends_the_active_job_on_transition_to_terminal_state() {
     let pool = test_pool().await;
     let printer_id = seed_printer(&pool).await;
     let store = new_store();
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
     let mut active_task_id = None;
-    handle_message(printer_id, &running_payload("1725"), &pool, &store, &mut active_task_id).await;
+    handle_message(printer_id, &running_payload("1725"), &pool, &store, &mut active_task_id, &camera_registry).await;
 
-    handle_message(printer_id, finish_payload(), &pool, &store, &mut active_task_id).await;
+    handle_message(printer_id, finish_payload(), &pool, &store, &mut active_task_id, &camera_registry).await;
 
     assert_eq!(active_task_id, None, "consumed on end, so a repeat terminal message can't double-end");
     let ended_at: Option<String> = sqlx::query_scalar("SELECT ended_at FROM printer_jobs").fetch_one(&pool).await.unwrap();
@@ -65,17 +67,37 @@ async fn handle_message_ends_the_active_job_on_transition_to_terminal_state() {
 }
 
 #[tokio::test]
+async fn handle_message_ends_the_open_job_via_db_fallback_when_active_task_id_was_lost_to_a_restart() {
+    let pool = test_pool().await;
+    let printer_id = seed_printer(&pool).await;
+    let store = new_store();
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
+    let mut active_task_id = None;
+    handle_message(printer_id, &running_payload("1725"), &pool, &store, &mut active_task_id, &camera_registry).await;
+
+    // Simulate the backend process restarting mid-print: a fresh connect_and_subscribe_loop
+    // invocation starts with active_task_id = None, even though printer_jobs still has an open
+    // row for this printer.
+    let mut active_task_id_after_restart = None;
+    handle_message(printer_id, finish_payload(), &pool, &store, &mut active_task_id_after_restart, &camera_registry).await;
+
+    let ended_at: Option<String> = sqlx::query_scalar("SELECT ended_at FROM printer_jobs").fetch_one(&pool).await.unwrap();
+    assert!(ended_at.is_some(), "terminal message must end the DB's open job even with no in-memory active_task_id");
+}
+
+#[tokio::test]
 async fn handle_message_does_not_end_a_job_twice_on_repeated_terminal_messages() {
     let pool = test_pool().await;
     let printer_id = seed_printer(&pool).await;
     let store = new_store();
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
     let mut active_task_id = None;
-    handle_message(printer_id, &running_payload("1725"), &pool, &store, &mut active_task_id).await;
-    handle_message(printer_id, finish_payload(), &pool, &store, &mut active_task_id).await;
+    handle_message(printer_id, &running_payload("1725"), &pool, &store, &mut active_task_id, &camera_registry).await;
+    handle_message(printer_id, finish_payload(), &pool, &store, &mut active_task_id, &camera_registry).await;
 
     // A second terminal message (e.g. IDLE right after FINISH) with no active job tracked
     // anymore must be a no-op, not an error or a second end_job call.
-    handle_message(printer_id, r#"{"print":{"gcode_state":"IDLE"}}"#, &pool, &store, &mut active_task_id).await;
+    handle_message(printer_id, r#"{"print":{"gcode_state":"IDLE"}}"#, &pool, &store, &mut active_task_id, &camera_registry).await;
 
     assert_eq!(active_task_id, None);
 }
@@ -85,9 +107,10 @@ async fn handle_message_ignores_unparseable_payloads() {
     let pool = test_pool().await;
     let printer_id = seed_printer(&pool).await;
     let store = new_store();
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
     let mut active_task_id = None;
 
-    handle_message(printer_id, "not json", &pool, &store, &mut active_task_id).await;
+    handle_message(printer_id, "not json", &pool, &store, &mut active_task_id, &camera_registry).await;
 
     let job_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM printer_jobs").fetch_one(&pool).await.unwrap();
     assert_eq!(job_count, 0);
@@ -100,13 +123,14 @@ async fn handle_message_does_not_overwrite_ams_units_with_an_empty_update() {
     let pool = test_pool().await;
     let printer_id = seed_printer(&pool).await;
     let store = new_store();
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
     let mut active_task_id = None;
     let with_ams = r#"{"print":{"gcode_state":"RUNNING","task_id":"1","ams":{"ams":[{"id":"0","humidity":"5","tray":[]}]}}}"#;
-    handle_message(printer_id, with_ams, &pool, &store, &mut active_task_id).await;
+    handle_message(printer_id, with_ams, &pool, &store, &mut active_task_id, &camera_registry).await;
 
     // A follow-up message with no "ams" key at all (common for delta updates) must not clear
     // the AMS inventory we already know about.
-    handle_message(printer_id, &running_payload("1"), &pool, &store, &mut active_task_id).await;
+    handle_message(printer_id, &running_payload("1"), &pool, &store, &mut active_task_id, &camera_registry).await;
 
     let status = snapshot(&store, printer_id).await;
     assert_eq!(status.ams_units.len(), 1);
@@ -136,8 +160,9 @@ async fn live_endpoint_streams_the_stores_snapshot_for_the_requested_printer() {
     let pool = test_pool().await;
     let printer_id = seed_printer(&pool).await;
     let store = new_store();
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
     let mut active_task_id = None;
-    handle_message(printer_id, &running_payload("1725"), &pool, &store, &mut active_task_id).await;
+    handle_message(printer_id, &running_payload("1725"), &pool, &store, &mut active_task_id, &camera_registry).await;
 
     let (status, body) = send_sse(&pool, &store, &format!("/api/printers/{printer_id}/live")).await;
 
@@ -154,6 +179,7 @@ async fn live_endpoint_reports_disconnected_for_a_printer_with_no_live_status() 
     let pool = test_pool().await;
     let printer_id = seed_printer(&pool).await;
     let store = new_store();
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
 
     let (status, body) = send_sse(&pool, &store, &format!("/api/printers/{printer_id}/live")).await;
 

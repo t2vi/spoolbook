@@ -52,8 +52,8 @@ pub async fn record_reading(
     };
 
     sqlx::query(
-        "INSERT INTO printer_readings (printer_job_id, recorded_at, nozzle_temp_c, bed_temp_c, chamber_temp_c, ams_slot, progress_pct)
-         VALUES (?1, COALESCE(?2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), ?3, ?4, ?5, ?6, ?7)",
+        "INSERT INTO printer_readings (printer_job_id, recorded_at, nozzle_temp_c, bed_temp_c, chamber_temp_c, ams_slot, progress_pct, ams_humidity_pct, layer_num, total_layer_num)
+         VALUES (?1, COALESCE(?2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
     )
     .bind(job_id)
     .bind(at)
@@ -62,6 +62,9 @@ pub async fn record_reading(
     .bind(input.chamber_temp_c)
     .bind(&input.ams_slot)
     .bind(input.progress_pct)
+    .bind(input.ams_humidity_pct)
+    .bind(input.layer_num)
+    .bind(input.total_layer_num)
     .execute(pool)
     .await
     .expect("insert failed");
@@ -95,6 +98,69 @@ pub async fn record_reading(
     }
 }
 
+#[derive(Serialize, serde::Deserialize, sqlx::FromRow, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadingSnapshot {
+    pub recorded_at: String,
+    pub chamber_temp_c: Option<f64>,
+    pub ams_humidity_pct: Option<i64>,
+    pub layer_num: Option<i64>,
+    pub total_layer_num: Option<i64>,
+    pub progress_pct: Option<i64>,
+}
+
+// Collapses a finished Job's raw Readings into a fixed one-minute-bucketed snapshot stored on
+// its Print, then deletes the raw rows -- see docs/adr/0032. Last value per bucket, deliberately
+// not averaged: averaging would smooth over abrupt real jumps (e.g. a chamber door opening) that
+// this feature exists to surface. No-op (leaves telemetry_json untouched) when there are no
+// readings for this job -- nothing to collapse.
+pub async fn collapse_readings_to_snapshot(pool: &SqlitePool, print_id: i64, printer_job_id: i64) {
+    let readings = sqlx::query_as::<_, ReadingSnapshot>(
+        "SELECT recorded_at, chamber_temp_c, ams_humidity_pct, layer_num, total_layer_num, progress_pct
+         FROM printer_readings WHERE printer_job_id = ?1 ORDER BY recorded_at ASC",
+    )
+    .bind(printer_job_id)
+    .fetch_all(pool)
+    .await
+    .expect("query failed");
+
+    if readings.is_empty() {
+        return;
+    }
+
+    let mut buckets: Vec<ReadingSnapshot> = Vec::new();
+    for reading in readings {
+        // recorded_at is "YYYY-MM-DDTHH:MM:SS.fffZ" -- the first 16 chars are the minute bucket.
+        let bucket_key = &reading.recorded_at[..16];
+        match buckets.last() {
+            Some(last) if &last.recorded_at[..16] == bucket_key => {
+                *buckets.last_mut().unwrap() = reading;
+            }
+            _ => buckets.push(reading),
+        }
+    }
+
+    let json = serde_json::to_string(&buckets).expect("serialize failed");
+    sqlx::query("UPDATE prints SET telemetry_json = ?1 WHERE id = ?2").bind(json).bind(print_id).execute(pool).await.expect("update failed");
+    sqlx::query("DELETE FROM printer_readings WHERE printer_job_id = ?1").bind(printer_job_id).execute(pool).await.expect("delete failed");
+}
+
+// Converts any already-attached Job whose Print has no telemetry_json snapshot yet -- covers
+// Prints that finished before this feature shipped. Idempotent (safe to call every startup, like
+// auth::migrate_env_var_admin_if_needed): the WHERE clause only ever matches a Print once.
+pub async fn backfill_reading_snapshots(pool: &SqlitePool) {
+    let pending = sqlx::query_as::<_, (i64, i64)>(
+        "SELECT pj.id, pj.print_id FROM printer_jobs pj JOIN prints p ON p.id = pj.print_id WHERE p.telemetry_json IS NULL",
+    )
+    .fetch_all(pool)
+    .await
+    .expect("query failed");
+
+    for (job_id, print_id) in pending {
+        collapse_readings_to_snapshot(pool, print_id, job_id).await;
+    }
+}
+
 // FINISH/FAILED are unambiguous. Everything else (IDLE, or a delta message that omitted
 // gcode_state before this one) falls back to Partial rather than guessing — IDLE could mean a
 // dropped FINISH right before the idle snapshot, or the printer going idle after a user-
@@ -107,7 +173,30 @@ fn map_terminal_gcode_state(gcode_state: Option<&str>) -> &'static str {
     }
 }
 
-pub async fn end_job(pool: &SqlitePool, printer_id: i64, external_job_id: &str, terminal_gcode_state: Option<&str>, at: Option<&str>) {
+// DB-backed fallback for when the caller has no in-memory active_task_id to hand end_job (e.g.
+// after a process restart mid-print — see printer_mqtt.rs's handle_message). At most one open
+// job per printer under normal operation; ORDER BY started_at DESC is a defensive tie-break, not
+// an expected case.
+pub async fn find_open_job_external_id(pool: &SqlitePool, printer_id: i64) -> Option<String> {
+    sqlx::query_scalar::<_, String>(
+        "SELECT external_job_id FROM printer_jobs WHERE printer_id = ?1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1",
+    )
+    .bind(printer_id)
+    .fetch_optional(pool)
+    .await
+    .expect("query failed")
+}
+
+pub async fn end_job(
+    pool: &SqlitePool,
+    printer_id: i64,
+    external_job_id: &str,
+    terminal_gcode_state: Option<&str>,
+    at: Option<&str>,
+    chamber_temp_c: Option<f64>,
+    ams_humidity_pct: Option<i64>,
+    camera_registry: &crate::printer_camera::CameraRegistry,
+) {
     let job = sqlx::query_as::<_, (i64, Option<i64>)>(
         "SELECT id, print_id FROM printer_jobs WHERE printer_id = ?1 AND external_job_id = ?2 AND ended_at IS NULL",
     )
@@ -127,18 +216,25 @@ pub async fn end_job(pool: &SqlitePool, printer_id: i64, external_job_id: &str, 
         .expect("update failed");
 
     if let Some(print_id) = print_id {
+        // Snapshot the printer's last-known chamber temp / AMS humidity at end-of-print — the
+        // only point either is ever known, since neither is client-writable (see prints.rs).
         sqlx::query(
-            "UPDATE prints SET ended_at = COALESCE(?1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), status = ?2
-             WHERE id = ?3 AND status = 'InProgress'",
+            "UPDATE prints SET ended_at = COALESCE(?1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), status = ?2,
+             chamber_temp_c = ?3, ams_humidity_pct = ?4
+             WHERE id = ?5 AND status = 'InProgress'",
         )
         .bind(at)
         .bind(map_terminal_gcode_state(terminal_gcode_state))
+        .bind(chamber_temp_c)
+        .bind(ams_humidity_pct)
         .bind(print_id)
         .execute(pool)
         .await
         .expect("update failed");
 
         crate::weather::fetch_and_store(pool, print_id).await;
+        crate::printer_camera::capture_and_store(pool, camera_registry, print_id, printer_id).await;
+        collapse_readings_to_snapshot(pool, print_id, job_id).await;
     }
 }
 

@@ -1,11 +1,13 @@
 // Ambient weather auto-fetch (github.com/t2vi/spoolbook/issues/94): once a print ends, pull the
 // hourly outdoor temperature/humidity for the print's [started_at, ended_at] window from
 // Open-Meteo's historical/archive API (ERA5 reanalysis -- hourly is its finest resolution, no
-// reliable sub-hourly for an arbitrary location) and average it into prints.ambient_temp_c /
-// ambient_humidity_pct. This is a separate, single-location value from the existing manual
-// actual_room_temp_c (indoor, near the printer) -- ambient stays informational/correlation-only,
-// never folded into recommend_profile's ranking, and is never hand-typed: the only way in today
-// is this fetch (auto_source records that), with a future thermometer integration as a possible
+// reliable sub-hourly for an arbitrary location), average it into prints.ambient_temp_c /
+// ambient_humidity_pct, and persist every hour into print_hourly_weather for the print detail
+// page's graph (issues/122) -- one fetch feeds both, never re-queried after. This is a separate,
+// single-location value from chamber_temp_c (the printer's own enclosure sensor, snapshotted at
+// end-of-print) -- ambient stays informational/correlation-only, folded into recommend_profile's
+// ranking instead of chamber (see prints.rs), and is never hand-typed: the only way in today is
+// this fetch (auto_source records that), with a future thermometer integration as a possible
 // second source.
 use chrono::{DateTime, NaiveDateTime};
 use serde::Deserialize;
@@ -27,10 +29,18 @@ struct HourlyData {
     relative_humidity_2m: Vec<Option<f64>>,
 }
 
-// Averages only the hours that actually fall within the print's [started_at, ended_at] window --
+pub struct HourlyReading {
+    pub hour: String,
+    pub temp_c: Option<f64>,
+    pub humidity_pct: Option<f64>,
+}
+
+// Shared by fetch_ambient_average and fetch_and_store's hourly-graph persistence (issues/122) --
+// one HTTP call to Open-Meteo serves both, rather than each independently re-fetching the same
+// window. Only the hours that actually fall within the print's [started_at, ended_at] window --
 // the archive API only takes whole-day date params, so a short print still gets its own window's
 // readings, not the whole day's.
-pub async fn fetch_ambient_average(latitude: f64, longitude: f64, started_at: &str, ended_at: &str) -> Result<(f64, f64), String> {
+async fn fetch_hourly_readings(latitude: f64, longitude: f64, started_at: &str, ended_at: &str) -> Result<Vec<HourlyReading>, String> {
     let start = DateTime::parse_from_rfc3339(started_at).map_err(|e| e.to_string())?.naive_utc();
     let end = DateTime::parse_from_rfc3339(ended_at).map_err(|e| e.to_string())?.naive_utc();
 
@@ -51,26 +61,34 @@ pub async fn fetch_ambient_average(latitude: f64, longitude: f64, started_at: &s
     }
     let body: ArchiveResponse = resp.json().await.map_err(|e| e.to_string())?;
 
-    let mut temps = Vec::new();
-    let mut humidities = Vec::new();
+    let mut readings = Vec::new();
     for i in 0..body.hourly.time.len() {
         let Ok(hour) = NaiveDateTime::parse_from_str(&body.hourly.time[i], "%Y-%m-%dT%H:%M") else { continue };
         if hour < start || hour > end {
             continue;
         }
-        if let Some(t) = body.hourly.temperature_2m.get(i).copied().flatten() {
-            temps.push(t);
-        }
-        if let Some(h) = body.hourly.relative_humidity_2m.get(i).copied().flatten() {
-            humidities.push(h);
-        }
+        readings.push(HourlyReading {
+            hour: body.hourly.time[i].clone(),
+            temp_c: body.hourly.temperature_2m.get(i).copied().flatten(),
+            humidity_pct: body.hourly.relative_humidity_2m.get(i).copied().flatten(),
+        });
     }
+    Ok(readings)
+}
+
+fn average(values: &[f64]) -> f64 {
+    values.iter().sum::<f64>() / values.len() as f64
+}
+
+pub async fn fetch_ambient_average(latitude: f64, longitude: f64, started_at: &str, ended_at: &str) -> Result<(f64, f64), String> {
+    let readings = fetch_hourly_readings(latitude, longitude, started_at, ended_at).await?;
+    let temps: Vec<f64> = readings.iter().filter_map(|r| r.temp_c).collect();
+    let humidities: Vec<f64> = readings.iter().filter_map(|r| r.humidity_pct).collect();
 
     if temps.is_empty() || humidities.is_empty() {
         return Err("no hourly reading falls within the print window".to_string());
     }
-    let avg = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
-    Ok((avg(&temps), avg(&humidities)))
+    Ok((average(&temps), average(&humidities)))
 }
 
 // Called from printer_telemetry::end_job right after a print's ended_at is set. Fire-and-forget
@@ -90,15 +108,36 @@ pub async fn fetch_and_store(pool: &SqlitePool, print_id: i64) {
     };
     let Some(ended_at) = ended_at else { return };
 
-    match fetch_ambient_average(latitude, longitude, &started_at, &ended_at).await {
-        Ok((temp, humidity)) => {
+    match fetch_hourly_readings(latitude, longitude, &started_at, &ended_at).await {
+        Ok(readings) => {
+            let temps: Vec<f64> = readings.iter().filter_map(|r| r.temp_c).collect();
+            let humidities: Vec<f64> = readings.iter().filter_map(|r| r.humidity_pct).collect();
+            if temps.is_empty() || humidities.is_empty() {
+                eprintln!("ambient weather fetch for print {print_id}: no hourly reading falls within the print window");
+                return;
+            }
+
             sqlx::query("UPDATE prints SET ambient_temp_c = ?1, ambient_humidity_pct = ?2, ambient_source = 'open-meteo' WHERE id = ?3")
-                .bind(temp)
-                .bind(humidity)
+                .bind(average(&temps))
+                .bind(average(&humidities))
                 .bind(print_id)
                 .execute(pool)
                 .await
                 .expect("update failed");
+
+            for reading in &readings {
+                sqlx::query(
+                    "INSERT INTO print_hourly_weather (print_id, hour, temp_c, humidity_pct) VALUES (?1, ?2, ?3, ?4)
+                     ON CONFLICT (print_id, hour) DO UPDATE SET temp_c = excluded.temp_c, humidity_pct = excluded.humidity_pct",
+                )
+                .bind(print_id)
+                .bind(&reading.hour)
+                .bind(reading.temp_c)
+                .bind(reading.humidity_pct)
+                .execute(pool)
+                .await
+                .expect("insert failed");
+            }
         }
         Err(e) => eprintln!("ambient weather fetch failed for print {print_id}: {e}"),
     }

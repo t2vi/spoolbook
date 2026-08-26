@@ -7,6 +7,12 @@ pub struct ReadingInput {
     pub chamber_temp_c: Option<f64>,
     pub ams_slot: Option<String>,
     pub progress_pct: Option<i64>,
+    // Mirrors the first AMS unit's real-% humidity (see snapshot_for_end_job in printer_mqtt.rs
+    // for the same first-unit convention) -- coarse humidity_level is never stored here, same
+    // real-percentage-only rule as the end-of-print snapshot.
+    pub ams_humidity_pct: Option<i64>,
+    pub layer_num: Option<i64>,
+    pub total_layer_num: Option<i64>,
 }
 
 // Live-only AMS snapshot — deliberately not persisted onto PrinterReading (docs/adr/0022): the
@@ -67,6 +73,8 @@ pub fn parse(json: &str) -> Option<BambuTelemetryMessage> {
         }
     }
 
+    let ams_humidity_pct = ams_units.first().and_then(|u| u.humidity_pct);
+
     Some(BambuTelemetryMessage {
         gcode_state,
         task_id: print.get("task_id").and_then(Value::as_str).map(String::from),
@@ -76,6 +84,9 @@ pub fn parse(json: &str) -> Option<BambuTelemetryMessage> {
             chamber_temp_c: print.get("chamber_temper").and_then(Value::as_f64),
             ams_slot,
             progress_pct: print.get("mc_percent").and_then(Value::as_i64),
+            ams_humidity_pct,
+            layer_num: print.get("layer_num").and_then(Value::as_i64),
+            total_layer_num: print.get("total_layer_num").and_then(Value::as_i64),
         },
         ams_units,
     })

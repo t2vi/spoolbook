@@ -137,8 +137,7 @@ async fn delete_rejects_a_printer_with_prints() {
         "profileId": profile_id, "spoolId": spool_id, "printerId": printer_id,
         "input": {
             "startedAt": "2026-08-15T10:00:00Z", "endedAt": "2026-08-15T12:00:00Z",
-            "status": "Success", "notes": null, "amsHumidityPct": null,
-            "actualRoomTempC": null, "cleanBuildPlate": true,
+            "status": "Success", "notes": null, "cleanBuildPlate": true,
             "projectId": null, "projectPlaterId": null,
             "failureModes": []
         }

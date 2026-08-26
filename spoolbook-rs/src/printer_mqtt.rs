@@ -14,6 +14,7 @@ pub struct PrinterLiveStatus {
     pub connected: bool,
     pub ams_units: Vec<parser::AmsUnitReading>,
     pub gcode_state: Option<String>,
+    pub chamber_temp_c: Option<f64>,
     // Reused by printer control commands (docs/adr/0022) so pause/resume/stop publish on the
     // same live connection telemetry already holds open, rather than opening a new one per
     // action. AsyncClient is a cheap handle (channel sender), not the real socket — cloning it
@@ -102,7 +103,7 @@ pub(crate) fn tls12_no_verify_config() -> rustls::ClientConfig {
 // default 10KB max packet size is smaller than this printer's real device/report payload
 // (~14KB) — connect_and_subscribe_loop's own set_max_packet_size call below is the fix. No
 // reference test suite to port forward (the .NET original has none either).
-pub async fn spawn_all(pool: SqlitePool, store: LiveStatusStore) {
+pub async fn spawn_all(pool: SqlitePool, store: LiveStatusStore, camera_registry: crate::printer_camera::CameraRegistry) {
     tokio::spawn(purge_stale_jobs_loop(pool.clone()));
 
     let printers = sqlx::query_as::<_, (i64, Option<String>, Option<String>, Option<String>)>(
@@ -114,7 +115,7 @@ pub async fn spawn_all(pool: SqlitePool, store: LiveStatusStore) {
 
     for (id, ip_address, access_code, serial_number) in printers {
         if let (Some(ip_address), Some(access_code), Some(serial_number)) = (ip_address, access_code, serial_number) {
-            tokio::spawn(connect_and_subscribe_loop(id, ip_address, access_code, serial_number, pool.clone(), store.clone()));
+            tokio::spawn(connect_and_subscribe_loop(id, ip_address, access_code, serial_number, pool.clone(), store.clone(), camera_registry.clone()));
         }
     }
 }
@@ -141,6 +142,7 @@ async fn connect_and_subscribe_loop(
     serial_number: String,
     pool: SqlitePool,
     store: LiveStatusStore,
+    camera_registry: crate::printer_camera::CameraRegistry,
 ) {
     // Tracks the external job id of the currently-active print, so a terminal message (which
     // may omit task_id) can still end the right Job. Mirrors _activeTaskIdByPrinter — lost on
@@ -174,7 +176,7 @@ async fn connect_and_subscribe_loop(
                 }
                 Ok(Event::Incoming(Packet::Publish(publish))) => {
                     if let Ok(payload) = std::str::from_utf8(&publish.payload) {
-                        handle_message(printer_id, payload, &pool, &store, &mut active_task_id).await;
+                        handle_message(printer_id, payload, &pool, &store, &mut active_task_id, &camera_registry).await;
                     }
                 }
                 Ok(_) => {}
@@ -189,7 +191,14 @@ async fn connect_and_subscribe_loop(
 
 // pub rather than private: exercised directly by tests (no real MQTT connection needed, it's
 // pure JSON-in/DB-and-store-out), same testing boundary as printer_telemetry.rs.
-pub async fn handle_message(printer_id: i64, payload: &str, pool: &SqlitePool, store: &LiveStatusStore, active_task_id: &mut Option<String>) {
+pub async fn handle_message(
+    printer_id: i64,
+    payload: &str,
+    pool: &SqlitePool,
+    store: &LiveStatusStore,
+    active_task_id: &mut Option<String>,
+    camera_registry: &crate::printer_camera::CameraRegistry,
+) {
     let Some(message) = parser::parse(payload) else { return };
 
     {
@@ -200,6 +209,11 @@ pub async fn handle_message(printer_id: i64, payload: &str, pool: &SqlitePool, s
         if !message.ams_units.is_empty() {
             entry.ams_units = message.ams_units.clone();
         }
+        // A delta message that omits chamber_temper must not clobber the last known reading,
+        // same reasoning as the ams_units guard above.
+        if message.reading.chamber_temp_c.is_some() {
+            entry.chamber_temp_c = message.reading.chamber_temp_c;
+        }
     }
 
     if parser::is_active_state(&message.gcode_state) {
@@ -208,8 +222,33 @@ pub async fn handle_message(printer_id: i64, payload: &str, pool: &SqlitePool, s
             printer_telemetry::record_reading(pool, printer_id, task_id, &message.reading, None).await;
         }
     } else if let Some(task_id) = active_task_id.take() {
-        printer_telemetry::end_job(pool, printer_id, &task_id, Some(&message.gcode_state), None).await;
+        let (chamber_temp_c, ams_humidity_pct) = snapshot_for_end_job(store, printer_id).await;
+        printer_telemetry::end_job(pool, printer_id, &task_id, Some(&message.gcode_state), None, chamber_temp_c, ams_humidity_pct, camera_registry).await;
+    } else if let Some(task_id) = printer_telemetry::find_open_job_external_id(pool, printer_id).await {
+        // active_task_id is only ever in-memory (comment above connect_and_subscribe_loop's
+        // declaration) — a backend restart mid-print loses it, but printer_jobs' own open row
+        // (ended_at IS NULL) survives. Without this fallback a terminal message arriving after a
+        // restart is a silent no-op forever: the Print never gets ended_at/status, stuck
+        // InProgress until someone notices and fixes it by hand.
+        let (chamber_temp_c, ams_humidity_pct) = snapshot_for_end_job(store, printer_id).await;
+        printer_telemetry::end_job(pool, printer_id, &task_id, Some(&message.gcode_state), None, chamber_temp_c, ams_humidity_pct, camera_registry).await;
     }
+}
+
+// Best-known chamber temp / AMS humidity for this printer at the moment a print ends — the only
+// point either value gets persisted onto the Print row (see prints.rs's comment on PrintRow).
+// Takes the first AMS unit's reading when multiple are present; ponytail: revisit if a multi-AMS
+// setup makes that ambiguous in practice.
+//
+// humidity_pct only, never humidity_level: the print-detail UI shows this single stored number
+// as a plain percentage, and a coarse 1-5 index displayed that way ("3%") would read as a real,
+// very-low humidity reading instead of "middling" on the coarse scale. AMS hardware without a
+// hygrometer (no humidity_pct) just gets left blank here rather than showing a wrong number.
+async fn snapshot_for_end_job(store: &LiveStatusStore, printer_id: i64) -> (Option<f64>, Option<i64>) {
+    let s = store.read().await;
+    let Some(entry) = s.get(&printer_id) else { return (None, None) };
+    let ams_humidity_pct = entry.ams_units.first().and_then(|u| u.humidity_pct);
+    (entry.chamber_temp_c, ams_humidity_pct)
 }
 
 // Publishes on the same live connection telemetry already holds open (docs/adr/0022) rather

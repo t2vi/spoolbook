@@ -10,10 +10,10 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 
-// Weather auto-fetch (Open-Meteo, populating ambient_temp_c/ambient_humidity_pct/ambient_source)
-// is deliberately not implemented here — unlike filament-catalog sync or project upload/import
-// (both now ported), this one has no reference test suite to port forward, only a live external
-// API. ActualRoomTempC (manual entry) already covers the non-network path.
+// ams_humidity_pct/chamber_temp_c are auto-snapshotted from the printer's own live MQTT reading
+// at print-end (printer_mqtt.rs's handle_message -> printer_telemetry::end_job), same as
+// ambient_temp_c/ambient_humidity_pct/ambient_source are auto-fetched from Open-Meteo there —
+// none of the five are client-writable, so none appear in PrintInputBody.
 #[derive(sqlx::FromRow)]
 struct PrintRow {
     id: i64,
@@ -27,11 +27,12 @@ struct PrintRow {
     status: String,
     notes: Option<String>,
     ams_humidity_pct: Option<i64>,
-    actual_room_temp_c: Option<f64>,
+    chamber_temp_c: Option<f64>,
     clean_build_plate: Option<bool>,
     ambient_temp_c: Option<f64>,
     ambient_humidity_pct: Option<f64>,
     ambient_source: Option<String>,
+    bed_photo_base64: Option<String>,
 }
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -65,13 +66,16 @@ pub struct Print {
     status: String,
     notes: Option<String>,
     ams_humidity_pct: Option<i64>,
-    actual_room_temp_c: Option<f64>,
+    chamber_temp_c: Option<f64>,
     clean_build_plate: Option<bool>,
     // Auto-fetched only (issues/94) -- never client-writable, so these have no counterpart in
     // PrintInputBody.
     ambient_temp_c: Option<f64>,
     ambient_humidity_pct: Option<f64>,
     ambient_source: Option<String>,
+    // Auto-captured at end-of-print regardless of terminal status (issues/121) -- never
+    // client-writable either.
+    bed_photo_base64: Option<String>,
     failure_modes: Vec<PrintFailureModeEntry>,
 }
 
@@ -119,11 +123,12 @@ async fn hydrate(pool: &SqlitePool, row: PrintRow) -> Print {
         status: row.status,
         notes: row.notes,
         ams_humidity_pct: row.ams_humidity_pct,
-        actual_room_temp_c: row.actual_room_temp_c,
+        chamber_temp_c: row.chamber_temp_c,
         clean_build_plate: row.clean_build_plate,
         ambient_temp_c: row.ambient_temp_c,
         ambient_humidity_pct: row.ambient_humidity_pct,
         ambient_source: row.ambient_source,
+        bed_photo_base64: row.bed_photo_base64,
         failure_modes,
     }
 }
@@ -135,8 +140,6 @@ pub struct PrintInputBody {
     ended_at: String,
     status: String,
     notes: Option<String>,
-    ams_humidity_pct: Option<i64>,
-    actual_room_temp_c: Option<f64>,
     clean_build_plate: Option<bool>,
     project_id: Option<i64>,
     project_plater_id: Option<String>,
@@ -186,6 +189,32 @@ pub fn router() -> Router<SqlitePool> {
         .route("/api/prints/job-match", get(job_match))
         .route("/api/prints/{id}", get(get_one).put(update).delete(delete))
         .route("/api/prints/{id}/attach-job", axum::routing::post(attach_job))
+        .route("/api/prints/{id}/hourly-weather", get(hourly_weather))
+        .route("/api/prints/{id}/readings", get(readings))
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+struct HourlyWeatherRow {
+    hour: String,
+    temp_c: Option<f64>,
+    humidity_pct: Option<f64>,
+}
+
+async fn hourly_weather(State(pool): State<SqlitePool>, Path(id): Path<i64>) -> Json<Vec<HourlyWeatherRow>> {
+    let rows = sqlx::query_as::<_, HourlyWeatherRow>(
+        "SELECT hour, temp_c, humidity_pct FROM print_hourly_weather WHERE print_id = ?1 ORDER BY hour",
+    )
+    .bind(id)
+    .fetch_all(&pool)
+    .await
+    .expect("query failed");
+    Json(rows)
+}
+
+async fn readings(State(pool): State<SqlitePool>, Path(id): Path<i64>) -> Json<Vec<crate::printer_telemetry::ReadingSnapshot>> {
+    let json: Option<String> = sqlx::query_scalar("SELECT telemetry_json FROM prints WHERE id = ?1").bind(id).fetch_optional(&pool).await.expect("query failed").flatten();
+    Json(json.map(|j| serde_json::from_str(&j).expect("stored telemetry_json is always valid")).unwrap_or_default())
 }
 
 #[derive(Deserialize)]
@@ -340,8 +369,11 @@ async fn recommend_profile(State(pool): State<SqlitePool>, Query(q): Query<Recom
             _ => 3,
         }
     }
+    // Ranked against ambient_temp_c (Open-Meteo, auto-fetched at print-end) rather than
+    // chamber_temp_c — chamber is the printer enclosure's own heat during the print, not a
+    // stand-in for outside/room conditions, so it's the wrong axis for "closest weather match".
     fn temp_distance(row: &PrintRow, current: Option<f64>) -> f64 {
-        match (row.actual_room_temp_c, current) {
+        match (row.ambient_temp_c, current) {
             (Some(effective), Some(current)) => (effective - current).abs(),
             _ => f64::MAX,
         }
@@ -411,8 +443,8 @@ async fn create(
     let id = sqlx::query_scalar::<_, i64>(
         "INSERT INTO prints (
             profile_id, spool_id, printer_id, project_id, project_plater_id,
-            started_at, ended_at, status, notes, ams_humidity_pct, actual_room_temp_c, clean_build_plate
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+            started_at, ended_at, status, notes, clean_build_plate
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
         RETURNING id",
     )
     .bind(body.profile_id)
@@ -424,8 +456,6 @@ async fn create(
     .bind(&body.input.ended_at)
     .bind(&body.input.status)
     .bind(&body.input.notes)
-    .bind(body.input.ams_humidity_pct)
-    .bind(body.input.actual_room_temp_c)
     .bind(body.input.clean_build_plate)
     .fetch_one(&mut *tx)
     .await
@@ -467,8 +497,8 @@ async fn update(
 
     let updated = sqlx::query(
         "UPDATE prints SET printer_id = ?1, project_id = ?2, project_plater_id = ?3, started_at = ?4,
-         ended_at = ?5, status = ?6, notes = ?7, ams_humidity_pct = ?8, actual_room_temp_c = ?9, clean_build_plate = ?10
-         WHERE id = ?11",
+         ended_at = ?5, status = ?6, notes = ?7, clean_build_plate = ?8
+         WHERE id = ?9",
     )
     .bind(body.printer_id)
     .bind(body.input.project_id)
@@ -477,8 +507,6 @@ async fn update(
     .bind(&body.input.ended_at)
     .bind(&body.input.status)
     .bind(&body.input.notes)
-    .bind(body.input.ams_humidity_pct)
-    .bind(body.input.actual_room_temp_c)
     .bind(body.input.clean_build_plate)
     .bind(id)
     .execute(&mut *tx)

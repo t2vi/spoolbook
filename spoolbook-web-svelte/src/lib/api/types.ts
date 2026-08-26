@@ -161,14 +161,34 @@ export interface Print {
 	endedAt: string | null;
 	status: PrintStatus;
 	notes: string | null;
+	// amsHumidityPct/chamberTempC are auto-snapshotted from the printer's own live MQTT reading
+	// when the print ends -- never manually entered, same as the ambient fields below.
 	amsHumidityPct: number | null;
-	actualRoomTempC: number | null;
+	chamberTempC: number | null;
 	cleanBuildPlate: boolean | null;
 	// Auto-fetched from Open-Meteo when the print ends (issues/94) -- never manually entered.
 	ambientTempC: number | null;
 	ambientHumidityPct: number | null;
 	ambientSource: string | null;
+	// Auto-captured at end-of-print regardless of terminal status (issues/121) -- never
+	// manually entered either. Null when the printer was unreachable at capture time.
+	bedPhotoBase64: string | null;
 	failureModes: PrintFailureModeEntry[];
+}
+
+export interface HourlyWeatherReading {
+	hour: string;
+	tempC: number | null;
+	humidityPct: number | null;
+}
+
+export interface PrintReading {
+	recordedAt: string;
+	chamberTempC: number | null;
+	amsHumidityPct: number | null;
+	layerNum: number | null;
+	totalLayerNum: number | null;
+	progressPct: number | null;
 }
 
 export interface PrintInventoryResult {
