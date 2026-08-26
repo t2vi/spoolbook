@@ -3,6 +3,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Chart from '$lib/components/ui/chart/index.js';
+	import * as Tabs from '$lib/components/ui/tabs/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { LineChart } from 'layerchart';
@@ -47,6 +48,7 @@
 	let weatherChartData = $derived(hourlyWeather.map((r) => ({ ...r, hour: new Date(r.hour) })));
 	let readingsChartData = $derived(printReadings.map((r) => ({ ...r, recordedAt: new Date(r.recordedAt) })));
 	let lastReading = $derived(printReadings.length > 0 ? printReadings[printReadings.length - 1] : null);
+	let chartTab = $state('weather');
 
 	function statusBadgeClass(status: Print['status']) {
 		switch (status) {
@@ -67,6 +69,7 @@
 			plates = print.project ? await getProjectPlates(print.project.id) : [];
 			hourlyWeather = await getHourlyWeather(id);
 			printReadings = await getPrintReadings(id);
+			if (hourlyWeather.length === 0 && printReadings.length > 0) chartTab = 'telemetry';
 		})();
 	});
 </script>
@@ -75,7 +78,7 @@
 	<title>Print details</title>
 </svelte:head>
 
-<div class="mx-auto max-w-2xl px-4 py-8">
+<div class="mx-auto max-w-5xl px-4 py-8">
 	{#if print === null}
 		<Card.Root>
 			<Card.Header>
@@ -104,132 +107,143 @@
 					<Separator />
 				{/if}
 
-				<div class="flex flex-col gap-2">
-					<span class="text-sm font-medium text-muted-foreground">Bed photo</span>
-					{#if print.bedPhotoBase64}
-						<div class="flex h-48 items-center justify-center overflow-hidden rounded-lg bg-slate-900">
-							<img src="data:image/jpeg;base64,{print.bedPhotoBase64}" class="h-full w-full object-contain" alt="Bed at print end" />
+				<div class="grid grid-cols-1 gap-6 md:grid-cols-[280px_1fr]">
+					<div class="flex flex-col gap-2">
+						<span class="text-sm font-medium text-muted-foreground">Bed photo</span>
+						{#if print.bedPhotoBase64}
+							<div class="flex h-48 items-center justify-center overflow-hidden rounded-lg bg-slate-900">
+								<img src="data:image/jpeg;base64,{print.bedPhotoBase64}" class="h-full w-full object-contain" alt="Bed at print end" />
+							</div>
+						{:else}
+							<div class="flex h-48 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
+								No bed photo captured
+							</div>
+						{/if}
+					</div>
+
+					<div class="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
+						<div class="flex flex-col gap-1">
+							<span class="font-medium text-muted-foreground">Spool</span>
+							<span>{print.spool?.filament?.brand} {print.spool?.filament?.material} {print.spool?.filament?.variant ?? ''} — {print.spool?.filament?.color}{print.spool
+									?.lotCode
+									? ` (${print.spool.lotCode})`
+									: ''}</span>
 						</div>
-					{:else}
-						<div class="flex h-24 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
-							No bed photo captured
+						<div class="flex flex-col gap-1">
+							<span class="font-medium text-muted-foreground">Profile</span>
+							<span>{print.profile?.name}</span>
 						</div>
-					{/if}
+						<div class="flex flex-col gap-1">
+							<span class="font-medium text-muted-foreground">Printer</span>
+							<span>{print.printer?.name}</span>
+						</div>
+						<div class="flex flex-col gap-1">
+							<span class="font-medium text-muted-foreground">Clean build plate</span>
+							<span>{print.cleanBuildPlate ? 'Yes' : 'No'}</span>
+						</div>
+						<div class="flex flex-col gap-1">
+							<span class="font-medium text-muted-foreground">Started</span>
+							<span>{formatDateTime(print.startedAt)}</span>
+						</div>
+						<div class="flex flex-col gap-1">
+							<span class="font-medium text-muted-foreground">Ended</span>
+							<span>{print.endedAt ? formatDateTime(print.endedAt) : '—'}</span>
+						</div>
+						<div class="flex flex-col gap-1">
+							<span class="font-medium text-muted-foreground">AMS humidity</span>
+							<span>{print.amsHumidityPct !== null ? `${print.amsHumidityPct}%` : '—'}</span>
+						</div>
+						<div class="flex flex-col gap-1">
+							<span class="font-medium text-muted-foreground">Chamber temp</span>
+							<span>{print.chamberTempC !== null ? `${print.chamberTempC}°C` : '—'}</span>
+						</div>
+						{#if print.ambientTempC !== null || print.ambientHumidityPct !== null}
+							<div class="col-span-2 flex flex-col gap-1">
+								<span class="font-medium text-muted-foreground">Room temp (auto-fetched)</span>
+								<span
+									>{print.ambientTempC !== null ? `${print.ambientTempC.toFixed(1)}°C` : '—'} / {print.ambientHumidityPct !== null
+										? `${print.ambientHumidityPct.toFixed(0)}% humidity`
+										: '—'}</span
+								>
+							</div>
+						{/if}
+					</div>
 				</div>
-				<Separator />
 
-				<div class="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
-					<div class="flex flex-col gap-1">
-						<span class="font-medium text-muted-foreground">Spool</span>
-						<span>{print.spool?.filament?.brand} {print.spool?.filament?.material} {print.spool?.filament?.variant ?? ''} — {print.spool?.filament?.color}{print.spool
-								?.lotCode
-								? ` (${print.spool.lotCode})`
-								: ''}</span>
-					</div>
-					<div class="flex flex-col gap-1">
-						<span class="font-medium text-muted-foreground">Profile</span>
-						<span>{print.profile?.name}</span>
-					</div>
-					<div class="flex flex-col gap-1">
-						<span class="font-medium text-muted-foreground">Printer</span>
-						<span>{print.printer?.name}</span>
-					</div>
-					<div class="flex flex-col gap-1">
-						<span class="font-medium text-muted-foreground">Clean build plate</span>
-						<span>{print.cleanBuildPlate ? 'Yes' : 'No'}</span>
-					</div>
-					<div class="flex flex-col gap-1">
-						<span class="font-medium text-muted-foreground">Started</span>
-						<span>{formatDateTime(print.startedAt)}</span>
-					</div>
-					<div class="flex flex-col gap-1">
-						<span class="font-medium text-muted-foreground">Ended</span>
-						<span>{print.endedAt ? formatDateTime(print.endedAt) : '—'}</span>
-					</div>
-					<div class="flex flex-col gap-1">
-						<span class="font-medium text-muted-foreground">AMS humidity</span>
-						<span>{print.amsHumidityPct !== null ? `${print.amsHumidityPct}%` : '—'}</span>
-					</div>
-					<div class="flex flex-col gap-1">
-						<span class="font-medium text-muted-foreground">Chamber temp</span>
-						<span>{print.chamberTempC !== null ? `${print.chamberTempC}°C` : '—'}</span>
-					</div>
-					{#if print.ambientTempC !== null || print.ambientHumidityPct !== null}
-						<div class="col-span-2 flex flex-col gap-1">
-							<span class="font-medium text-muted-foreground">Room temp (auto-fetched)</span>
-							<span
-								>{print.ambientTempC !== null ? `${print.ambientTempC.toFixed(1)}°C` : '—'} / {print.ambientHumidityPct !== null
-									? `${print.ambientHumidityPct.toFixed(0)}% humidity`
-									: '—'}</span
-							>
-						</div>
-					{/if}
-				</div>
-
-				{#if hourlyWeather.length > 0}
+				{#if hourlyWeather.length > 0 || printReadings.length > 0}
 					<Separator />
-					<div class="flex flex-col gap-2">
-						<span class="text-sm font-medium text-muted-foreground">Room weather over time</span>
-						<Chart.Container config={weatherChartConfig} class="h-[200px] w-full">
-							<LineChart
-								data={weatherChartData}
-								x="hour"
-								xScale={scaleTime()}
-								series={[
-									{ key: 'tempC', label: weatherChartConfig.tempC.label, color: weatherChartConfig.tempC.color },
-									{ key: 'humidityPct', label: weatherChartConfig.humidityPct.label, color: weatherChartConfig.humidityPct.color }
-								]}
-								props={{ xAxis: { format: (d: Date) => d.toLocaleTimeString([], { hour: 'numeric' }) } }}
-							>
-								{#snippet tooltip()}
-									<Chart.Tooltip labelKey="hour" />
-								{/snippet}
-							</LineChart>
-						</Chart.Container>
-					</div>
-				{/if}
+					<Tabs.Root bind:value={chartTab}>
+						<Tabs.List>
+							{#if hourlyWeather.length > 0}
+								<Tabs.Trigger value="weather">Room weather</Tabs.Trigger>
+							{/if}
+							{#if printReadings.length > 0}
+								<Tabs.Trigger value="telemetry">Chamber & humidity</Tabs.Trigger>
+								<Tabs.Trigger value="layer">Layer progress</Tabs.Trigger>
+							{/if}
+						</Tabs.List>
 
-				{#if printReadings.length > 0}
-					<Separator />
-					<div class="flex flex-col gap-2">
-						<span class="text-sm font-medium text-muted-foreground">Chamber temp & AMS humidity</span>
-						<Chart.Container config={telemetryChartConfig} class="h-[200px] w-full">
-							<LineChart
-								data={readingsChartData}
-								x="recordedAt"
-								xScale={scaleTime()}
-								series={[
-									{ key: 'chamberTempC', label: telemetryChartConfig.chamberTempC.label, color: telemetryChartConfig.chamberTempC.color },
-									{ key: 'amsHumidityPct', label: telemetryChartConfig.amsHumidityPct.label, color: telemetryChartConfig.amsHumidityPct.color }
-								]}
-								props={{ xAxis: { format: (d: Date) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) } }}
-							>
-								{#snippet tooltip()}
-									<Chart.Tooltip labelKey="recordedAt" />
-								{/snippet}
-							</LineChart>
-						</Chart.Container>
-					</div>
+						{#if hourlyWeather.length > 0}
+							<Tabs.Content value="weather">
+								<Chart.Container config={weatherChartConfig} class="h-[240px] w-full">
+									<LineChart
+										data={weatherChartData}
+										x="hour"
+										xScale={scaleTime()}
+										series={[
+											{ key: 'tempC', label: weatherChartConfig.tempC.label, color: weatherChartConfig.tempC.color },
+											{ key: 'humidityPct', label: weatherChartConfig.humidityPct.label, color: weatherChartConfig.humidityPct.color }
+										]}
+										props={{ xAxis: { format: (d: Date) => d.toLocaleTimeString([], { hour: 'numeric' }) } }}
+									>
+										{#snippet tooltip()}
+											<Chart.Tooltip labelKey="hour" />
+										{/snippet}
+									</LineChart>
+								</Chart.Container>
+							</Tabs.Content>
+						{/if}
 
-					<Separator />
-					<div class="flex flex-col gap-2">
-						<span class="text-sm font-medium text-muted-foreground"
-							>Layer progress{lastReading?.totalLayerNum ? ` — layer ${lastReading.layerNum ?? '—'} of ${lastReading.totalLayerNum}` : ''}</span
-						>
-						<Chart.Container config={layerChartConfig} class="h-[200px] w-full">
-							<LineChart
-								data={readingsChartData}
-								x="recordedAt"
-								xScale={scaleTime()}
-								series={[{ key: 'layerNum', label: layerChartConfig.layerNum.label, color: layerChartConfig.layerNum.color }]}
-								props={{ xAxis: { format: (d: Date) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) } }}
-							>
-								{#snippet tooltip()}
-									<Chart.Tooltip labelKey="recordedAt" />
-								{/snippet}
-							</LineChart>
-						</Chart.Container>
-					</div>
+						{#if printReadings.length > 0}
+							<Tabs.Content value="telemetry">
+								<Chart.Container config={telemetryChartConfig} class="h-[240px] w-full">
+									<LineChart
+										data={readingsChartData}
+										x="recordedAt"
+										xScale={scaleTime()}
+										series={[
+											{ key: 'chamberTempC', label: telemetryChartConfig.chamberTempC.label, color: telemetryChartConfig.chamberTempC.color },
+											{ key: 'amsHumidityPct', label: telemetryChartConfig.amsHumidityPct.label, color: telemetryChartConfig.amsHumidityPct.color }
+										]}
+										props={{ xAxis: { format: (d: Date) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) } }}
+									>
+										{#snippet tooltip()}
+											<Chart.Tooltip labelKey="recordedAt" />
+										{/snippet}
+									</LineChart>
+								</Chart.Container>
+							</Tabs.Content>
+
+							<Tabs.Content value="layer">
+								{#if lastReading?.totalLayerNum}
+									<p class="mb-2 text-sm text-muted-foreground">Layer {lastReading.layerNum ?? '—'} of {lastReading.totalLayerNum}</p>
+								{/if}
+								<Chart.Container config={layerChartConfig} class="h-[240px] w-full">
+									<LineChart
+										data={readingsChartData}
+										x="recordedAt"
+										xScale={scaleTime()}
+										series={[{ key: 'layerNum', label: layerChartConfig.layerNum.label, color: layerChartConfig.layerNum.color }]}
+										props={{ xAxis: { format: (d: Date) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) } }}
+									>
+										{#snippet tooltip()}
+											<Chart.Tooltip labelKey="recordedAt" />
+										{/snippet}
+									</LineChart>
+								</Chart.Container>
+							</Tabs.Content>
+						{/if}
+					</Tabs.Root>
 				{/if}
 
 				{#if print.failureModes.length > 0}
