@@ -191,6 +191,11 @@ export interface PrintReading {
 	progressPct: number | null;
 }
 
+// docs/adr/0033 — export/import. Table keys are dynamic (EXPORT_TABLES on the backend), so these
+// stay Records rather than a field per table.
+export type ImportPreview = Record<string, { total: number; new: number }>;
+export type ImportCommitResult = { ok: boolean; tables: Record<string, { inserted: number; matched: number }> };
+
 export interface PrintInventoryResult {
 	prints: Print[];
 	total: number;
