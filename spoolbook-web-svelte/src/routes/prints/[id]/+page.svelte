@@ -2,12 +2,20 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
+	import * as Chart from '$lib/components/ui/chart/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
-	import { getPrint, getProjectPlates } from '$lib/api/client';
-	import type { FailureMode, Print, ProjectPlate } from '$lib/api/types';
+	import { LineChart } from 'layerchart';
+	import { scaleTime } from 'd3-scale';
+	import { getPrint, getProjectPlates, getHourlyWeather } from '$lib/api/client';
+	import type { FailureMode, HourlyWeatherReading, Print, ProjectPlate } from '$lib/api/types';
 	import { page } from '$app/state';
 	import { formatDateTime } from '$lib/utils.js';
+
+	const weatherChartConfig = {
+		tempC: { label: 'Temp (°C)', color: 'var(--chart-1)' },
+		humidityPct: { label: 'Humidity (%)', color: 'var(--chart-2)' }
+	} satisfies Chart.ChartConfig;
 
 	const FAILURE_MODE_LABELS: Record<FailureMode, string> = {
 		Stringing: 'Stringing',
@@ -23,8 +31,10 @@
 	let id = $derived(Number(page.params.id));
 	let print = $state<Print | null>(null);
 	let plates = $state<ProjectPlate[]>([]);
+	let hourlyWeather = $state<HourlyWeatherReading[]>([]);
 
 	let plate = $derived(plates.find((p) => p.platerId === print?.projectPlaterId) ?? null);
+	let weatherChartData = $derived(hourlyWeather.map((r) => ({ ...r, hour: new Date(r.hour) })));
 
 	function statusBadgeClass(status: Print['status']) {
 		switch (status) {
@@ -43,6 +53,7 @@
 		(async () => {
 			print = await getPrint(id);
 			plates = print.project ? await getProjectPlates(print.project.id) : [];
+			hourlyWeather = await getHourlyWeather(id);
 		})();
 	});
 </script>
@@ -85,6 +96,20 @@
 					<Separator />
 				{/if}
 
+				<div class="flex flex-col gap-2">
+					<span class="text-sm font-medium text-muted-foreground">Bed photo</span>
+					{#if print.bedPhotoBase64}
+						<div class="flex h-48 items-center justify-center overflow-hidden rounded-lg bg-slate-900">
+							<img src="data:image/jpeg;base64,{print.bedPhotoBase64}" class="h-full w-full object-contain" alt="Bed at print end" />
+						</div>
+					{:else}
+						<div class="flex h-24 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
+							No bed photo captured
+						</div>
+					{/if}
+				</div>
+				<Separator />
+
 				<div class="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
 					<div class="flex flex-col gap-1">
 						<span class="font-medium text-muted-foreground">Spool</span>
@@ -118,12 +143,12 @@
 						<span>{print.amsHumidityPct !== null ? `${print.amsHumidityPct}%` : '—'}</span>
 					</div>
 					<div class="flex flex-col gap-1">
-						<span class="font-medium text-muted-foreground">Actual room temp</span>
-						<span>{print.actualRoomTempC !== null ? `${print.actualRoomTempC}°C` : '—'}</span>
+						<span class="font-medium text-muted-foreground">Chamber temp</span>
+						<span>{print.chamberTempC !== null ? `${print.chamberTempC}°C` : '—'}</span>
 					</div>
 					{#if print.ambientTempC !== null || print.ambientHumidityPct !== null}
 						<div class="col-span-2 flex flex-col gap-1">
-							<span class="font-medium text-muted-foreground">Ambient weather (auto-fetched)</span>
+							<span class="font-medium text-muted-foreground">Room temp (auto-fetched)</span>
 							<span
 								>{print.ambientTempC !== null ? `${print.ambientTempC.toFixed(1)}°C` : '—'} / {print.ambientHumidityPct !== null
 									? `${print.ambientHumidityPct.toFixed(0)}% humidity`
@@ -132,6 +157,29 @@
 						</div>
 					{/if}
 				</div>
+
+				{#if hourlyWeather.length > 0}
+					<Separator />
+					<div class="flex flex-col gap-2">
+						<span class="text-sm font-medium text-muted-foreground">Room weather over time</span>
+						<Chart.Container config={weatherChartConfig} class="h-[200px] w-full">
+							<LineChart
+								data={weatherChartData}
+								x="hour"
+								xScale={scaleTime()}
+								series={[
+									{ key: 'tempC', label: weatherChartConfig.tempC.label, color: weatherChartConfig.tempC.color },
+									{ key: 'humidityPct', label: weatherChartConfig.humidityPct.label, color: weatherChartConfig.humidityPct.color }
+								]}
+								props={{ xAxis: { format: (d: Date) => d.toLocaleTimeString([], { hour: 'numeric' }) } }}
+							>
+								{#snippet tooltip()}
+									<Chart.Tooltip labelKey="hour" />
+								{/snippet}
+							</LineChart>
+						</Chart.Container>
+					</div>
+				{/if}
 
 				{#if print.failureModes.length > 0}
 					<Separator />

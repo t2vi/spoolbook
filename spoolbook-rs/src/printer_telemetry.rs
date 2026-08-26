@@ -107,7 +107,30 @@ fn map_terminal_gcode_state(gcode_state: Option<&str>) -> &'static str {
     }
 }
 
-pub async fn end_job(pool: &SqlitePool, printer_id: i64, external_job_id: &str, terminal_gcode_state: Option<&str>, at: Option<&str>) {
+// DB-backed fallback for when the caller has no in-memory active_task_id to hand end_job (e.g.
+// after a process restart mid-print — see printer_mqtt.rs's handle_message). At most one open
+// job per printer under normal operation; ORDER BY started_at DESC is a defensive tie-break, not
+// an expected case.
+pub async fn find_open_job_external_id(pool: &SqlitePool, printer_id: i64) -> Option<String> {
+    sqlx::query_scalar::<_, String>(
+        "SELECT external_job_id FROM printer_jobs WHERE printer_id = ?1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1",
+    )
+    .bind(printer_id)
+    .fetch_optional(pool)
+    .await
+    .expect("query failed")
+}
+
+pub async fn end_job(
+    pool: &SqlitePool,
+    printer_id: i64,
+    external_job_id: &str,
+    terminal_gcode_state: Option<&str>,
+    at: Option<&str>,
+    chamber_temp_c: Option<f64>,
+    ams_humidity_pct: Option<i64>,
+    camera_registry: &crate::printer_camera::CameraRegistry,
+) {
     let job = sqlx::query_as::<_, (i64, Option<i64>)>(
         "SELECT id, print_id FROM printer_jobs WHERE printer_id = ?1 AND external_job_id = ?2 AND ended_at IS NULL",
     )
@@ -127,18 +150,24 @@ pub async fn end_job(pool: &SqlitePool, printer_id: i64, external_job_id: &str, 
         .expect("update failed");
 
     if let Some(print_id) = print_id {
+        // Snapshot the printer's last-known chamber temp / AMS humidity at end-of-print — the
+        // only point either is ever known, since neither is client-writable (see prints.rs).
         sqlx::query(
-            "UPDATE prints SET ended_at = COALESCE(?1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), status = ?2
-             WHERE id = ?3 AND status = 'InProgress'",
+            "UPDATE prints SET ended_at = COALESCE(?1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), status = ?2,
+             chamber_temp_c = ?3, ams_humidity_pct = ?4
+             WHERE id = ?5 AND status = 'InProgress'",
         )
         .bind(at)
         .bind(map_terminal_gcode_state(terminal_gcode_state))
+        .bind(chamber_temp_c)
+        .bind(ams_humidity_pct)
         .bind(print_id)
         .execute(pool)
         .await
         .expect("update failed");
 
         crate::weather::fetch_and_store(pool, print_id).await;
+        crate::printer_camera::capture_and_store(pool, camera_registry, print_id, printer_id).await;
     }
 }
 

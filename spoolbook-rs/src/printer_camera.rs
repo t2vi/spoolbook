@@ -11,6 +11,7 @@
 // since none of that needs a real printer or ffmpeg).
 use crate::jpeg_frame_extractor::JpegFrameExtractor;
 use axum::body::{Body, Bytes};
+use base64::Engine;
 use axum::extract::{Path, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
@@ -506,6 +507,43 @@ pub fn rewrite_response_host(data: &[u8], target_host: &str, target_port: u16, p
     let mut out = rewritten.into_bytes();
     out.extend_from_slice(&data[header_len..]); // body preserved byte-for-byte, never re-encoded
     out
+}
+
+// End-of-print bed photo (issues/121): a headless, internal-only subscription — no browser
+// watching — that waits for the pipeline's first decoded frame, then drops (Drop's own
+// unsubscribe cleans up, same as a browser tab closing). subscribe() lazily starts the pipeline
+// if nothing else is already streaming, so this works whether or not the live camera view
+// happened to be open at print-end. Bypasses CameraSubscription's Stream impl (which wraps each
+// frame in HTTP multipart framing for the browser) — reads the raw JPEG straight off the
+// broadcast channel instead.
+const SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(8);
+
+async fn capture_still(registry: &CameraRegistry, printer_id: i64, ip_address: String, access_code: String) -> Option<Vec<u8>> {
+    let broadcaster = get_or_create(registry, printer_id, ip_address, access_code).await;
+    let mut subscription = broadcaster.subscribe().await;
+    tokio::time::timeout(SNAPSHOT_TIMEOUT, subscription.receiver.recv()).await.ok().flatten()
+}
+
+// Called from printer_telemetry::end_job right after the ambient weather fetch — same
+// fire-and-forget posture (never panics, never propagates an error to the caller): a printer
+// that's already powered off/unreachable right after finishing (routine for a P2S, per
+// run_pipeline's own comment) just leaves bed_photo_base64 null, no retry.
+pub async fn capture_and_store(pool: &SqlitePool, registry: &CameraRegistry, print_id: i64, printer_id: i64) {
+    let Some(printer) = crate::printers::get_by_id(pool, printer_id).await else { return };
+    let (Some(ip_address), Some(access_code)) = (printer.ip_address, printer.access_code) else { return };
+
+    match capture_still(registry, printer_id, ip_address, access_code).await {
+        Some(frame) => {
+            let encoded = base64::engine::general_purpose::STANDARD.encode(&frame);
+            sqlx::query("UPDATE prints SET bed_photo_base64 = ?1 WHERE id = ?2")
+                .bind(encoded)
+                .bind(print_id)
+                .execute(pool)
+                .await
+                .expect("update failed");
+        }
+        None => eprintln!("bed photo capture failed or timed out for print {print_id} (printer {printer_id})"),
+    }
 }
 
 pub fn router() -> Router<SqlitePool> {

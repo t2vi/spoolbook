@@ -135,12 +135,30 @@ async fn record_reading_different_external_ids_create_separate_jobs() {
 async fn end_job_sets_ended_at() {
     let pool = test_pool().await;
     let printer_id = seed_printer(&pool).await;
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
     record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
 
-    end_job(&pool, printer_id, "job-1", None, None).await;
+    end_job(&pool, printer_id, "job-1", None, None, None, None, &camera_registry).await;
 
     let ended_at: Option<String> = sqlx::query_scalar("SELECT ended_at FROM printer_jobs").fetch_one(&pool).await.unwrap();
     assert!(ended_at.is_some());
+}
+
+#[tokio::test]
+async fn end_job_snapshots_chamber_temp_and_ams_humidity_onto_the_print() {
+    let pool = test_pool().await;
+    let printer_id = seed_printer(&pool).await;
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
+    let (profile_id, spool_id) = seed_print_deps(&pool).await;
+    let print_id = seed_in_progress_print(&pool, profile_id, spool_id, printer_id, "2026-01-01T08:00:00Z").await;
+    record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
+
+    end_job(&pool, printer_id, "job-1", Some("FINISH"), None, Some(38.5), Some(21), &camera_registry).await;
+
+    let (chamber_temp_c, ams_humidity_pct): (Option<f64>, Option<i64>) =
+        sqlx::query_as("SELECT chamber_temp_c, ams_humidity_pct FROM prints WHERE id = ?1").bind(print_id).fetch_one(&pool).await.unwrap();
+    assert!((chamber_temp_c.unwrap() - 38.5).abs() < 0.01);
+    assert_eq!(ams_humidity_pct, Some(21));
 }
 
 #[tokio::test]
@@ -195,11 +213,12 @@ async fn end_job_sets_attached_print_status_from_terminal_gcode_state() {
     ] {
         let pool = test_pool().await;
         let printer_id = seed_printer(&pool).await;
+        let camera_registry = spoolbook_rs::printer_camera::new_registry();
         let (profile_id, spool_id) = seed_print_deps(&pool).await;
         let print_id = seed_in_progress_print(&pool, profile_id, spool_id, printer_id, "2026-01-01T08:00:00Z").await;
         record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
 
-        end_job(&pool, printer_id, "job-1", gcode_state, None).await;
+        end_job(&pool, printer_id, "job-1", gcode_state, None, None, None, &camera_registry).await;
 
         let (status, ended_at): (String, Option<String>) =
             sqlx::query_as("SELECT status, ended_at FROM prints WHERE id = ?1").bind(print_id).fetch_one(&pool).await.unwrap();
@@ -215,11 +234,12 @@ async fn end_job_fetches_and_stores_ambient_weather_when_location_is_configured(
     unsafe { std::env::set_var("ARCHIVE_URL", spawn_mock_archive().await) };
     set_location(&pool, -37.8, 144.9).await;
     let printer_id = seed_printer(&pool).await;
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
     let (profile_id, spool_id) = seed_print_deps(&pool).await;
     let print_id = seed_in_progress_print(&pool, profile_id, spool_id, printer_id, "2026-01-01T07:00:00Z").await;
     record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
 
-    end_job(&pool, printer_id, "job-1", Some("FINISH"), Some("2026-01-01T09:00:00Z")).await;
+    end_job(&pool, printer_id, "job-1", Some("FINISH"), Some("2026-01-01T09:00:00Z"), None, None, &camera_registry).await;
 
     let (temp, humidity, source): (Option<f64>, Option<f64>, Option<String>) =
         sqlx::query_as("SELECT ambient_temp_c, ambient_humidity_pct, ambient_source FROM prints WHERE id = ?1").bind(print_id).fetch_one(&pool).await.unwrap();
@@ -229,15 +249,45 @@ async fn end_job_fetches_and_stores_ambient_weather_when_location_is_configured(
 }
 
 #[tokio::test]
-async fn end_job_leaves_ambient_weather_null_when_no_location_is_configured() {
+async fn end_job_persists_every_hour_of_the_print_window_for_the_graph() {
     let _guard = ENV_LOCK.lock().unwrap();
     let pool = test_pool().await;
+    unsafe { std::env::set_var("ARCHIVE_URL", spawn_mock_archive().await) };
+    set_location(&pool, -37.8, 144.9).await;
     let printer_id = seed_printer(&pool).await;
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
     let (profile_id, spool_id) = seed_print_deps(&pool).await;
     let print_id = seed_in_progress_print(&pool, profile_id, spool_id, printer_id, "2026-01-01T07:00:00Z").await;
     record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
 
-    end_job(&pool, printer_id, "job-1", Some("FINISH"), Some("2026-01-01T09:00:00Z")).await;
+    end_job(&pool, printer_id, "job-1", Some("FINISH"), Some("2026-01-01T09:00:00Z"), None, None, &camera_registry).await;
+
+    let rows: Vec<(String, Option<f64>, Option<f64>)> =
+        sqlx::query_as("SELECT hour, temp_c, humidity_pct FROM print_hourly_weather WHERE print_id = ?1 ORDER BY hour")
+            .bind(print_id)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+
+    assert_eq!(rows.len(), 3, "{rows:?}");
+    assert_eq!(rows[0].0, "2026-01-01T07:00");
+    assert!((rows[0].1.unwrap() - 20.0).abs() < 0.01);
+    assert!((rows[0].2.unwrap() - 50.0).abs() < 0.01);
+    assert_eq!(rows[2].0, "2026-01-01T09:00");
+    assert!((rows[2].1.unwrap() - 24.0).abs() < 0.01);
+}
+
+#[tokio::test]
+async fn end_job_leaves_ambient_weather_null_when_no_location_is_configured() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let pool = test_pool().await;
+    let printer_id = seed_printer(&pool).await;
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
+    let (profile_id, spool_id) = seed_print_deps(&pool).await;
+    let print_id = seed_in_progress_print(&pool, profile_id, spool_id, printer_id, "2026-01-01T07:00:00Z").await;
+    record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
+
+    end_job(&pool, printer_id, "job-1", Some("FINISH"), Some("2026-01-01T09:00:00Z"), None, None, &camera_registry).await;
 
     let (temp, source): (Option<f64>, Option<String>) =
         sqlx::query_as("SELECT ambient_temp_c, ambient_source FROM prints WHERE id = ?1").bind(print_id).fetch_one(&pool).await.unwrap();
@@ -249,9 +299,10 @@ async fn end_job_leaves_ambient_weather_null_when_no_location_is_configured() {
 async fn end_job_does_not_touch_print_status_when_job_has_no_attached_print() {
     let pool = test_pool().await;
     let printer_id = seed_printer(&pool).await;
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
     record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
 
-    end_job(&pool, printer_id, "job-1", Some("FINISH"), None).await;
+    end_job(&pool, printer_id, "job-1", Some("FINISH"), None, None, None, &camera_registry).await;
 
     let (ended_at, print_id): (Option<String>, Option<i64>) =
         sqlx::query_as("SELECT ended_at, print_id FROM printer_jobs").fetch_one(&pool).await.unwrap();

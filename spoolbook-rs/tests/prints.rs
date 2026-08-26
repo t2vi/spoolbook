@@ -99,8 +99,7 @@ fn print_body(f: &Fixtures, status: &str, failure_modes: Vec<&str>) -> Value {
         "profileId": f.profile_id, "spoolId": f.spool_id, "printerId": f.printer_id,
         "input": {
             "startedAt": "2026-08-15T10:00:00Z", "endedAt": "2026-08-15T12:00:00Z",
-            "status": status, "notes": "test print", "amsHumidityPct": 30,
-            "actualRoomTempC": 22.5, "cleanBuildPlate": true,
+            "status": status, "notes": "test print", "cleanBuildPlate": true,
             "projectId": null, "projectPlaterId": null,
             "failureModes": failure_modes
         }
@@ -295,8 +294,7 @@ async fn update_persists_changes() {
         "printerId": f.printer_id,
         "input": {
             "startedAt": "2026-08-15T10:00:00Z", "endedAt": "2026-08-15T12:00:00Z",
-            "status": "Partial", "notes": "updated notes", "amsHumidityPct": 35,
-            "actualRoomTempC": 23.0, "cleanBuildPlate": false,
+            "status": "Partial", "notes": "updated notes", "cleanBuildPlate": false,
             "projectId": null, "projectPlaterId": null,
             "failureModes": ["Clog"]
         }
@@ -316,7 +314,7 @@ async fn update_returns_not_found_for_missing_id() {
     let f = seed_all(&pool).await;
     let update = json!({
         "printerId": f.printer_id,
-        "input": { "startedAt": "2026-08-15T10:00:00Z", "endedAt": "2026-08-15T12:00:00Z", "status": "Success", "notes": null, "amsHumidityPct": null, "actualRoomTempC": null, "cleanBuildPlate": null, "projectId": null, "projectPlaterId": null, "failureModes": [] }
+        "input": { "startedAt": "2026-08-15T10:00:00Z", "endedAt": "2026-08-15T12:00:00Z", "status": "Success", "notes": null, "cleanBuildPlate": null, "projectId": null, "projectPlaterId": null, "failureModes": [] }
     });
     let (status, _) = send(&pool, "PUT", "/api/prints/999", Some(update)).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
@@ -399,4 +397,39 @@ async fn attach_job_sets_the_jobs_print_id() {
     let attached_print_id: Option<i64> =
         sqlx::query_scalar("SELECT print_id FROM printer_jobs WHERE id = ?1").bind(job_id).fetch_one(&pool).await.unwrap();
     assert_eq!(attached_print_id, Some(print_id));
+}
+
+#[tokio::test]
+async fn hourly_weather_returns_rows_ordered_by_hour() {
+    let pool = test_pool().await;
+    let f = seed_all(&pool).await;
+    let (_, created) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
+    let print_id = created["print"]["id"].as_i64().unwrap();
+    sqlx::query("INSERT INTO print_hourly_weather (print_id, hour, temp_c, humidity_pct) VALUES (?1, '2026-01-01T08:00', 22.0, 52.0), (?1, '2026-01-01T07:00', 20.0, 50.0)")
+        .bind(print_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let (status, body) = send(&pool, "GET", &format!("/api/prints/{print_id}/hourly-weather"), None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    let rows = body.as_array().unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0]["hour"], "2026-01-01T07:00");
+    assert_eq!(rows[0]["tempC"], 20.0);
+    assert_eq!(rows[1]["hour"], "2026-01-01T08:00");
+}
+
+#[tokio::test]
+async fn hourly_weather_returns_empty_array_when_none_recorded() {
+    let pool = test_pool().await;
+    let f = seed_all(&pool).await;
+    let (_, created) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
+    let print_id = created["print"]["id"].as_i64().unwrap();
+
+    let (status, body) = send(&pool, "GET", &format!("/api/prints/{print_id}/hourly-weather"), None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.as_array().unwrap().len(), 0);
 }

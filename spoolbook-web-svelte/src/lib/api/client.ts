@@ -8,6 +8,7 @@ import type {
 	Filament,
 	FilamentColor,
 	FilamentSearchResult,
+	HourlyWeatherReading,
 	ImportResult,
 	PrinterControlResult,
 	PrinterLiveSnapshot,
@@ -187,6 +188,7 @@ export const searchPrints = (status: PrintStatus | '', printerId: number | null,
 };
 export const getPrint = (id: number) => request<Print>(`/api/prints/${id}`);
 export const deletePrint = (id: number) => request<ApiResult>(`/api/prints/${id}`, { method: 'DELETE' });
+export const getHourlyWeather = (id: number) => request<HourlyWeatherReading[]>(`/api/prints/${id}/hourly-weather`);
 
 export const listSpools = () => request<Spool[]>('/api/spools');
 export const getSpool = (id: number) => request<Spool>(`/api/spools/${id}`);

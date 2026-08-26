@@ -24,8 +24,8 @@ async fn main() {
     spoolbook_rs::auth::migrate_env_var_admin_if_needed(&pool).await;
 
     let live_status = spoolbook_rs::printer_mqtt::new_store();
-    spoolbook_rs::printer_mqtt::spawn_all(pool.clone(), live_status.clone()).await;
     let camera_registry = spoolbook_rs::printer_camera::new_registry();
+    spoolbook_rs::printer_mqtt::spawn_all(pool.clone(), live_status.clone(), camera_registry.clone()).await;
 
     // Throttled to once/24h via app_settings.last_filament_sync_at, same as the .NET app's
     // Program.cs startup block — silent on failure, the Filaments page's manual sync button
