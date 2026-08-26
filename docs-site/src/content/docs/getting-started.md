@@ -59,5 +59,6 @@ the job finished.
 4. Send the print (see above) — spoolbook creates the Print record automatically and locks in the
    exact settings from the Profile version you used, so editing the Profile later (e.g. a seasonal
    temperature tweak) never rewrites what a past print recorded. **Print workflow → Prints** shows
-   the full history; each entry is read-only, including the plate thumbnail spoolbook read out of
-   the project at send time.
+   the full history; each entry is read-only, and fills in automatically once the print ends — a
+   photo of the finished bed, outdoor weather for the print window, and (P2S/AMS hardware that
+   reports it) chamber temperature, AMS humidity, and layer progress charted over the print.
