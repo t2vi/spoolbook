@@ -2,6 +2,7 @@
 
 | Version | Date | Notes |
 |---|---|---|
+| [v1.3.0](docs/releases/v1.3.0.md) | 2026-08-26 | Bed photo auto-captured at print end (replacing the plate thumbnail on print detail); outdoor weather and mid-print chamber temp/AMS humidity/layer progress charted hour-by-hour on the print detail page; print detail layout reworked (wider, tabbed charts); fixed prints getting stuck "In Progress" after a backend restart mid-print |
 | [v1.2.0](docs/releases/v1.2.0.md) | 2026-08-25 | Sidebar navigation replacing the top header; real Projects page (list/rename/delete/detail view, version chaining on re-slice); Prints made view-only (manual log/edit form removed); full shadcn-svelte restyle; AMS humidity now shows the real percentage instead of a misleading coarse index |
 | [v1.1.0](docs/releases/v1.1.0.md) | 2026-08-25 | Sending a print to a real printer confirmed working end-to-end for the first time (FTPS + MQTT fixes); real user accounts with Google sign-in; ambient weather auto-fetch; Bambu Studio preset import; printer model dropdown; profile save bug fixed |
 | [v1.0.0](docs/releases/v1.0.0.md) | 2026-08-25 | Entire backend rewritten in Rust; .NET/EF Core deleted outright; real auth bug fixed (SvelteKit had no working login without .NET); manual DB migration required for existing installs |
