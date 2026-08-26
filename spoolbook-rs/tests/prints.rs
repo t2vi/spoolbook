@@ -422,6 +422,37 @@ async fn hourly_weather_returns_rows_ordered_by_hour() {
 }
 
 #[tokio::test]
+async fn readings_returns_the_stored_telemetry_snapshot() {
+    let pool = test_pool().await;
+    let f = seed_all(&pool).await;
+    let (_, created) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
+    let print_id = created["print"]["id"].as_i64().unwrap();
+    let json = r#"[{"recordedAt":"2026-01-01T08:00:10Z","chamberTempC":35.0,"amsHumidityPct":38,"layerNum":6,"totalLayerNum":908,"progressPct":8}]"#;
+    sqlx::query("UPDATE prints SET telemetry_json = ?1 WHERE id = ?2").bind(json).bind(print_id).execute(&pool).await.unwrap();
+
+    let (status, body) = send(&pool, "GET", &format!("/api/prints/{print_id}/readings"), None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    let rows = body.as_array().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["chamberTempC"], 35.0);
+    assert_eq!(rows[0]["layerNum"], 6);
+}
+
+#[tokio::test]
+async fn readings_returns_empty_array_when_no_snapshot_exists() {
+    let pool = test_pool().await;
+    let f = seed_all(&pool).await;
+    let (_, created) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
+    let print_id = created["print"]["id"].as_i64().unwrap();
+
+    let (status, body) = send(&pool, "GET", &format!("/api/prints/{print_id}/readings"), None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
 async fn hourly_weather_returns_empty_array_when_none_recorded() {
     let pool = test_pool().await;
     let f = seed_all(&pool).await;

@@ -52,8 +52,8 @@ pub async fn record_reading(
     };
 
     sqlx::query(
-        "INSERT INTO printer_readings (printer_job_id, recorded_at, nozzle_temp_c, bed_temp_c, chamber_temp_c, ams_slot, progress_pct)
-         VALUES (?1, COALESCE(?2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), ?3, ?4, ?5, ?6, ?7)",
+        "INSERT INTO printer_readings (printer_job_id, recorded_at, nozzle_temp_c, bed_temp_c, chamber_temp_c, ams_slot, progress_pct, ams_humidity_pct, layer_num, total_layer_num)
+         VALUES (?1, COALESCE(?2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
     )
     .bind(job_id)
     .bind(at)
@@ -62,6 +62,9 @@ pub async fn record_reading(
     .bind(input.chamber_temp_c)
     .bind(&input.ams_slot)
     .bind(input.progress_pct)
+    .bind(input.ams_humidity_pct)
+    .bind(input.layer_num)
+    .bind(input.total_layer_num)
     .execute(pool)
     .await
     .expect("insert failed");
@@ -92,6 +95,69 @@ pub async fn record_reading(
                 .await
                 .expect("update failed");
         }
+    }
+}
+
+#[derive(Serialize, serde::Deserialize, sqlx::FromRow, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadingSnapshot {
+    pub recorded_at: String,
+    pub chamber_temp_c: Option<f64>,
+    pub ams_humidity_pct: Option<i64>,
+    pub layer_num: Option<i64>,
+    pub total_layer_num: Option<i64>,
+    pub progress_pct: Option<i64>,
+}
+
+// Collapses a finished Job's raw Readings into a fixed one-minute-bucketed snapshot stored on
+// its Print, then deletes the raw rows -- see docs/adr/0032. Last value per bucket, deliberately
+// not averaged: averaging would smooth over abrupt real jumps (e.g. a chamber door opening) that
+// this feature exists to surface. No-op (leaves telemetry_json untouched) when there are no
+// readings for this job -- nothing to collapse.
+pub async fn collapse_readings_to_snapshot(pool: &SqlitePool, print_id: i64, printer_job_id: i64) {
+    let readings = sqlx::query_as::<_, ReadingSnapshot>(
+        "SELECT recorded_at, chamber_temp_c, ams_humidity_pct, layer_num, total_layer_num, progress_pct
+         FROM printer_readings WHERE printer_job_id = ?1 ORDER BY recorded_at ASC",
+    )
+    .bind(printer_job_id)
+    .fetch_all(pool)
+    .await
+    .expect("query failed");
+
+    if readings.is_empty() {
+        return;
+    }
+
+    let mut buckets: Vec<ReadingSnapshot> = Vec::new();
+    for reading in readings {
+        // recorded_at is "YYYY-MM-DDTHH:MM:SS.fffZ" -- the first 16 chars are the minute bucket.
+        let bucket_key = &reading.recorded_at[..16];
+        match buckets.last() {
+            Some(last) if &last.recorded_at[..16] == bucket_key => {
+                *buckets.last_mut().unwrap() = reading;
+            }
+            _ => buckets.push(reading),
+        }
+    }
+
+    let json = serde_json::to_string(&buckets).expect("serialize failed");
+    sqlx::query("UPDATE prints SET telemetry_json = ?1 WHERE id = ?2").bind(json).bind(print_id).execute(pool).await.expect("update failed");
+    sqlx::query("DELETE FROM printer_readings WHERE printer_job_id = ?1").bind(printer_job_id).execute(pool).await.expect("delete failed");
+}
+
+// Converts any already-attached Job whose Print has no telemetry_json snapshot yet -- covers
+// Prints that finished before this feature shipped. Idempotent (safe to call every startup, like
+// auth::migrate_env_var_admin_if_needed): the WHERE clause only ever matches a Print once.
+pub async fn backfill_reading_snapshots(pool: &SqlitePool) {
+    let pending = sqlx::query_as::<_, (i64, i64)>(
+        "SELECT pj.id, pj.print_id FROM printer_jobs pj JOIN prints p ON p.id = pj.print_id WHERE p.telemetry_json IS NULL",
+    )
+    .fetch_all(pool)
+    .await
+    .expect("query failed");
+
+    for (job_id, print_id) in pending {
+        collapse_readings_to_snapshot(pool, print_id, job_id).await;
     }
 }
 
@@ -168,6 +234,7 @@ pub async fn end_job(
 
         crate::weather::fetch_and_store(pool, print_id).await;
         crate::printer_camera::capture_and_store(pool, camera_registry, print_id, printer_id).await;
+        collapse_readings_to_snapshot(pool, print_id, job_id).await;
     }
 }
 

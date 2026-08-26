@@ -182,6 +182,15 @@ export interface HourlyWeatherReading {
 	humidityPct: number | null;
 }
 
+export interface PrintReading {
+	recordedAt: string;
+	chamberTempC: number | null;
+	amsHumidityPct: number | null;
+	layerNum: number | null;
+	totalLayerNum: number | null;
+	progressPct: number | null;
+}
+
 export interface PrintInventoryResult {
 	prints: Print[];
 	total: number;

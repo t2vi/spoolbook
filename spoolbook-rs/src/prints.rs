@@ -190,6 +190,7 @@ pub fn router() -> Router<SqlitePool> {
         .route("/api/prints/{id}", get(get_one).put(update).delete(delete))
         .route("/api/prints/{id}/attach-job", axum::routing::post(attach_job))
         .route("/api/prints/{id}/hourly-weather", get(hourly_weather))
+        .route("/api/prints/{id}/readings", get(readings))
 }
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -209,6 +210,11 @@ async fn hourly_weather(State(pool): State<SqlitePool>, Path(id): Path<i64>) -> 
     .await
     .expect("query failed");
     Json(rows)
+}
+
+async fn readings(State(pool): State<SqlitePool>, Path(id): Path<i64>) -> Json<Vec<crate::printer_telemetry::ReadingSnapshot>> {
+    let json: Option<String> = sqlx::query_scalar("SELECT telemetry_json FROM prints WHERE id = ?1").bind(id).fetch_optional(&pool).await.expect("query failed").flatten();
+    Json(json.map(|j| serde_json::from_str(&j).expect("stored telemetry_json is always valid")).unwrap_or_default())
 }
 
 #[derive(Deserialize)]

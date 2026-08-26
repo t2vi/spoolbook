@@ -23,6 +23,11 @@ async fn main() {
     // var falls through and the frontend shows the setup wizard (GET /api/setup-status).
     spoolbook_rs::auth::migrate_env_var_admin_if_needed(&pool).await;
 
+    // Converts any already-finished Print's raw Readings into its telemetry_json snapshot --
+    // covers Prints that finished before docs/adr/0032 shipped. Idempotent, same posture as the
+    // admin migration above.
+    spoolbook_rs::printer_telemetry::backfill_reading_snapshots(&pool).await;
+
     let live_status = spoolbook_rs::printer_mqtt::new_store();
     let camera_registry = spoolbook_rs::printer_camera::new_registry();
     spoolbook_rs::printer_mqtt::spawn_all(pool.clone(), live_status.clone(), camera_registry.clone()).await;

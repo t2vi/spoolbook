@@ -7,14 +7,23 @@
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { LineChart } from 'layerchart';
 	import { scaleTime } from 'd3-scale';
-	import { getPrint, getProjectPlates, getHourlyWeather } from '$lib/api/client';
-	import type { FailureMode, HourlyWeatherReading, Print, ProjectPlate } from '$lib/api/types';
+	import { getPrint, getProjectPlates, getHourlyWeather, getPrintReadings } from '$lib/api/client';
+	import type { FailureMode, HourlyWeatherReading, Print, PrintReading, ProjectPlate } from '$lib/api/types';
 	import { page } from '$app/state';
 	import { formatDateTime } from '$lib/utils.js';
 
 	const weatherChartConfig = {
 		tempC: { label: 'Temp (°C)', color: 'var(--chart-1)' },
 		humidityPct: { label: 'Humidity (%)', color: 'var(--chart-2)' }
+	} satisfies Chart.ChartConfig;
+
+	const telemetryChartConfig = {
+		chamberTempC: { label: 'Chamber temp (°C)', color: 'var(--chart-1)' },
+		amsHumidityPct: { label: 'AMS humidity (%)', color: 'var(--chart-2)' }
+	} satisfies Chart.ChartConfig;
+
+	const layerChartConfig = {
+		layerNum: { label: 'Layer', color: 'var(--chart-3)' }
 	} satisfies Chart.ChartConfig;
 
 	const FAILURE_MODE_LABELS: Record<FailureMode, string> = {
@@ -32,9 +41,12 @@
 	let print = $state<Print | null>(null);
 	let plates = $state<ProjectPlate[]>([]);
 	let hourlyWeather = $state<HourlyWeatherReading[]>([]);
+	let printReadings = $state<PrintReading[]>([]);
 
 	let plate = $derived(plates.find((p) => p.platerId === print?.projectPlaterId) ?? null);
 	let weatherChartData = $derived(hourlyWeather.map((r) => ({ ...r, hour: new Date(r.hour) })));
+	let readingsChartData = $derived(printReadings.map((r) => ({ ...r, recordedAt: new Date(r.recordedAt) })));
+	let lastReading = $derived(printReadings.length > 0 ? printReadings[printReadings.length - 1] : null);
 
 	function statusBadgeClass(status: Print['status']) {
 		switch (status) {
@@ -54,6 +66,7 @@
 			print = await getPrint(id);
 			plates = print.project ? await getProjectPlates(print.project.id) : [];
 			hourlyWeather = await getHourlyWeather(id);
+			printReadings = await getPrintReadings(id);
 		})();
 	});
 </script>
@@ -170,6 +183,49 @@
 							>
 								{#snippet tooltip()}
 									<Chart.Tooltip labelKey="hour" />
+								{/snippet}
+							</LineChart>
+						</Chart.Container>
+					</div>
+				{/if}
+
+				{#if printReadings.length > 0}
+					<Separator />
+					<div class="flex flex-col gap-2">
+						<span class="text-sm font-medium text-muted-foreground">Chamber temp & AMS humidity</span>
+						<Chart.Container config={telemetryChartConfig} class="h-[200px] w-full">
+							<LineChart
+								data={readingsChartData}
+								x="recordedAt"
+								xScale={scaleTime()}
+								series={[
+									{ key: 'chamberTempC', label: telemetryChartConfig.chamberTempC.label, color: telemetryChartConfig.chamberTempC.color },
+									{ key: 'amsHumidityPct', label: telemetryChartConfig.amsHumidityPct.label, color: telemetryChartConfig.amsHumidityPct.color }
+								]}
+								props={{ xAxis: { format: (d: Date) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) } }}
+							>
+								{#snippet tooltip()}
+									<Chart.Tooltip labelKey="recordedAt" />
+								{/snippet}
+							</LineChart>
+						</Chart.Container>
+					</div>
+
+					<Separator />
+					<div class="flex flex-col gap-2">
+						<span class="text-sm font-medium text-muted-foreground"
+							>Layer progress{lastReading?.totalLayerNum ? ` — layer ${lastReading.layerNum ?? '—'} of ${lastReading.totalLayerNum}` : ''}</span
+						>
+						<Chart.Container config={layerChartConfig} class="h-[200px] w-full">
+							<LineChart
+								data={readingsChartData}
+								x="recordedAt"
+								xScale={scaleTime()}
+								series={[{ key: 'layerNum', label: layerChartConfig.layerNum.label, color: layerChartConfig.layerNum.color }]}
+								props={{ xAxis: { format: (d: Date) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) } }}
+							>
+								{#snippet tooltip()}
+									<Chart.Tooltip labelKey="recordedAt" />
 								{/snippet}
 							</LineChart>
 						</Chart.Container>

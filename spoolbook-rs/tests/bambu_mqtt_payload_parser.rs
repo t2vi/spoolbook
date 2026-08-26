@@ -29,6 +29,8 @@ fn parse_extracts_core_fields_from_running_status() {
     assert_eq!(result.reading.bed_temp_c, Some(70.0));
     assert_eq!(result.reading.ams_slot.as_deref(), Some("0"));
     assert_eq!(result.reading.progress_pct, Some(8));
+    assert_eq!(result.reading.layer_num, Some(21));
+    assert_eq!(result.reading.total_layer_num, Some(908));
 }
 
 // Field names/types confirmed against maziggy/bambuddy (a mature, actively-maintained Bambu
@@ -66,6 +68,7 @@ fn parse_extracts_full_ams_inventory_when_present() {
     let result = parse(RUNNING_STATUS_WITH_FULL_AMS_JSON).unwrap();
 
     assert_eq!(result.ams_units.len(), 1);
+    assert_eq!(result.reading.ams_humidity_pct, Some(38), "reading snapshot mirrors the first AMS unit's real-% humidity");
     let unit = &result.ams_units[0];
     assert_eq!(unit.unit_id, "0");
     assert_eq!(unit.humidity_pct, Some(38), "humidity_raw (real %) preferred over the coarse index");
