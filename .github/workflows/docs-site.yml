@@ -1,9 +1,15 @@
 name: Docs site
 
+# docs/** is deliberately broad — it also covers docs/releases/* changes so
+# the site rebuilds when release notes change once docs-site/ exists. That
+# means this can trigger before docs-site/ is bootstrapped, so the job
+# itself is guarded below (docs-site/package.json must exist) — see
+# docs/docs-site.md.
 on:
   push:
     branches: [main]
     paths:
+      - 'docs/**'
       - 'docs-site/**'
 
 permissions:
@@ -12,6 +18,7 @@ permissions:
 jobs:
   build-deploy:
     name: Build & deploy docs
+    if: ${{ hashFiles('docs-site/package.json') != '' }}
     runs-on: ubuntu-latest
     defaults:
       run:

@@ -23,6 +23,9 @@ skills-lock.json
 .vscode
 .env*
 !.env.example
+node_modules/
+build/
+*.log
 
 # Local .app bundle build output
 dist/
