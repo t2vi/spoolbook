@@ -2,6 +2,7 @@
 
 | Version | Date | Notes |
 |---|---|---|
+| [v1.4.2](docs/releases/v1.4.2.md) | 2026-08-29 | Fixed the live camera feed failing on every Docker install (`ffmpeg` was missing from the container image); fixed live telemetry showing "No live job data yet" during a print (never requested a full status dump on connect); fixed the "Docs site" CI workflow being invalid since the template sync |
 | [v1.4.1](docs/releases/v1.4.1.md) | 2026-08-29 | Fixed a printer added or edited through the UI never starting its live-telemetry connection until the next backend restart (Test connection worked, but the card stayed "Not connected" and Print failed) — mostly affected Docker installs |
 | [v1.4.0](docs/releases/v1.4.0.md) | 2026-08-26 | Export/import to migrate data between spoolbook installs (merges, doesn't replace) from the Settings page; fixed uploaded `.3mf` files being lost on every redeploy (were stored in temp, not the persistent volume) |
 | [v1.3.0](docs/releases/v1.3.0.md) | 2026-08-26 | Bed photo auto-captured at print end (replacing the plate thumbnail on print detail); outdoor weather and mid-print chamber temp/AMS humidity/layer progress charted hour-by-hour on the print detail page; print detail layout reworked (wider, tabbed charts); fixed prints getting stuck "In Progress" after a backend restart mid-print |
