@@ -30,7 +30,8 @@ async fn main() {
 
     let live_status = spoolbook_rs::printer_mqtt::new_store();
     let camera_registry = spoolbook_rs::printer_camera::new_registry();
-    spoolbook_rs::printer_mqtt::spawn_all(pool.clone(), live_status.clone(), camera_registry.clone()).await;
+    let conn_supervisor = spoolbook_rs::printer_mqtt::new_supervisor();
+    spoolbook_rs::printer_mqtt::spawn_all(pool.clone(), live_status.clone(), camera_registry.clone(), conn_supervisor.clone()).await;
 
     // Throttled to once/24h via app_settings.last_filament_sync_at, same as the .NET app's
     // Program.cs startup block — silent on failure, the Filaments page's manual sync button
@@ -58,7 +59,7 @@ async fn main() {
     let index_path = std::path::Path::new(&static_root).join("index.html");
     let serve_static = ServeDir::new(&static_root).fallback(ServeFile::new(index_path));
 
-    let app = spoolbook_rs::app_with_camera(pool, live_status, camera_registry).fallback_service(serve_static);
+    let app = spoolbook_rs::app_with_camera_supervised(pool, live_status, camera_registry, conn_supervisor).fallback_service(serve_static);
 
     // 0.0.0.0, not 127.0.0.1: matches .NET's ASPNETCORE_URLS=http://0.0.0.0:5070 (self-hosted,
     // LAN-accessible per CLAUDE.md) and is required for Docker port publishing to reach it at all.

@@ -41,6 +41,15 @@ pub fn app_with_live_status(pool: SqlitePool, live_status: printer_mqtt::LiveSta
 }
 
 pub fn app_with_camera(pool: SqlitePool, live_status: printer_mqtt::LiveStatusStore, camera_registry: printer_camera::CameraRegistry) -> Router {
+    app_with_camera_supervised(pool, live_status, camera_registry, printer_mqtt::new_supervisor())
+}
+
+pub fn app_with_camera_supervised(
+    pool: SqlitePool,
+    live_status: printer_mqtt::LiveStatusStore,
+    camera_registry: printer_camera::CameraRegistry,
+    conn_supervisor: printer_mqtt::ConnSupervisor,
+) -> Router {
     filaments::router()
         .merge(colors::router())
         .merge(spools::router())
@@ -62,6 +71,7 @@ pub fn app_with_camera(pool: SqlitePool, live_status: printer_mqtt::LiveStatusSt
         .route("/api/version", get(|| async { Json(serde_json::json!({ "version": env!("CARGO_PKG_VERSION") })) }))
         .layer(Extension(live_status))
         .layer(Extension(camera_registry))
+        .layer(Extension(conn_supervisor))
         // axum's own default (2MB) is well below a real sliced .3mf's size (embedded gcode +
         // thumbnails) -- match project_upload's own MAX_BYTES, the limit it already validates
         // import-url downloads against but this layer is what actually enforces it for uploads.
