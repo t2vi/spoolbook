@@ -220,6 +220,16 @@ async fn connect_and_subscribe_loop(
             match eventloop.poll().await {
                 Ok(Event::Incoming(Packet::ConnAck(_))) => {
                     store.write().await.entry(printer_id).or_default().connected = true;
+                    // Bambu's broker only emits a full status object (gcode_state, task_id, ams,
+                    // the pause/HMS reason) on request or on its own slow (~minutes) schedule --
+                    // deltas in between omit gcode_state and parser::parse drops them. Without
+                    // this, a connection made mid-print (the normal case now that telemetry
+                    // starts when a printer is added at runtime) shows "No live job data yet"
+                    // until the next scheduled full push.
+                    let request_topic = format!("device/{serial_number}/request");
+                    let _ = client
+                        .publish(request_topic, QoS::AtMostOnce, false, r#"{"pushing":{"sequence_id":"0","command":"pushall"}}"#)
+                        .await;
                 }
                 Ok(Event::Incoming(Packet::Publish(publish))) => {
                     if let Ok(payload) = std::str::from_utf8(&publish.payload) {
