@@ -29,6 +29,55 @@ pub fn new_store() -> LiveStatusStore {
     Arc::new(RwLock::new(HashMap::new()))
 }
 
+// Abort handles for the per-printer connect_and_subscribe_loop tasks, keyed by printer id.
+// spawn_all fills this at startup; printers.rs create/update/delete call respawn_one/stop_one so a
+// printer configured while the process is already running gets a live connection without a
+// restart. That's the normal case under Docker (fresh data volume, printer added through the UI,
+// container never bounced): before this, the one-shot Test Connection worked but the persistent
+// loop never started, so the card stayed "Not connected" and Print failed at publish_raw with
+// "Printer isn't connected".
+pub type ConnSupervisor = Arc<tokio::sync::Mutex<HashMap<i64, tokio::task::AbortHandle>>>;
+
+pub fn new_supervisor() -> ConnSupervisor {
+    Arc::new(tokio::sync::Mutex::new(HashMap::new()))
+}
+
+// Spawn (or replace) the live-telemetry loop for one printer. Aborts any existing loop for this id
+// first, so an edit that changes the IP doesn't leave the old loop reconnecting to the old
+// address forever with both loops fighting over store[id]. Collapses to just the abort when the
+// printer has no connection details.
+#[allow(clippy::too_many_arguments)]
+pub async fn respawn_one(
+    supervisor: &ConnSupervisor,
+    id: i64,
+    ip_address: Option<String>,
+    access_code: Option<String>,
+    serial_number: Option<String>,
+    pool: SqlitePool,
+    store: LiveStatusStore,
+    camera_registry: crate::printer_camera::CameraRegistry,
+) {
+    let mut sup = supervisor.lock().await;
+    if let Some(handle) = sup.remove(&id) {
+        handle.abort();
+    }
+    store.write().await.remove(&id);
+    if let (Some(ip_address), Some(access_code), Some(serial_number)) = (ip_address, access_code, serial_number) {
+        let task = tokio::spawn(connect_and_subscribe_loop(
+            id, ip_address, access_code, serial_number, pool, store, camera_registry,
+        ));
+        sup.insert(id, task.abort_handle());
+    }
+}
+
+// Drop the live-telemetry loop for a deleted printer.
+pub async fn stop_one(supervisor: &ConnSupervisor, store: &LiveStatusStore, id: i64) {
+    if let Some(handle) = supervisor.lock().await.remove(&id) {
+        handle.abort();
+    }
+    store.write().await.remove(&id);
+}
+
 pub async fn snapshot(store: &LiveStatusStore, printer_id: i64) -> PrinterLiveStatus {
     store.read().await.get(&printer_id).cloned().unwrap_or_default()
 }
@@ -103,7 +152,7 @@ pub(crate) fn tls12_no_verify_config() -> rustls::ClientConfig {
 // default 10KB max packet size is smaller than this printer's real device/report payload
 // (~14KB) — connect_and_subscribe_loop's own set_max_packet_size call below is the fix. No
 // reference test suite to port forward (the .NET original has none either).
-pub async fn spawn_all(pool: SqlitePool, store: LiveStatusStore, camera_registry: crate::printer_camera::CameraRegistry) {
+pub async fn spawn_all(pool: SqlitePool, store: LiveStatusStore, camera_registry: crate::printer_camera::CameraRegistry, supervisor: ConnSupervisor) {
     tokio::spawn(purge_stale_jobs_loop(pool.clone()));
 
     let printers = sqlx::query_as::<_, (i64, Option<String>, Option<String>, Option<String>)>(
@@ -114,9 +163,7 @@ pub async fn spawn_all(pool: SqlitePool, store: LiveStatusStore, camera_registry
     .unwrap_or_default();
 
     for (id, ip_address, access_code, serial_number) in printers {
-        if let (Some(ip_address), Some(access_code), Some(serial_number)) = (ip_address, access_code, serial_number) {
-            tokio::spawn(connect_and_subscribe_loop(id, ip_address, access_code, serial_number, pool.clone(), store.clone(), camera_registry.clone()));
-        }
+        respawn_one(&supervisor, id, ip_address, access_code, serial_number, pool.clone(), store.clone(), camera_registry.clone()).await;
     }
 }
 

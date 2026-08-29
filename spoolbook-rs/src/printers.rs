@@ -1,4 +1,5 @@
-use crate::printer_mqtt::{self, LiveStatusStore};
+use crate::printer_camera::CameraRegistry;
+use crate::printer_mqtt::{self, ConnSupervisor, LiveStatusStore};
 use axum::http::StatusCode;
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use axum::{
@@ -186,6 +187,9 @@ async fn is_duplicate(pool: &SqlitePool, name: &str, exclude_id: Option<i64>) ->
 async fn create(
     _editor: crate::auth::Editor,
     State(pool): State<SqlitePool>,
+    Extension(store): Extension<LiveStatusStore>,
+    Extension(camera_registry): Extension<CameraRegistry>,
+    Extension(supervisor): Extension<ConnSupervisor>,
     Json(input): Json<PrinterInput>,
 ) -> (StatusCode, Json<PrinterResult>) {
     if input.name.trim().is_empty() {
@@ -208,12 +212,29 @@ async fn create(
     .await
     .expect("insert failed");
 
+    // Start its live-telemetry loop now, not just at the next restart's spawn_all — a printer
+    // added while the process is already running is the norm under Docker.
+    printer_mqtt::respawn_one(
+        &supervisor,
+        printer.id,
+        printer.ip_address.clone(),
+        printer.access_code.clone(),
+        printer.serial_number.clone(),
+        pool.clone(),
+        store,
+        camera_registry,
+    )
+    .await;
+
     (StatusCode::OK, Json(PrinterResult { ok: true, error: None, printer: Some(printer) }))
 }
 
 async fn update(
     _editor: crate::auth::Editor,
     State(pool): State<SqlitePool>,
+    Extension(store): Extension<LiveStatusStore>,
+    Extension(camera_registry): Extension<CameraRegistry>,
+    Extension(supervisor): Extension<ConnSupervisor>,
     Path(id): Path<i64>,
     Json(input): Json<PrinterInput>,
 ) -> (StatusCode, Json<PrinterResult>) {
@@ -240,12 +261,33 @@ async fn update(
     .expect("update failed");
 
     match printer {
-        Some(printer) => (StatusCode::OK, Json(PrinterResult { ok: true, error: None, printer: Some(printer) })),
+        Some(printer) => {
+            // Connection details may have changed — restart the loop against the new ones (and
+            // drop it entirely if they were cleared). respawn_one aborts the stale loop first.
+            printer_mqtt::respawn_one(
+                &supervisor,
+                printer.id,
+                printer.ip_address.clone(),
+                printer.access_code.clone(),
+                printer.serial_number.clone(),
+                pool.clone(),
+                store,
+                camera_registry,
+            )
+            .await;
+            (StatusCode::OK, Json(PrinterResult { ok: true, error: None, printer: Some(printer) }))
+        }
         None => err(StatusCode::NOT_FOUND, "not_found"),
     }
 }
 
-async fn delete(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Path(id): Path<i64>) -> (StatusCode, Json<PrinterResult>) {
+async fn delete(
+    _editor: crate::auth::Editor,
+    State(pool): State<SqlitePool>,
+    Extension(store): Extension<LiveStatusStore>,
+    Extension(supervisor): Extension<ConnSupervisor>,
+    Path(id): Path<i64>,
+) -> (StatusCode, Json<PrinterResult>) {
     let has_prints = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM prints WHERE printer_id = ?1")
         .bind(id)
         .fetch_one(&pool)
@@ -265,6 +307,8 @@ async fn delete(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Pa
     if result.rows_affected() == 0 {
         return err(StatusCode::NOT_FOUND, "not_found");
     }
+
+    printer_mqtt::stop_one(&supervisor, &store, id).await;
 
     (StatusCode::OK, Json(PrinterResult { ok: true, error: None, printer: None }))
 }
