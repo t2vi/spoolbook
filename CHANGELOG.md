@@ -2,6 +2,7 @@
 
 | Version | Date | Notes |
 |---|---|---|
+| [v1.4.1](docs/releases/v1.4.1.md) | 2026-08-29 | Fixed a printer added or edited through the UI never starting its live-telemetry connection until the next backend restart (Test connection worked, but the card stayed "Not connected" and Print failed) — mostly affected Docker installs |
 | [v1.4.0](docs/releases/v1.4.0.md) | 2026-08-26 | Export/import to migrate data between spoolbook installs (merges, doesn't replace) from the Settings page; fixed uploaded `.3mf` files being lost on every redeploy (were stored in temp, not the persistent volume) |
 | [v1.3.0](docs/releases/v1.3.0.md) | 2026-08-26 | Bed photo auto-captured at print end (replacing the plate thumbnail on print detail); outdoor weather and mid-print chamber temp/AMS humidity/layer progress charted hour-by-hour on the print detail page; print detail layout reworked (wider, tabbed charts); fixed prints getting stuck "In Progress" after a backend restart mid-print |
 | [v1.2.0](docs/releases/v1.2.0.md) | 2026-08-25 | Sidebar navigation replacing the top header; real Projects page (list/rename/delete/detail view, version chaining on re-slice); Prints made view-only (manual log/edit form removed); full shadcn-svelte restyle; AMS humidity now shows the real percentage instead of a misleading coarse index |
