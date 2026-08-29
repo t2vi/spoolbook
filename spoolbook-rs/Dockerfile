@@ -19,7 +19,11 @@ COPY spoolbook-rs/ ./
 RUN cargo build --release
 
 FROM debian:trixie-slim
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libcurl4t64 && rm -rf /var/lib/apt/lists/*
+# ffmpeg: printer_camera.rs shells out to it for the live-camera MJPEG relay -- without it the
+# camera feed fails with a generic "Camera stream failed" on every Docker install (works in dev
+# only because macOS has ffmpeg on PATH). Pulls ~150MB of libav* deps; a static ffmpeg build
+# would shrink that if image size ever matters.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libcurl4t64 ffmpeg && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=backend-build /src/target/release/spoolbook-rs .
 COPY --from=frontend-build /src/spoolbook-web-svelte/build ./svelte-build
