@@ -56,9 +56,9 @@ fn compute_gcode_md5_returns_none_when_the_plate_entry_is_missing() {
 }
 
 #[test]
-fn build_project_file_payload_never_sends_ams_and_forces_vibration_cali_off_for_p2s() {
-    // Even with use_ams=true + a slot requested, the payload disables AMS and sends no mapping:
-    // a re-sliced spoolbook .3mf has no AMS filament data, so use_ams:true fails HMS 07FF-8012.
+fn build_project_file_payload_maps_the_picked_ams_slot_and_forces_vibration_cali_off_for_p2s() {
+    // use_ams=true -> ams_mapping is [global_tray_id]. An empty mapping fails HMS 07FF-8012 on a
+    // cold P2S (nothing threaded); [slot] with use_ams:true maps gcode filament 0 to that tray.
     let payload = build_project_file_payload("print.3mf", "abc123", "plate_1.gcode", true, 5, true, "42");
 
     let v: Value = serde_json::from_str(&payload).unwrap();
@@ -69,10 +69,10 @@ fn build_project_file_payload_never_sends_ams_and_forces_vibration_cali_off_for_
     assert_eq!(print["url"], "ftp:///print.3mf");
     assert_eq!(print["file"], "print.3mf");
     assert_eq!(print["md5"], "abc123");
-    assert_eq!(print["use_ams"], false);
-    assert_eq!(print["vibration_cali"], false, "P2S doesn't support vibration cali");
-    assert_eq!(print["ams_mapping"], serde_json::json!([]));
+    assert_eq!(print["use_ams"], true);
+    assert_eq!(print["ams_mapping"], serde_json::json!([5]));
     assert_eq!(print["ams_mapping2"], serde_json::json!([]));
+    assert_eq!(print["vibration_cali"], false, "P2S doesn't support vibration cali");
     assert_eq!(print["project_id"], "42");
     assert_eq!(print["subtask_id"], "42");
     assert_eq!(print["task_id"], "42");
@@ -80,7 +80,7 @@ fn build_project_file_payload_never_sends_ams_and_forces_vibration_cali_off_for_
 }
 
 #[test]
-fn build_project_file_payload_enables_vibration_cali_for_non_p2s_printers() {
+fn build_project_file_payload_sends_no_mapping_when_ams_is_off_and_enables_vibration_cali_for_non_p2s() {
     let payload = build_project_file_payload("print.3mf", "abc123", "plate_1.gcode", false, 0, false, "1");
 
     let v: Value = serde_json::from_str(&payload).unwrap();

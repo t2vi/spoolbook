@@ -48,15 +48,10 @@ pub fn build_project_file_payload(
     remote_file_name: &str,
     md5: &str,
     plate_gcode_file_name: &str,
-    // Both kept for the wire contract with the frontend's AMS toggle + tray picker, but neither
-    // is sent: spoolbook's .3mf is re-sliced by the headless BambuStudio CLI, whose gcode carries
-    // no per-filament AMS-assignment metadata. With that missing, use_ams:true (with or without
-    // an ams_mapping) fails at HMS 07FF-8012 "Failed to get AMS mapping table" — confirmed
-    // against a real P2S: only use_ams:false prints. The printer then just feeds from whatever
-    // filament is threaded (the AMS tray's PTFE, in practice). Real AMS/multi-material support
-    // needs a file sliced *for* AMS and is a separate feature.
-    _use_ams: bool,
-    _ams_slot: i64,
+    // From the modal's "Use AMS" toggle + tray picker. ams_slot is a global tray id
+    // (ams_id*4 + slot_id), computed frontend-side by amsSlotNumber().
+    use_ams: bool,
+    ams_slot: i64,
     is_p2s: bool,
     submission_id: &str,
 ) -> String {
@@ -82,9 +77,7 @@ pub fn build_project_file_payload(
             // specifically for P2S/N7.
             "vibration_cali": !is_p2s,
             "layer_inspect": false,
-            // Forced false — see the doc comment on the _use_ams param. A re-sliced spoolbook
-            // .3mf has no AMS filament data, so use_ams:true fails at HMS 07FF-8012.
-            "use_ams": false,
+            "use_ams": use_ams,
             "cfg": "0",
             "extrude_cali_flag": 2,
             "extrude_cali_manual_mode": 0,
@@ -97,15 +90,13 @@ pub fn build_project_file_payload(
             "project_id": submission_id,
             "subtask_id": submission_id,
             "task_id": submission_id,
-            // Deliberately empty, never a per-tray [tray_id]. spoolbook's .3mf is re-sliced by the
-            // headless BambuStudio CLI, whose gcode omits the per-filament AMS-assignment metadata
-            // the printer cross-references an incoming mapping against — supplying one (even a
-            // correct-looking [ams_id*4+slot_id]) fails at HMS 07FF-8012 "Failed to get AMS
-            // mapping table" (confirmed against a real P2S: empty prints fine, [1] does not).
-            // Empty tells the printer to feed from its currently-active AMS tray, matching Bambu
-            // Handy's own single-colour default. True per-tray selection needs a file sliced *for*
-            // AMS and isn't supported here yet.
-            "ams_mapping": [],
+            // Single-filament map: gcode filament 0 -> the picked global tray id. An EMPTY
+            // ams_mapping fails at HMS 07FF-8012 "Failed to get AMS mapping table" whenever the
+            // extruder is cold (tray_now 255, nothing threaded) — the P2S start macro's
+            // unconditional `M620 S0A` then has nothing to resolve. [ams_slot] with use_ams:true
+            // maps it and prints from that tray (confirmed against a real P2S from a cold start).
+            // use_ams:false is only safe when filament is already loaded.
+            "ams_mapping": if use_ams { json!([ams_slot]) } else { json!([]) },
             "ams_mapping2": [],
         }
     })
