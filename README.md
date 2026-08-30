@@ -91,6 +91,19 @@ cd spoolbook-rs && cargo run             # backend, port 5070, sqlite at spoolbo
 cd spoolbook-rs && cargo test
 ```
 
+`tests/printer_live.rs` holds hardware-in-the-loop tests (MQTT connect, FTPS upload, send a
+print and cancel it in the prep phase, unsliced `.3mf` → slicer-service → print). They're
+`#[ignore]`d and need a real printer on the LAN — run them by hand while developing the printer
+integration:
+
+```sh
+SPOOLBOOK_TEST_PRINTER_IP=… SPOOLBOOK_TEST_PRINTER_ACCESS_CODE=… SPOOLBOOK_TEST_PRINTER_SERIAL=… \
+  cargo test --test printer_live -- --ignored --nocapture
+```
+
+The print tests also need `SPOOLBOOK_TEST_ALLOW_REAL_PRINT=1` and a `.3mf` path; `examples/stop_print.rs`
+is a standalone cancel command if one gets away.
+
 ## Releasing
 
 See the "Release checklist" in `CLAUDE.md`. `.github/workflows/docker-images.yml` builds and

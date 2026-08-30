@@ -2204,7 +2204,7 @@ dependencies = [
 
 [[package]]
 name = "spoolbook-rs"
-version = "1.4.2"
+version = "1.4.3"
 dependencies = [
  "argon2",
  "axum",
