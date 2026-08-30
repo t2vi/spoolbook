@@ -276,7 +276,7 @@
 									{#if tray.colorHex}
 										<span
 											class="inline-block h-3 w-3 rounded-full border"
-											style:background-color="#{tray.colorHex.length >= 6 ? tray.colorHex.slice(0, 6) : 'cccccc'}"
+											style:background-color={/^[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(tray.colorHex) ? `#${tray.colorHex}` : '#cccccc'}
 										></span>
 									{/if}
 									<span class={tray.materialType === null ? 'text-muted-foreground' : ''}>

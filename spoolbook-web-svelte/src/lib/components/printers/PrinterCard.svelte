@@ -123,8 +123,17 @@
 		}
 	}
 
+	// Bambu tray_color is RRGGBB or RRGGBBAA — keep the alpha (CSS takes 8-digit hex) so a
+	// clear/transparent filament (e.g. "00000000") renders see-through, not solid black.
 	function trayFill(colorHex: string | null): string | undefined {
-		return colorHex ? `#${colorHex.length >= 6 ? colorHex.slice(0, 6) : 'cccccc'}` : undefined;
+		if (!colorHex) return undefined;
+		return /^[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(colorHex) ? `#${colorHex}` : '#cccccc';
+	}
+
+	// Clear/translucent filament: RRGGBBAA with a near-zero alpha. Gets a checkerboard behind
+	// the swatch so it reads as "clear", not "empty" — same intent as Bambu Studio's swatch.
+	function trayIsClear(colorHex: string | null): boolean {
+		return !!colorHex && /^[0-9a-fA-F]{8}$/.test(colorHex) && parseInt(colorHex.slice(6), 16) < 0x20;
 	}
 
 	// Thresholds match maziggy/bambuddy's own AmsUnitCard defaults (goodThreshold=40,
@@ -275,7 +284,7 @@
 							{#each unit.trays as tray (tray.slotId)}
 								<div class="text-center">
 									<div
-										class="mx-auto flex h-9 w-9 items-center justify-center rounded-full {tray.materialType === null ? 'border-2 border-dashed border-muted-foreground/40' : 'border'}"
+										class="mx-auto flex h-9 w-9 items-center justify-center rounded-full {tray.materialType === null ? 'border-2 border-dashed border-muted-foreground/40' : 'border'} {trayIsClear(tray.colorHex) ? 'bg-[repeating-conic-gradient(theme(colors.muted.foreground/20%)_0_25%,transparent_0_50%)] bg-[length:8px_8px]' : ''}"
 										style:background-color={tray.materialType === null ? undefined : trayFill(tray.colorHex)}
 									></div>
 									<p class="mt-1 truncate text-xs {tray.materialType === null ? 'text-muted-foreground' : 'font-medium'}">
