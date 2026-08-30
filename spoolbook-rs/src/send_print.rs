@@ -232,6 +232,16 @@ async fn start_print(
     let is_p2s = printer.model.as_deref().unwrap_or_default().to_lowercase().contains("p2s");
     let payload = build_project_file_payload(&remote_file_name, &md5, &plate_gcode_file_name, req.use_ams, req.ams_slot, is_p2s, &submission_id());
 
+    // Set SPOOLBOOK_MQTT_DEBUG=1 to dump the exact project_file command sent to the printer,
+    // alongside printer_mqtt's incoming report dump -- the only way to see why a send is
+    // rejected (HMS code, gcode_state) on an install we can't reproduce locally.
+    if std::env::var("SPOOLBOOK_MQTT_DEBUG").is_ok() {
+        eprintln!(
+            "[send_print] file={file_path} plate={plate_gcode_file_name} md5={md5} req.use_ams={} req.ams_slot={}\n[send_print] project_file -> {payload}",
+            req.use_ams, req.ams_slot
+        );
+    }
+
     if let Err(e) = crate::printer_mqtt::publish_raw(&store, id, serial_number, payload).await {
         return (StatusCode::BAD_REQUEST, Json(err_response(&e)));
     }
