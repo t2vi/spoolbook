@@ -19,6 +19,10 @@ pub struct PrinterJob {
 
 const COLUMNS: &str = "id, printer_id, external_job_id, started_at, ended_at, print_id";
 
+// Called from the MQTT eventloop task (printer_mqtt::handle_message) for every active-state
+// reading. A DB error here must not unwind -- a panic in that spawned task kills the whole
+// telemetry+control connection for the printer (pause/resume/stop stop working mid-print) and
+// it doesn't come back until a restart. So this logs and drops the one reading instead.
 pub async fn record_reading(
     pool: &SqlitePool,
     printer_id: i64,
@@ -26,14 +30,25 @@ pub async fn record_reading(
     input: &ReadingInput,
     at: Option<&str>,
 ) {
+    if let Err(e) = try_record_reading(pool, printer_id, external_job_id, input, at).await {
+        eprintln!("[telemetry {printer_id}] dropped a reading for job {external_job_id}: {e}");
+    }
+}
+
+async fn try_record_reading(
+    pool: &SqlitePool,
+    printer_id: i64,
+    external_job_id: &str,
+    input: &ReadingInput,
+    at: Option<&str>,
+) -> Result<(), sqlx::Error> {
     let existing_job_id = sqlx::query_scalar::<_, i64>(
         "SELECT id FROM printer_jobs WHERE printer_id = ?1 AND external_job_id = ?2 AND ended_at IS NULL",
     )
     .bind(printer_id)
     .bind(external_job_id)
     .fetch_optional(pool)
-    .await
-    .expect("query failed");
+    .await?;
 
     let is_new_job = existing_job_id.is_none();
     let job_id = match existing_job_id {
@@ -47,8 +62,7 @@ pub async fn record_reading(
         .bind(external_job_id)
         .bind(at)
         .fetch_one(pool)
-        .await
-        .expect("insert failed"),
+        .await?,
     };
 
     sqlx::query(
@@ -66,8 +80,7 @@ pub async fn record_reading(
     .bind(input.layer_num)
     .bind(input.total_layer_num)
     .execute(pool)
-    .await
-    .expect("insert failed");
+    .await?;
 
     // Auto-create-on-send (docs/adr/0017's 2026-08-14 addendum): a brand-new Job attaches
     // straight to the printer's open (InProgress, not yet attached) Print instead of waiting for
@@ -84,18 +97,17 @@ pub async fn record_reading(
         )
         .bind(printer_id)
         .fetch_optional(pool)
-        .await
-        .expect("query failed");
+        .await?;
 
         if let Some(open_print_id) = open_print_id {
             sqlx::query("UPDATE printer_jobs SET print_id = ?1 WHERE id = ?2")
                 .bind(open_print_id)
                 .bind(job_id)
                 .execute(pool)
-                .await
-                .expect("update failed");
+                .await?;
         }
     }
+    Ok(())
 }
 
 #[derive(Serialize, serde::Deserialize, sqlx::FromRow, Clone)]

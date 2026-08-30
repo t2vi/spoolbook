@@ -56,7 +56,9 @@ fn compute_gcode_md5_returns_none_when_the_plate_entry_is_missing() {
 }
 
 #[test]
-fn build_project_file_payload_maps_ams_slot_to_a_regular_tray_and_forces_vibration_cali_off_for_p2s() {
+fn build_project_file_payload_never_sends_ams_and_forces_vibration_cali_off_for_p2s() {
+    // Even with use_ams=true + a slot requested, the payload disables AMS and sends no mapping:
+    // a re-sliced spoolbook .3mf has no AMS filament data, so use_ams:true fails HMS 07FF-8012.
     let payload = build_project_file_payload("print.3mf", "abc123", "plate_1.gcode", true, 5, true, "42");
 
     let v: Value = serde_json::from_str(&payload).unwrap();
@@ -67,11 +69,10 @@ fn build_project_file_payload_maps_ams_slot_to_a_regular_tray_and_forces_vibrati
     assert_eq!(print["url"], "ftp:///print.3mf");
     assert_eq!(print["file"], "print.3mf");
     assert_eq!(print["md5"], "abc123");
-    assert_eq!(print["use_ams"], true);
+    assert_eq!(print["use_ams"], false);
     assert_eq!(print["vibration_cali"], false, "P2S doesn't support vibration cali");
-    assert_eq!(print["ams_mapping"], serde_json::json!([5]));
-    // Global tray 5 = ams_id 1, slot_id 1 (5 / 4 = 1, 5 % 4 = 1).
-    assert_eq!(print["ams_mapping2"], serde_json::json!([{ "ams_id": 1, "slot_id": 1 }]));
+    assert_eq!(print["ams_mapping"], serde_json::json!([]));
+    assert_eq!(print["ams_mapping2"], serde_json::json!([]));
     assert_eq!(print["project_id"], "42");
     assert_eq!(print["subtask_id"], "42");
     assert_eq!(print["task_id"], "42");
