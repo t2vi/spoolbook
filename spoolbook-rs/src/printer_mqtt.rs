@@ -182,7 +182,10 @@ async fn purge_stale_jobs_loop(pool: SqlitePool) {
 // polling the eventloop is simultaneously what maintains the connection and what delivers
 // messages. So unlike the .NET original's connect-then-watchdog-loop shape, this is one loop
 // that does both; behaviorally equivalent (connected, receiving, reconnecting on failure).
-async fn connect_and_subscribe_loop(
+// pub rather than private: driven directly by tests/printer_live.rs against a real printer on
+// the LAN (no mock -- the bugs this catches are all "the firmware's own wire format / packet
+// size", invisible to anything but real hardware). Same testing boundary as handle_message.
+pub async fn connect_and_subscribe_loop(
     printer_id: i64,
     ip_address: String,
     access_code: String,
@@ -202,23 +205,28 @@ async fn connect_and_subscribe_loop(
         mqttoptions.set_keep_alive(Duration::from_secs(30));
         mqttoptions.set_transport(Transport::tls_with_config(TlsConfiguration::Rustls(Arc::new(tls_config()))));
         // rumqttc's default incoming limit (10KB) is smaller than this printer's real device/report
-        // payload (~14KB, confirmed against a real P2S -- the connection ConnAcks and SubAcks fine,
-        // then errors out the instant the first real status report arrives, since nothing here ever
-        // subscribed to real hardware's own report size before). 128KB is a comfortable margin.
-        mqttoptions.set_max_packet_size(128 * 1024, 128 * 1024);
+        // payload (~14KB delta, confirmed against a real P2S -- the connection ConnAcks and SubAcks
+        // fine, then errors out the instant the first real status report arrives). The pushall
+        // *full* object (every AMS tray + the whole HMS array) is bigger again, so 128KB wasn't
+        // always enough -- an oversized-packet poll error right after ConnAck is exactly the
+        // "connects, flips to Live, then drops to No live job data" flap. 1MB is well clear.
+        mqttoptions.set_max_packet_size(1024 * 1024, 1024 * 1024);
 
         let (client, mut eventloop) = AsyncClient::new(mqttoptions, 10);
 
         let topic = format!("device/{serial_number}/report");
         if client.subscribe(&topic, QoS::AtMostOnce).await.is_err() {
+            eprintln!("[mqtt {printer_id}] subscribe to {topic} failed, retrying in 15s");
             tokio::time::sleep(Duration::from_secs(15)).await;
             continue;
         }
+        eprintln!("[mqtt {printer_id}] connecting to {ip_address}:8883");
         store.write().await.entry(printer_id).or_default().client = Some(client.clone());
 
         loop {
             match eventloop.poll().await {
                 Ok(Event::Incoming(Packet::ConnAck(_))) => {
+                    eprintln!("[mqtt {printer_id}] connected, sending pushall");
                     store.write().await.entry(printer_id).or_default().connected = true;
                     // Bambu's broker only emits a full status object (gcode_state, task_id, ams,
                     // the pause/HMS reason) on request or on its own slow (~minutes) schedule --
@@ -233,11 +241,21 @@ async fn connect_and_subscribe_loop(
                 }
                 Ok(Event::Incoming(Packet::Publish(publish))) => {
                     if let Ok(payload) = std::str::from_utf8(&publish.payload) {
+                        // Set SPOOLBOOK_MQTT_DEBUG=1 to dump every raw report to stderr -- the
+                        // only way to see the printer's own pause/HMS reason, gcode_state, and
+                        // error codes, none of which the parser keeps. Off by default (a real
+                        // report is ~14KB).
+                        if std::env::var("SPOOLBOOK_MQTT_DEBUG").is_ok() {
+                            eprintln!("[mqtt {printer_id}] report: {payload}");
+                        }
                         handle_message(printer_id, payload, &pool, &store, &mut active_task_id, &camera_registry).await;
                     }
                 }
                 Ok(_) => {}
-                Err(_) => break,
+                Err(e) => {
+                    eprintln!("[mqtt {printer_id}] disconnected: {e} -- reconnecting in 15s");
+                    break;
+                }
             }
         }
 
@@ -312,13 +330,17 @@ async fn snapshot_for_end_job(store: &LiveStatusStore, printer_id: i64) -> (Opti
 // than opening a new one per action — so a command fails outright (rather than queuing) if that
 // connection happens to be mid-reconnect.
 pub async fn publish_command(store: &LiveStatusStore, printer_id: i64, serial_number: &str, command: &str) -> Result<(), String> {
-    let payload = serde_json::json!({ "print": { "command": command, "sequence_id": uuid_v4() } }).to_string();
+    // sequence_id must be a stringified integer, not a uuid: the P2S firmware ignores pause/
+    // resume/stop commands whose sequence_id isn't numeric (the start-print "project_file" path
+    // already uses a numeric one via submission_id() and works). This is what makes the on-screen
+    // "select Resume to retry" prompt after an HMS actually respond to spoolbook's Resume button.
+    let payload = serde_json::json!({ "print": { "command": command, "param": "", "sequence_id": crate::send_print::submission_id() } }).to_string();
     publish_raw(store, printer_id, serial_number, payload).await
 }
 
 // Shared by publish_command above and send_print.rs's "project_file" start-print command —
 // both just publish an already-built payload on the same live connection telemetry holds open.
-pub(crate) async fn publish_raw(store: &LiveStatusStore, printer_id: i64, serial_number: &str, payload: String) -> Result<(), String> {
+pub async fn publish_raw(store: &LiveStatusStore, printer_id: i64, serial_number: &str, payload: String) -> Result<(), String> {
     let client = store.read().await.get(&printer_id).and_then(|s| s.client.clone());
     let Some(client) = client else {
         return Err("Printer isn't connected — telemetry link is down or still reconnecting.".to_string());

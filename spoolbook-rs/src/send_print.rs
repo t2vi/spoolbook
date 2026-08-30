@@ -48,16 +48,18 @@ pub fn build_project_file_payload(
     remote_file_name: &str,
     md5: &str,
     plate_gcode_file_name: &str,
-    use_ams: bool,
-    ams_slot: i64,
+    // Both kept for the wire contract with the frontend's AMS toggle + tray picker, but neither
+    // is sent: spoolbook's .3mf is re-sliced by the headless BambuStudio CLI, whose gcode carries
+    // no per-filament AMS-assignment metadata. With that missing, use_ams:true (with or without
+    // an ams_mapping) fails at HMS 07FF-8012 "Failed to get AMS mapping table" — confirmed
+    // against a real P2S: only use_ams:false prints. The printer then just feeds from whatever
+    // filament is threaded (the AMS tray's PTFE, in practice). Real AMS/multi-material support
+    // needs a file sliced *for* AMS and is a separate feature.
+    _use_ams: bool,
+    _ams_slot: i64,
     is_p2s: bool,
     submission_id: &str,
 ) -> String {
-    let flat_ams_mapping: Vec<i64> = if use_ams { vec![ams_slot] } else { vec![] };
-    // Global tray ID = ams_id*4 + slot_id (bambuddy's "regular AMS tray" case — spoolbook only
-    // targets a single onboard AMS unit, not AMS-HT/external-spool/multi-nozzle setups).
-    let ams_mapping2: Vec<serde_json::Value> =
-        flat_ams_mapping.iter().map(|t| json!({ "ams_id": t / 4, "slot_id": t % 4 })).collect();
     let subtask_name = std::path::Path::new(remote_file_name).file_stem().and_then(|s| s.to_str()).unwrap_or(remote_file_name);
 
     json!({
@@ -80,7 +82,9 @@ pub fn build_project_file_payload(
             // specifically for P2S/N7.
             "vibration_cali": !is_p2s,
             "layer_inspect": false,
-            "use_ams": use_ams,
+            // Forced false — see the doc comment on the _use_ams param. A re-sliced spoolbook
+            // .3mf has no AMS filament data, so use_ams:true fails at HMS 07FF-8012.
+            "use_ams": false,
             "cfg": "0",
             "extrude_cali_flag": 2,
             "extrude_cali_manual_mode": 0,
@@ -93,8 +97,16 @@ pub fn build_project_file_payload(
             "project_id": submission_id,
             "subtask_id": submission_id,
             "task_id": submission_id,
-            "ams_mapping": flat_ams_mapping,
-            "ams_mapping2": ams_mapping2,
+            // Deliberately empty, never a per-tray [tray_id]. spoolbook's .3mf is re-sliced by the
+            // headless BambuStudio CLI, whose gcode omits the per-filament AMS-assignment metadata
+            // the printer cross-references an incoming mapping against — supplying one (even a
+            // correct-looking [ams_id*4+slot_id]) fails at HMS 07FF-8012 "Failed to get AMS
+            // mapping table" (confirmed against a real P2S: empty prints fine, [1] does not).
+            // Empty tells the printer to feed from its currently-active AMS tray, matching Bambu
+            // Handy's own single-colour default. True per-tray selection needs a file sliced *for*
+            // AMS and isn't supported here yet.
+            "ams_mapping": [],
+            "ams_mapping2": [],
         }
     })
     .to_string()

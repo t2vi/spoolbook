@@ -198,16 +198,16 @@
 			Status
 		</h3>
 		<div class="flex gap-4 rounded-lg bg-muted p-4">
+			<!-- No inline live feed here: an <img> streaming the camera is a permanent client, and
+			     Bambu firmware only serves one at a time, so the card holding it starved the
+			     printer's own toolhead-camera init mid-print. The camera is popup-only now. -->
 			<button
 				onclick={() => hasTelemetryConfig && openCameraWindow()}
 				class="flex h-20 w-28 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted-foreground/10 disabled:cursor-default"
 				disabled={!hasTelemetryConfig}
+				title="View camera"
 			>
-				{#if cameraStatus === 'Streaming'}
-					<img src={cameraSrc} alt="Live camera" class="h-full w-full object-cover" />
-				{:else}
-					<Printer class="h-8 w-8 text-muted-foreground/50" />
-				{/if}
+				<Printer class="h-8 w-8 text-muted-foreground/50" />
 			</button>
 			<div class="min-w-0 flex-1 text-sm">
 				<p class="font-medium">{connected ? 'Connected' : 'Not connected'}</p>

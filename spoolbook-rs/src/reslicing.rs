@@ -81,7 +81,9 @@ async fn slice_and_save(pool: &SqlitePool, patched_path: &std::path::Path, displ
     result
 }
 
-async fn slice_via_service(patched_path: &std::path::Path) -> Result<Vec<u8>, String> {
+// pub for tests/printer_live.rs's non-sliced -> slice -> print flow against the real
+// slicer-service container. Takes any .3mf on disk; the caller patches settings first (or not).
+pub async fn slice_via_service(patched_path: &std::path::Path) -> Result<Vec<u8>, String> {
     let base_url = std::env::var("RESLICE_SERVICE_URL").unwrap_or_else(|_| "http://localhost:8100".to_string());
     let bytes = std::fs::read(patched_path).map_err(|e| e.to_string())?;
     let file_name = patched_path.file_name().and_then(|n| n.to_str()).unwrap_or("project.3mf").to_string();
