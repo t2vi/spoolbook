@@ -1,5 +1,6 @@
 [![Tests](https://github.com/t2vi/spoolbook/actions/workflows/tests.yml/badge.svg)](https://github.com/t2vi/spoolbook/actions/workflows/tests.yml)
 [![Docs Pages builds](https://github.com/t2vi/spoolbook/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/t2vi/spoolbook/actions/workflows/pages/pages-build-deployment)
+[![Docker images](https://github.com/t2vi/spoolbook/actions/workflows/docker-images.yml/badge.svg)](https://github.com/t2vi/spoolbook/actions/workflows/docker-images.yml)
 
 # spoolbook
 

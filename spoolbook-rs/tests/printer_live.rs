@@ -290,7 +290,10 @@ async fn print_3mf_then_cancel(p: &PrinterEnv, threemf_path: &std::path::Path, p
         .expect("FTPS upload failed");
     let md5 = compute_gcode_md5(threemf_path.to_str().unwrap(), plate)
         .unwrap_or_else(|| panic!("no Metadata/{plate} inside {} -- is it a sliced export?", threemf_path.display()));
-    let payload = build_project_file_payload(&remote, &md5, plate, false, 0, true, &submission_id());
+    // use_ams:true + a real slot -- an empty ams_mapping fails HMS 07FF-8012 on a cold P2S.
+    // SPOOLBOOK_TEST_AMS_SLOT overrides the global tray id (ams_id*4 + slot_id); default 0.
+    let ams_slot: i64 = std::env::var("SPOOLBOOK_TEST_AMS_SLOT").ok().and_then(|s| s.parse().ok()).unwrap_or(0);
+    let payload = build_project_file_payload(&remote, &md5, plate, true, ams_slot, true, &submission_id());
     printer_mqtt::publish_raw(&store, 1, &p.serial, payload).await.expect("publish project_file failed");
 
     // Status must move into the prep/print phase -- this is the assertion that the whole send
