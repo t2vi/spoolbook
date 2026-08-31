@@ -9,6 +9,8 @@
 	import CameraOff from '@lucide/svelte/icons/camera-off';
 	import Printer from '@lucide/svelte/icons/printer';
 	import Droplets from '@lucide/svelte/icons/droplets';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
+	import ExternalLink from '@lucide/svelte/icons/external-link';
 	import { printerImagePath } from '$lib/printer-image';
 	import {
 		controlPrinter,
@@ -17,7 +19,14 @@
 		retryPrinterCamera,
 		subscribeToPrinterLiveStatus
 	} from '$lib/api/client';
-	import type { AmsUnitReading, CameraStatus, Print, Printer as PrinterEntity, PrintStatus } from '$lib/api/types';
+	import type {
+		AmsUnitReading,
+		CameraStatus,
+		Print,
+		Printer as PrinterEntity,
+		PrinterError,
+		PrintStatus
+	} from '$lib/api/types';
 	import { formatDateTime } from '$lib/utils.js';
 
 	let {
@@ -35,6 +44,7 @@
 	let cameraStatus = $state<CameraStatus>('NotStarted');
 	let cameraError = $state<string | null>(null);
 	let gcodeState = $state<string | null>(null);
+	let printerErrors = $state<PrinterError[]>([]);
 	let recentPrints = $state<Print[]>([]);
 	let sending = $state(false);
 	let controlErr = $state<string | null>(null);
@@ -60,6 +70,7 @@
 		cameraStatus = snap.cameraStatus;
 		cameraError = snap.cameraError;
 		gcodeState = snap.gcodeState;
+		printerErrors = snap.errors ?? [];
 	}));
 
 	async function refreshRecentPrints() {
@@ -230,6 +241,28 @@
 				{/if}
 			</div>
 		</div>
+
+		{#each printerErrors as err (err.code)}
+			<div
+				class="mt-2 rounded-lg border p-3 text-sm {err.blocking
+					? 'border-destructive/40 bg-destructive/10 text-destructive'
+					: 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400'}"
+			>
+				<div class="flex items-center gap-2 font-medium">
+					<TriangleAlert class="h-4 w-4 shrink-0" />
+					<span>{err.blocking ? 'Printer error' : 'Printer warning'} {err.code}</span>
+				</div>
+				<p class="mt-1 text-foreground/80">{err.message}</p>
+				<a
+					href={err.wikiUrl}
+					target="_blank"
+					rel="noopener noreferrer"
+					class="mt-1 inline-flex items-center gap-1 text-xs underline underline-offset-2 hover:no-underline"
+				>
+					Bambu troubleshooting <ExternalLink class="h-3 w-3" />
+				</a>
+			</div>
+		{/each}
 	</div>
 
 	<div>
