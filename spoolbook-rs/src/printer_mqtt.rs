@@ -15,6 +15,10 @@ pub struct PrinterLiveStatus {
     pub ams_units: Vec<parser::AmsUnitReading>,
     pub gcode_state: Option<String>,
     pub chamber_temp_c: Option<f64>,
+    // What the printer is currently complaining about (HMS / print_error), decoded for the UI.
+    // Replaced wholesale on every full status, so it clears itself when the printer stops
+    // reporting the error.
+    pub errors: Vec<parser::PrinterError>,
     // Reused by printer control commands (docs/adr/0022) so pause/resume/stop publish on the
     // same live connection telemetry already holds open, rather than opening a new one per
     // action. AsyncClient is a cheap handle (channel sender), not the real socket — cloning it
@@ -281,6 +285,9 @@ pub async fn handle_message(
         let entry = s.entry(printer_id).or_default();
         entry.connected = true;
         entry.gcode_state = Some(message.gcode_state.clone());
+        // Every message that carries gcode_state also carries the current error state, so this
+        // is a full replace: a cleared error disappears from the card on its own.
+        entry.errors = message.errors.clone();
         if !message.ams_units.is_empty() {
             entry.ams_units = message.ams_units.clone();
         }

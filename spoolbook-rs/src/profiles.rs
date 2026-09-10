@@ -364,7 +364,7 @@ pub struct ProfileInventoryResult {
     total_pages: i64,
 }
 
-pub(crate) async fn get_by_id(pool: &SqlitePool, id: i64) -> Option<PrintProfile> {
+pub async fn get_by_id(pool: &SqlitePool, id: i64) -> Option<PrintProfile> {
     let sql = format!("SELECT {COLUMNS} FROM print_profiles WHERE id = ?1");
     sqlx::query_as::<_, PrintProfile>(&sql).bind(id).fetch_optional(pool).await.expect("query failed")
 }

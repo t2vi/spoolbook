@@ -114,7 +114,7 @@ pub async fn slice_via_service(patched_path: &std::path::Path) -> Result<Vec<u8>
 // addressed, so the source file is effectively immutable) and swaps its
 // Metadata/project_settings.config entry for one patched with the chosen profile's settings.
 // Every other entry is raw-copied byte-for-byte (no decompress/recompress).
-fn build_patched_project_file(project_file_path: &str, profile: &profiles::PrintProfile) -> Result<PathBuf, String> {
+pub fn build_patched_project_file(project_file_path: &str, profile: &profiles::PrintProfile) -> Result<PathBuf, String> {
     let source = std::fs::File::open(project_file_path).map_err(|e| e.to_string())?;
     let mut archive = zip::ZipArchive::new(source).map_err(|e| e.to_string())?;
 

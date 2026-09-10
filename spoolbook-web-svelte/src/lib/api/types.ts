@@ -31,12 +31,21 @@ export interface AmsUnitReading {
 
 export type CameraStatus = 'NotStarted' | 'Connecting' | 'Streaming' | 'Unavailable';
 
+// A decoded Bambu HMS / print error, straight from the printer's live report.
+export interface PrinterError {
+	code: string; // "07FF-8012"
+	message: string; // plain-language explanation + what to try
+	blocking: boolean; // true = halts the print; false = warning, print continues
+	wikiUrl: string;
+}
+
 export interface PrinterLiveSnapshot {
 	connected: boolean;
 	amsUnits: AmsUnitReading[];
 	cameraStatus: CameraStatus;
 	cameraError: string | null;
 	gcodeState: string | null;
+	errors: PrinterError[];
 }
 
 export type PrintStatus = 'Success' | 'Failed' | 'Partial' | 'InProgress';
