@@ -91,6 +91,13 @@ a chain, and only current versions are listed.
   confirmation and the `has_prints` refusal shown. *Verify: e2e*
 - **FR-041** — `/projects/[id]` shows the Project's version badge (superseded or current), a
   link to its previous version, its plates with thumbnails, and its Prints. *Verify: e2e*
+- **FR-042** — `/projects` and the Print modal (004/FR-050) can add a Project from a pasted
+  direct `.3mf` link ("Fetch", FR-003) as well as by upload, showing the error when it fails.
+  *Verify: e2e*
+- **FR-043** — When a newly created Project (upload or URL) has a version candidate (FR-021,
+  excluding itself), the page asks "Looks like a new version of *<name>* — link it?" with
+  **Link** (FR-020) and **Not now**; re-uploading identical bytes (`created: false`) never asks.
+  *Verify: e2e*
 
 ## Notes
 
@@ -100,6 +107,7 @@ a chain, and only current versions are listed.
 - **#169 (fixed):** upload accepted non-.3mf bytes; link-version allowed self/cycles; URL import
   and re-slice had no timeouts; URL import checked size only after the full download. Linking
   onto a non-current version stays allowed (re-slicing an older version branches from it).
-- **#170:** URL import and manual version linking (FR-003, FR-020–021) have no UI.
+- **#170:** URL import and manual version linking (FR-003, FR-020–021) had no UI — now
+  FR-042–043 (the Blazor UI had both; lost in the SvelteKit migration).
 - `last_known_write_time_utc` is the import time, not the file's mtime — nothing reads it for
   drift detection.
