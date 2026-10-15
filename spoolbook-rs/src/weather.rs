@@ -58,7 +58,8 @@ async fn fetch_hourly_readings(latitude: f64, longitude: f64, started_at: &str, 
         .append_pair("hourly", "temperature_2m,relative_humidity_2m")
         .append_pair("timezone", "UTC");
 
-    let resp = reqwest::Client::new().get(url).send().await.map_err(|e| e.to_string())?;
+    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(10)).build().map_err(|e| e.to_string())?;
+    let resp = client.get(url).send().await.map_err(|e| e.to_string())?;
     if !resp.status().is_success() {
         return Err(format!("archive fetch failed: {}", resp.status()));
     }

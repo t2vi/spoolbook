@@ -80,7 +80,9 @@ discarded after 7 days. All of this runs in the background — no request trigge
   *Verify: integration*
 - **FR-022** — After finalizing an attached Print, ending its Job also fetches ambient weather
   for the print window, captures a bed photo, and collapses its Readings (FR-030), in that
-  order. *Verify: integration*
+  order — in the background: ending the Job returns as soon as the Print is finalized, so a
+  slow weather API or camera never holds up the printer's telemetry connection.
+  *Verify: integration*
 
 ### Reading retention
 
@@ -112,8 +114,8 @@ discarded after 7 days. All of this runs in the background — no request trigge
   instead of calling `purge_unattached_jobs_older_than`, which is the only function the purge
   tests exercise. The tests prove a helper production never calls. Fix: have the loop call the
   helper with a computed cutoff.
-- **FR-022 (#155):** weather fetch and bed-photo capture are awaited inline inside `end_job`, not
-  spawned; a slow weather API delays the Readings collapse. Weather/photo behavior itself is
+- **FR-022 (#155, fixed):** weather fetch and bed-photo capture used to be awaited inline inside
+  the MQTT message handler, stalling that printer's connection. Weather/photo behavior itself is
   specced with Prints (#150).
 - **FR-003–FR-006** can only be proven against real hardware (`tests/printer_live.rs`,
   `#[ignore]`d, run by hand); the live layer doesn't count toward coverage.

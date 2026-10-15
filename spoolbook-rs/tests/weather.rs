@@ -93,3 +93,28 @@ async fn includes_the_hour_the_print_started_in() {
     let (temp, _) = fetch_ambient_average(-37.8, 144.9, "2026-01-01T07:30:00Z", "2026-01-01T09:10:00Z").await.unwrap();
     assert!((temp - 22.0).abs() < 0.01, "{temp}");
 }
+
+// spec: 003/FR-042
+#[tokio::test]
+async fn gives_up_on_a_hung_archive() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let app = axum::Router::new().route(
+        "/v1/archive",
+        axum::routing::get(|| async {
+            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+            "{}"
+        }),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    set_archive_url(&format!("http://{addr}/v1/archive"));
+
+    let outcome = tokio::time::timeout(
+        std::time::Duration::from_secs(15),
+        fetch_ambient_average(-37.8, 144.9, "2026-01-01T07:00:00Z", "2026-01-01T09:00:00Z"),
+    )
+    .await;
+
+    assert!(matches!(outcome, Ok(Err(_))), "should fail within 10 s, got {outcome:?}");
+}

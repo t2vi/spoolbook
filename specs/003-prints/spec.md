@@ -90,8 +90,8 @@ and the ambient weather attached once a Print ends.
 - **FR-041** — No location, no `ended_at`, an unreachable/failed fetch, or no usable hours →
   ambient fields and hourly weather stay empty; no retry, and ending the Job is never failed by
   it. *Verify: integration*
-- **FR-042** — The weather request is time-bounded, so a hung API can't stall telemetry.
-  *Verify: integration* — **no timeout (#155)**
+- **FR-042** — The weather request gives up after 10 s, so a hung API can't leave the fetch
+  pending forever. *Verify: integration*
 - **FR-043** — `ARCHIVE_URL` overrides the archive endpoint (used by tests).
   *Verify: integration*
 
