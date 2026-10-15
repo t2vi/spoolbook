@@ -258,6 +258,14 @@ async fn delete(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Pa
     if has_spools {
         return err(StatusCode::BAD_REQUEST, "has_spools");
     }
+    let has_profiles: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM print_profiles WHERE filament_id = ?1)")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .expect("query failed");
+    if has_profiles {
+        return err(StatusCode::BAD_REQUEST, "has_profiles");
+    }
 
     let result = sqlx::query("DELETE FROM filaments WHERE id = ?1")
         .bind(id)
