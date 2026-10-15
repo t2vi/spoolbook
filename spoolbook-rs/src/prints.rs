@@ -181,6 +181,48 @@ fn dedup(modes: &[String]) -> Vec<String> {
     modes.iter().filter(|m| seen.insert((*m).clone())).cloned().collect()
 }
 
+const STATUSES: [&str; 4] = ["Success", "Failed", "Partial", "InProgress"];
+const FAILURE_MODES: [&str; 8] = ["Stringing", "LayerAdhesion", "Warping", "UnderExtrusion", "OverExtrusion", "LayerShift", "Clog", "Other"];
+
+async fn exists(pool: &SqlitePool, table: &str, id: i64) -> bool {
+    sqlx::query_scalar::<_, bool>(&format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE id = ?1)"))
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .expect("query failed")
+}
+
+// Shared by create and update; profile/spool are only passed on create (fixed afterwards).
+async fn validate(pool: &SqlitePool, profile_and_spool: Option<(i64, i64)>, printer_id: i64, input: &PrintInputBody) -> Result<(), String> {
+    if !STATUSES.contains(&input.status.as_str()) {
+        return Err("Unknown status.".into());
+    }
+    if let Some(mode) = input.failure_modes.iter().find(|m| !FAILURE_MODES.contains(&m.as_str())) {
+        return Err(format!("Unknown failure mode: {mode}."));
+    }
+    if let Some((profile_id, spool_id)) = profile_and_spool {
+        if !exists(pool, "print_profiles", profile_id).await {
+            return Err("Unknown print profile.".into());
+        }
+        if !exists(pool, "spools", spool_id).await {
+            return Err("Unknown spool.".into());
+        }
+    }
+    if !exists(pool, "printers", printer_id).await {
+        return Err("Unknown printer.".into());
+    }
+    if let Some(project_id) = input.project_id
+        && !exists(pool, "projects", project_id).await
+    {
+        return Err("Unknown project.".into());
+    }
+    // Lexical compare is chronological for same-shaped ISO-8601 strings.
+    if !input.ended_at.is_empty() && input.ended_at < input.started_at {
+        return Err("Ended before it started.".into());
+    }
+    Ok(())
+}
+
 pub fn router() -> Router<SqlitePool> {
     Router::new()
         .route("/api/prints", get(list).post(create))
@@ -242,9 +284,21 @@ async fn attach_job(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
     Json(req): Json<AttachJobRequest>,
-) -> Json<serde_json::Value> {
+) -> (StatusCode, Json<serde_json::Value>) {
+    let job = sqlx::query_scalar::<_, Option<i64>>("SELECT print_id FROM printer_jobs WHERE id = ?1")
+        .bind(req.job_id)
+        .fetch_optional(&pool)
+        .await
+        .expect("query failed");
+    let Some(attached_to) = job else { return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "ok": false, "error": "not_found" }))) };
+    if !exists(&pool, "prints", id).await {
+        return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "ok": false, "error": "not_found" })));
+    }
+    if attached_to.is_some_and(|p| p != id) {
+        return (StatusCode::CONFLICT, Json(serde_json::json!({ "ok": false, "error": "already_attached" })));
+    }
     crate::printer_telemetry::attach_job_to_print(&pool, req.job_id, id).await;
-    Json(serde_json::json!({ "ok": true }))
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true })))
 }
 
 #[derive(Deserialize)]
@@ -437,6 +491,9 @@ async fn create(
     if !modes.is_empty() && body.input.status == "Success" {
         return err(StatusCode::BAD_REQUEST, "failure_modes_require_failed_or_partial");
     }
+    if let Err(e) = validate(&pool, Some((body.profile_id, body.spool_id)), body.printer_id, &body.input).await {
+        return err(StatusCode::BAD_REQUEST, &e);
+    }
 
     let mut tx = pool.begin().await.expect("begin failed");
 
@@ -491,6 +548,9 @@ async fn update(
     let modes = dedup(&body.input.failure_modes);
     if !modes.is_empty() && body.input.status == "Success" {
         return err(StatusCode::BAD_REQUEST, "failure_modes_require_failed_or_partial");
+    }
+    if let Err(e) = validate(&pool, None, body.printer_id, &body.input).await {
+        return err(StatusCode::BAD_REQUEST, &e);
     }
 
     let mut tx = pool.begin().await.expect("begin failed");

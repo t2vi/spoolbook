@@ -51,9 +51,12 @@ and the ambient weather attached once a Print ends.
 - **FR-011** — Failure modes are de-duplicated. Any failure mode on a `Success` Print → 400
   `failure_modes_require_failed_or_partial`, nothing saved (create and update).
   *Verify: integration*
-- **FR-012** — Create/update reject with 400 (nothing saved): a status outside the four
-  values, an unknown failure mode, a profile/spool/printer/project id that doesn't exist, or
-  `endedAt` before `startedAt`. *Verify: integration* — **not implemented (#163)**
+- **FR-012** — Create/update reject with 400 `{ ok: false, error }` (nothing saved): a status
+  outside the four values → `Unknown status.`; a failure mode outside the known set →
+  `Unknown failure mode: <mode>.`; a profile/spool/printer/project id that doesn't exist →
+  `Unknown print profile.` / `Unknown spool.` / `Unknown printer.` / `Unknown project.`; an
+  `endedAt` before `startedAt` → `Ended before it started.` (a blank `endedAt` is fine).
+  *Verify: integration*
 - **FR-013** — `PUT /api/prints/{id}` (editor) updates printer, project + plate, times,
   status, notes, clean-build-plate, and replaces the failure-mode set wholesale. Profile and
   spool are fixed at creation. 404 if missing. *Verify: integration*
@@ -76,8 +79,9 @@ and the ambient weather attached once a Print ends.
 - **FR-030** — `GET /api/prints/job-match?printerId=&startedAt=` (open) returns the 001/FR-040
   candidate Job or `null`. *Verify: integration*
 - **FR-031** — `POST /api/prints/{id}/attach-job` `{ jobId }` (editor) attaches the Job
-  (001/FR-041). Missing Print or Job → 404; a Job already attached to a different Print → 409.
-  *Verify: integration* — **checks not implemented (#163)**
+  (001/FR-041). Missing Print or Job → 404 `not_found`; a Job already attached to a different
+  Print → 409 `already_attached` (attaching it again to the same Print is fine).
+  *Verify: integration*
 
 ### Ambient weather
 
