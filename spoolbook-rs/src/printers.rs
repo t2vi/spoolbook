@@ -132,8 +132,7 @@ async fn control(
 struct PrinterLiveSnapshot {
     connected: bool,
     ams_units: Vec<crate::bambu_mqtt_payload_parser::AmsUnitReading>,
-    // Camera streaming (docs/adr/0024, ffmpeg/MJPEG relay) is a separate deferred slice — always
-    // reports the pre-stream default rather than a real camera state.
+    // From the camera registry (printer_camera.rs) — the relay's real state, not a placeholder.
     camera_status: &'static str,
     camera_error: Option<String>,
     gcode_state: Option<String>,

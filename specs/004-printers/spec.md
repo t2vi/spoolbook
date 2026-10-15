@@ -121,8 +121,6 @@ background telemetry connection itself is spec 001.
 - **#166 (fixed):** send print used to start the job before checking profile/spool, then fail to
   record the Print.
 - **#167 (fixed):** the camera kept using a printer's old IP/access code until restart (FR-043).
-- `printers.rs:116`'s comment ("camera status is a deferred default") is stale — it reports the
-  real camera state (#156).
 - The ffmpeg pipeline and FTPS upload are only provable against a real printer
   (`tests/printer_live.rs`); the camera relay was written without real-hardware verification.
 - Only RTSP-camera models (X1/X2/H2/P2 family) are supported; A1/P1's port-6000 image protocol

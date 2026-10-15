@@ -15,7 +15,7 @@ pub struct ReadingInput {
     pub total_layer_num: Option<i64>,
 }
 
-// Live-only AMS snapshot — deliberately not persisted onto PrinterReading (docs/adr/0022): the
+// Live-only AMS snapshot — deliberately not persisted onto PrinterReading: the
 // point is a live status view, not a per-tray time series in print history. Clone+Serialize so
 // printer_mqtt.rs's live-status store can hand a snapshot straight to the /live SSE endpoint.
 #[derive(Clone, Serialize)]

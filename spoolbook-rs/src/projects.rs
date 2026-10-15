@@ -9,11 +9,8 @@ use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::io::Read;
 
-// Upload and import-from-url (see project_upload.rs) build on the mesh-hash/upsert helpers
-// below — plain file I/O and an HTTP GET, no different in kind from filament_catalog_sync's
-// fetch. Only reslicing stays out of scope: it shells out to Bambu Studio as an external
-// process, the same deferred tier as MQTT/camera (live hardware/process integration, not data
-// layer).
+// Upload and import-from-url (project_upload.rs) and re-slicing (reslicing.rs, via the
+// slicer-service container) build on the mesh-hash/upsert/version-chain helpers below.
 #[derive(Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {
@@ -40,7 +37,9 @@ pub(crate) const COLUMNS: &str = "id, file_path, file_name, last_known_write_tim
     mesh_hash, previous_version_project_id, version_number, is_current_version";
 
 // sha256 of just the mesh geometry entry, not the whole file — a re-slice of the same design
-// changes settings/thumbnails but usually not this. Byte-exact, not canonicalized (docs/adr/0023).
+// changes settings/thumbnails but usually not this. Byte-exact, not canonicalized: a re-export
+// that only reformats the XML misses the match and falls back to the filename signal — never a
+// wrong automatic link. Normalize only if byte-exact proves noisy in practice.
 // Returns None for anything that isn't a readable .3mf zip with that entry, rather than panicking.
 pub(crate) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()

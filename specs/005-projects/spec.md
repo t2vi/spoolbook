@@ -101,6 +101,5 @@ a chain, and only current versions are listed.
   and re-slice had no timeouts; URL import checked size only after the full download. Linking
   onto a non-current version stays allowed (re-slicing an older version branches from it).
 - **#170:** URL import and manual version linking (FR-003, FR-020–021) have no UI.
-- `projects.rs:15`'s comment calling re-slicing out of scope is stale (#156).
 - `last_known_write_time_utc` is the import time, not the file's mtime — nothing reads it for
   drift detection.

@@ -3,9 +3,9 @@ use serde::Serialize;
 use sqlx::SqlitePool;
 
 // Buffers live MQTT telemetry into Jobs/Readings and matches them to the retrospective Print
-// form afterward. See docs/adr/0017-printer-telemetry-mqtt-job-print-separation.md — the actual
-// MQTT wire client (subscribing to a real printer) is a separate, later slice; this is the pure
-// DB logic behind it, exercised directly by tests rather than over a network.
+// form afterward. A Job is what the printer reports; a Print is the user's record — kept separate
+// so telemetry never edits history by itself. This is the DB side; printer_mqtt.rs is the wire
+// client feeding it, and tests drive this directly rather than over a network.
 #[derive(Serialize, sqlx::FromRow, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct PrinterJob {
@@ -82,7 +82,7 @@ async fn try_record_reading(
     .execute(pool)
     .await?;
 
-    // Auto-create-on-send (docs/adr/0017's 2026-08-14 addendum): a brand-new Job attaches
+    // Auto-create-on-send: a brand-new Job attaches
     // straight to the printer's open (InProgress, not yet attached) Print instead of waiting for
     // the retrospective dismissible-chip match — there's no ambiguity, since the Print was
     // created moments before by the same "send" action that produced this Job. Only checked for
@@ -122,7 +122,7 @@ pub struct ReadingSnapshot {
 }
 
 // Collapses a finished Job's raw Readings into a fixed one-minute-bucketed snapshot stored on
-// its Print, then deletes the raw rows -- see docs/adr/0032. Last value per bucket, deliberately
+// its Print, then deletes the raw rows. Last value per bucket, deliberately
 // not averaged: averaging would smooth over abrupt real jumps (e.g. a chamber door opening) that
 // this feature exists to surface. No-op (leaves telemetry_json untouched) when there are no
 // readings for this job -- nothing to collapse.
@@ -281,7 +281,7 @@ pub async fn attach_job_to_print(pool: &SqlitePool, job_id: i64, print_id: i64) 
 }
 
 // Unattached Jobs (and their Readings, via ON DELETE CASCADE) older than the cutoff are
-// discarded — ADR-0017's 7-day retention window. Attached Jobs are kept regardless of age.
+// discarded — the 7-day retention window. Attached Jobs are kept regardless of age.
 // Logs rather than panics: it runs inside the long-lived purge loop, and a panic would end that
 // loop for the life of the process.
 pub async fn purge_unattached_jobs_older_than(pool: &SqlitePool, cutoff: &str) {
