@@ -52,7 +52,7 @@
 	let cameraRetryCount = $state(0);
 
 	let cameraSrc = $derived(`/printers/${printer.id}/camera?r=${cameraRetryCount}`);
-	let hasTelemetryConfig = $derived(printer.ipAddress !== null && printer.accessCode !== null);
+	let hasTelemetryConfig = $derived(printer.ipAddress !== null && printer.hasAccessCode);
 	// Bambu's gcode_state: RUNNING/PREPARE while actively printing, PAUSE while paused —
 	// mirrors BambuMqttPayloadParser.IsActiveState on the backend.
 	let isPrinting = $derived(gcodeState === 'RUNNING' || gcodeState === 'PREPARE');
@@ -279,7 +279,7 @@
 			<Button
 				class="ml-auto bg-green-600 hover:bg-green-700"
 				size="sm"
-				disabled={printer.ipAddress === null || printer.accessCode === null || isPrinting || isPaused}
+				disabled={printer.ipAddress === null || !printer.hasAccessCode || isPrinting || isPaused}
 				onclick={() => (showPrintModal = true)}
 			>
 				<Printer /> Print

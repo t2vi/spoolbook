@@ -24,18 +24,20 @@ background telemetry connection itself is spec 001.
 
 - **FR-001** — `GET /api/printers` (open) lists Printers ordered by name.
   *Verify: integration*
-- **FR-002** — A Printer's access code is never returned to an unauthenticated caller.
-  *Verify: integration* — **violated (#165)**
+- **FR-002** — A Printer's access code is write-only: no API response ever contains it.
+  Printers carry `hasAccessCode` (true when one is stored) instead. *Verify: integration*
 - **FR-003** — `POST /api/printers` / `PUT /api/printers/{id}` (editor) save name, model, IP,
   access code, serial. Blank name → 400 `Name is required`; a name already used by another
-  Printer → 400 `duplicate`; update of a missing id → 404. Saving (re)starts the Printer's
-  telemetry loop (001/FR-002). *Verify: integration*
+  Printer → 400 `duplicate`; update of a missing id → 404. On update, a blank or omitted
+  access code keeps the stored one. Saving (re)starts the Printer's telemetry loop
+  (001/FR-002). *Verify: integration*
 - **FR-004** — `DELETE /api/printers/{id}` (editor) → 400 `has_prints` if any Print references
   it; 404 if missing; otherwise deletes it, its telemetry Jobs/Readings, and stops its loop.
   *Verify: integration*
-- **FR-005** — `POST /api/printers/test` `{ ipAddress, accessCode }` (editor) connects once to
-  the printer's broker and reports `{ ok: true }` on a successful handshake, or
-  `{ ok: false, error }` — a timeout after 6 s names the IP / LAN-mode as the likely cause.
+- **FR-005** — `POST /api/printers/test` `{ ipAddress, accessCode?, printerId? }` (editor)
+  connects once to the printer's broker — with `accessCode`, or when that's blank the stored
+  code of `printerId`; neither available → 400 `Access code is required`. Reports
+  `{ ok: true }` on a successful handshake, or `{ ok: false, error }` — a timeout after 6 s names the IP / LAN-mode as the likely cause.
   *Verify: integration*
 
 ### Live status & control
@@ -87,7 +89,7 @@ background telemetry connection itself is spec 001.
   first viewer and stops 10 s after the last leaves. Status moves `NotStarted` → `Connecting`
   → `Streaming`; it gives up as `Unavailable` (with ffmpeg's last error) after 3 failed
   attempts before any frame, or 10 after frames had flowed. *Verify: integration*
-- **FR-042** — `POST /api/printers/{id}/camera/retry` resets an `Unavailable` camera to
+- **FR-042** — `POST /api/printers/{id}/camera/retry` (editor) resets an `Unavailable` camera to
   `NotStarted` (no-op otherwise or when no camera exists yet). *Verify: integration*
 - **FR-043** — Changing a printer's IP or access code, or deleting it, drops its camera
   connection so the next view uses the current details. *Verify: integration* — **not
@@ -113,8 +115,8 @@ background telemetry connection itself is spec 001.
 ## Notes
 
 - Retroactive: behavior read from the code at `3fdca27`.
-- **#165:** access codes leak through the open `GET /api/printers` (FR-002); also the camera
-  retry route isn't editor-gated.
+- **#165 (fixed):** access codes used to leak through the open `GET /api/printers`, and camera
+  retry wasn't editor-gated.
 - **#166:** send-print validation order (FR-030).
 - **#167:** stale camera connection details (FR-043).
 - `printers.rs:116`'s comment ("camera status is a deferred default") is stale — it reports the

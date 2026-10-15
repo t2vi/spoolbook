@@ -21,8 +21,15 @@ pub struct Printer {
     pub name: String,
     pub model: Option<String>,
     pub ip_address: Option<String>,
+    // Write-only: the access code is the printer's LAN credential (MQTT control, FTPS, camera),
+    // so responses only ever say whether one is stored.
+    #[serde(rename = "hasAccessCode", serialize_with = "is_set")]
     pub access_code: Option<String>,
     pub serial_number: Option<String>,
+}
+
+fn is_set<S: serde::Serializer>(value: &Option<String>, serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.serialize_bool(value.as_deref().is_some_and(|v| !v.is_empty()))
 }
 
 #[derive(Deserialize)]
@@ -58,13 +65,25 @@ pub fn router() -> Router<SqlitePool> {
 #[serde(rename_all = "camelCase")]
 struct PrinterConnectionTestRequest {
     ip_address: String,
-    access_code: String,
+    access_code: Option<String>,
+    // The edit form never sees the stored code (it's write-only), so a blank code here means
+    // "test with this printer's stored one".
+    printer_id: Option<i64>,
 }
 
-async fn test(_editor: crate::auth::Editor, Json(req): Json<PrinterConnectionTestRequest>) -> Json<serde_json::Value> {
-    match printer_mqtt::test_connection(&req.ip_address, &req.access_code).await {
-        Ok(()) => Json(serde_json::json!({ "ok": true })),
-        Err(error) => Json(serde_json::json!({ "ok": false, "error": error })),
+async fn test(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Json(req): Json<PrinterConnectionTestRequest>) -> (StatusCode, Json<serde_json::Value>) {
+    let typed = req.access_code.filter(|c| !c.trim().is_empty());
+    let access_code = match (typed, req.printer_id) {
+        (Some(code), _) => Some(code),
+        (None, Some(id)) => get_by_id(&pool, id).await.and_then(|p| p.access_code).filter(|c| !c.is_empty()),
+        (None, None) => None,
+    };
+    let Some(access_code) = access_code else {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "Access code is required" })));
+    };
+    match printer_mqtt::test_connection(&req.ip_address, &access_code).await {
+        Ok(()) => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))),
+        Err(error) => (StatusCode::OK, Json(serde_json::json!({ "ok": false, "error": error }))),
     }
 }
 
@@ -248,7 +267,7 @@ async fn update(
     }
 
     let printer = sqlx::query_as::<_, Printer>(
-        "UPDATE printers SET name = ?1, model = ?2, ip_address = ?3, access_code = ?4, serial_number = ?5
+        "UPDATE printers SET name = ?1, model = ?2, ip_address = ?3, access_code = COALESCE(NULLIF(TRIM(?4), ''), access_code), serial_number = ?5
          WHERE id = ?6
          RETURNING id, name, model, ip_address, access_code, serial_number",
     )

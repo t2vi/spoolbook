@@ -139,8 +139,9 @@ export const createPrinter = (input: PrinterInput) => request<PrinterResult>('/a
 export const updatePrinter = (id: number, input: PrinterInput) =>
 	request<PrinterResult>(`/api/printers/${id}`, { method: 'PUT', body: JSON.stringify(input) });
 export const deletePrinter = (id: number) => request<PrinterControlResult>(`/api/printers/${id}`, { method: 'DELETE' });
-export const testPrinterConnection = (ipAddress: string, accessCode: string) =>
-	request<PrinterControlResult>('/api/printers/test', json({ ipAddress, accessCode }));
+// Blank accessCode + printerId -> the backend tests with that printer's stored code.
+export const testPrinterConnection = (ipAddress: string, accessCode: string, printerId: number | null) =>
+	request<PrinterControlResult>('/api/printers/test', json({ ipAddress, accessCode, printerId }));
 
 export const controlPrinter = (id: number, command: 'pause' | 'resume' | 'stop') =>
 	request<PrinterControlResult>(`/api/printers/${id}/control`, json({ command }));

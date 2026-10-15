@@ -27,7 +27,7 @@ signed-in user can link a Google account and then sign in with it.
 - **FR-001** — Every mutating API route, and `GET /printers/{id}/camera`, requires an editor:
   a valid, unexpired session whose user is `Admin`. Otherwise → 401 `{ authenticated: false }`.
   Read routes need no session. Exceptions: setup (FR-010), login/logout, the Google
-  login/callback, and nothing else. *Verify: integration* — **camera retry ungated (#165)**
+  login/callback, and nothing else. *Verify: integration*
 
 ### Setup & sign-in
 

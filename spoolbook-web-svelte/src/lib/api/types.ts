@@ -8,7 +8,8 @@ export interface Printer {
 	name: string;
 	model: string | null;
 	ipAddress: string | null;
-	accessCode: string | null;
+	// The access code itself is write-only — never sent back by the API.
+	hasAccessCode: boolean;
 	serialNumber: string | null;
 }
 
