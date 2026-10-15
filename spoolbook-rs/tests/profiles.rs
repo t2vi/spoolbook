@@ -749,3 +749,25 @@ async fn update_without_provenance_keeps_the_stored_provenance() {
         sqlx::query_as("SELECT source, source_slicer, raw_settings_json FROM print_profiles WHERE id = ?1").bind(id).fetch_one(&pool).await.unwrap();
     assert_eq!((source.as_str(), slicer.as_deref(), raw.as_deref()), ("SlicerImport", Some("BambuStudio"), Some("{}")));
 }
+
+// spec: 006/FR-003
+#[tokio::test]
+async fn field_spec_reports_the_profiles_filament_and_spool() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let spool_id = seed_spool(&pool, filament_id).await;
+    let generic = create_profile(&pool, filament_id).await;
+    let mut body = full_profile_body();
+    body["spoolId"] = json!(spool_id);
+    let (_, created) = send(&pool, "POST", &format!("/api/profiles?filamentId={filament_id}"), Some(body)).await;
+    let specific = created["profile"]["id"].as_i64().unwrap();
+
+    let (_, generic_spec) = send(&pool, "GET", &format!("/api/profiles/field-spec?profileId={generic}"), None).await;
+    let (_, specific_spec) = send(&pool, "GET", &format!("/api/profiles/field-spec?profileId={specific}"), None).await;
+
+    assert_eq!(generic_spec["filamentId"], filament_id);
+    assert_eq!(generic_spec["spoolId"], Value::Null);
+    assert!(generic_spec.as_object().unwrap().contains_key("spoolId"));
+    assert_eq!(specific_spec["filamentId"], filament_id);
+    assert_eq!(specific_spec["spoolId"], spool_id);
+}

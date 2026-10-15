@@ -451,6 +451,8 @@ async fn field_spec(
             let mut spec = crate::profile_field_spec::build_groups(profile.name.clone(), Some(&values));
             spec.version_number = Some(profile.version_number);
             spec.is_current_version = Some(profile.is_current_version);
+            spec.filament_id = Some(profile.filament_id);
+            spec.spool_id = Some(profile.spool_id);
             (StatusCode::OK, Json(serde_json::to_value(spec).unwrap()))
         }
         None => (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "not_found" }))),
