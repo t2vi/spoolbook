@@ -98,7 +98,9 @@ Bambu system preset, and are what a Print records and a re-slice applies.
 - **FR-041** — `/profiles/new` and `/profiles/edit/[id]` render the tabbed form from the field
   spec, pre-fill from a file import or a system preset, show per-field errors, and save. The
   edit page shows the version number and a "Save as new version" button (FR-021); a `Locked`
-  refusal points the user at it. *Verify: e2e*
+  refusal points the user at it. Saving from the edit page keeps the profile's provenance
+  (`source`, `source_slicer`, `raw_settings_json`) unless a file or system preset was imported
+  into the form during that edit — then the import's provenance is saved. *Verify: e2e*
 
 ## Notes
 
@@ -109,4 +111,6 @@ Bambu system preset, and are what a Print records and a re-slice applies.
 - **#172 (fixed):** update used to erase `notes` / `version_name`.
 - **#173 (fixed):** unknown filament/spool used to 500, a profile could point at another
   filament's spool, and system-preset fetches had no timeout.
+- **#183 (fixed):** the edit page always sent `source: Manual`, relabelling every imported
+  profile on save.
 - `notes`, `version_name` and `source_preset_path` can't be set from the API at all today.

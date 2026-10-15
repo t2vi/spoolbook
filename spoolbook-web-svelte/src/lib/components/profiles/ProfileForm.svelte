@@ -50,6 +50,9 @@
 	let rawSettingsJson = $state<string | null>(null);
 	let source = $state<ProfileSource>('Manual');
 	let sourceSlicer = $state<SlicerType | null>(null);
+	// Provenance is only sent on create or after an import here; otherwise an edit would
+	// relabel an imported profile as Manual (the stored provenance is never loaded).
+	let imported = $state(false);
 	let importMessage = $state<string | null>(null);
 	let errorMessage = $state<string | null>(null);
 	let versionNumber = $state<number | null>(null);
@@ -112,6 +115,7 @@
 		rawSettingsJson = result.rawSettingsJson;
 		source = 'SlicerImport';
 		sourceSlicer = 'BambuStudio';
+		imported = true;
 		importMessage = `Imported ${Object.keys(result.fields).length} settings from ${importedFrom}.`;
 	}
 
@@ -139,7 +143,8 @@
 		const fields: Record<string, string> = {};
 		for (const tab of tabs) for (const section of tab.sections) for (const field of section.fields) fields[field.name] = field.value;
 
-		const input: ProfileInput = { name, fields, source, sourceSlicer, rawSettingsJson, spoolId: null };
+		const provenance = id === null || imported ? { source, sourceSlicer, rawSettingsJson } : {};
+		const input: ProfileInput = { name, fields, ...provenance, spoolId: null };
 
 		const result = id === null
 			? selectedFilamentId === 0
