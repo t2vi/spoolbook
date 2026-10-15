@@ -86,7 +86,7 @@ and the ambient weather attached once a Print ends.
   every hour overlapping `[started_at, ended_at]` — including the hour containing
   `started_at`. Their averages go to `ambient_temp_c` / `ambient_humidity_pct` with
   `ambient_source = 'open-meteo'`, and each hour is upserted into hourly weather.
-  *Verify: integration* — **start hour excluded (#162)**
+  *Verify: integration*
 - **FR-041** — No location, no `ended_at`, an unreachable/failed fetch, or no usable hours →
   ambient fields and hourly weather stay empty; no retry, and ending the Job is never failed by
   it. *Verify: integration*
