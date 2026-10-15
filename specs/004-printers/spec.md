@@ -62,8 +62,8 @@ background telemetry connection itself is spec 001.
 
 - **FR-030** — `POST /api/printers/{id}/print` `{ projectId, platerId, spoolId, profileId,
   useAms, amsSlot }` (editor). Missing printer → 404; printer without IP/access code/serial →
-  400; missing project → 404; unknown profile or spool → 400 — all checked before anything is
-  sent. *Verify: integration* — **missing printer → 400, profile/spool unchecked (#166)**
+  400; missing project → 404; unknown profile → 400 `Unknown print profile.`; unknown spool →
+  400 `Unknown spool.` — all checked before anything is uploaded or sent. *Verify: integration*
 - **FR-031** — The plate's `Metadata/plate_<platerId>.gcode` must exist in the project's
   `.3mf` (else 400 naming the entry — "is this a sliced export?"); its MD5 (of that gcode entry,
   not the whole file) is sent with the command. *Verify: integration*
@@ -117,7 +117,8 @@ background telemetry connection itself is spec 001.
 - Retroactive: behavior read from the code at `3fdca27`.
 - **#165 (fixed):** access codes used to leak through the open `GET /api/printers`, and camera
   retry wasn't editor-gated.
-- **#166:** send-print validation order (FR-030).
+- **#166 (fixed):** send print used to start the job before checking profile/spool, then fail to
+  record the Print.
 - **#167:** stale camera connection details (FR-043).
 - `printers.rs:116`'s comment ("camera status is a deferred default") is stale — it reports the
   real camera state (#156).
