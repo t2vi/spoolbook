@@ -19,7 +19,7 @@ pub struct PrinterLiveStatus {
     // Replaced wholesale on every full status, so it clears itself when the printer stops
     // reporting the error.
     pub errors: Vec<parser::PrinterError>,
-    // Reused by printer control commands (docs/adr/0022) so pause/resume/stop publish on the
+    // Reused by printer control commands so pause/resume/stop publish on the
     // same live connection telemetry already holds open, rather than opening a new one per
     // action. AsyncClient is a cheap handle (channel sender), not the real socket — cloning it
     // for the SSE snapshot every 2s is fine.
@@ -87,7 +87,7 @@ pub async fn snapshot(store: &LiveStatusStore, printer_id: i64) -> PrinterLiveSt
 }
 
 // Accepts whatever certificate the printer's LAN broker presents — Bambu's firmware uses a
-// self-signed cert, and this is a local-network-only credential exchange (docs/adr/0017), not a
+// self-signed cert, and this is a local-network-only credential exchange, not a
 // certificate-authenticated one. Mirrors MQTTnet's `.WithCertificateValidationHandler(_ => true)`.
 // Reused by send_print.rs's FTPS upload — same self-signed-cert, LAN-only posture.
 #[derive(Debug)]
@@ -148,7 +148,7 @@ pub(crate) fn tls12_no_verify_config() -> rustls::ClientConfig {
         .with_no_client_auth()
 }
 
-// Auto-connects at launch to every configured Printer's local MQTT broker (docs/adr/0017) and
+// Auto-connects at launch to every configured Printer's local MQTT broker and
 // buffers live telemetry via printer_telemetry. Read-only: subscribes to device/{serial}/report
 // only, never publishes to a printer's request/control topic.
 //
@@ -171,13 +171,10 @@ pub async fn spawn_all(pool: SqlitePool, store: LiveStatusStore, camera_registry
     }
 }
 
-// ADR-0017's 7-day unattached-Job retention. Runs once at startup, then daily.
+// The 7-day unattached-Job retention (an unattached Job older than that is never going to be matched to a Print). Runs once at startup, then daily.
 async fn purge_stale_jobs_loop(pool: SqlitePool) {
     loop {
-        sqlx::query("DELETE FROM printer_jobs WHERE print_id IS NULL AND started_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-7 days')")
-            .execute(&pool)
-            .await
-            .ok();
+        printer_telemetry::purge_stale_jobs(&pool).await;
         tokio::time::sleep(Duration::from_secs(24 * 60 * 60)).await;
     }
 }
@@ -333,7 +330,7 @@ async fn snapshot_for_end_job(store: &LiveStatusStore, printer_id: i64) -> (Opti
     (entry.chamber_temp_c, ams_humidity_pct)
 }
 
-// Publishes on the same live connection telemetry already holds open (docs/adr/0022) rather
+// Publishes on the same live connection telemetry already holds open rather
 // than opening a new one per action — so a command fails outright (rather than queuing) if that
 // connection happens to be mid-reconnect.
 pub async fn publish_command(store: &LiveStatusStore, printer_id: i64, serial_number: &str, command: &str) -> Result<(), String> {

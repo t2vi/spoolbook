@@ -167,6 +167,7 @@ pub struct PrintProfile {
     pub version_number: i64,
     pub version_name: Option<String>,
     pub is_current_version: bool,
+    pub previous_version_profile_id: Option<i64>,
     pub notes: Option<String>,
 }
 
@@ -408,7 +409,7 @@ const COLUMNS: &str = "id, filament_id, spool_id, name, print_speed_mm_s,
     counter_coef_1, counter_coef_2, counter_coef_3, counter_limit_max, counter_limit_min,
     start_gcode, end_gcode, default_colour_hex,
     source, source_slicer, raw_settings_json, source_preset_path, version_number, version_name,
-    is_current_version, notes";
+    is_current_version, previous_version_profile_id, notes";
 
 pub fn router() -> Router<SqlitePool> {
     Router::new()
@@ -416,6 +417,7 @@ pub fn router() -> Router<SqlitePool> {
         .route("/api/profiles/inventory", get(inventory))
         .route("/api/profiles/field-spec", get(field_spec))
         .route("/api/profiles/{id}", axum::routing::put(update).delete(delete))
+        .route("/api/profiles/{id}/versions", axum::routing::post(new_version))
 }
 
 #[derive(Deserialize)]
@@ -446,7 +448,11 @@ async fn field_spec(
     match profile {
         Some(profile) => {
             let values = crate::profile_field_spec::field_strings(&profile);
-            let spec = crate::profile_field_spec::build_groups(profile.name.clone(), Some(&values));
+            let mut spec = crate::profile_field_spec::build_groups(profile.name.clone(), Some(&values));
+            spec.version_number = Some(profile.version_number);
+            spec.is_current_version = Some(profile.is_current_version);
+            spec.filament_id = Some(profile.filament_id);
+            spec.spool_id = Some(profile.spool_id);
             (StatusCode::OK, Json(serde_json::to_value(spec).unwrap()))
         }
         None => (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "not_found" }))),
@@ -517,6 +523,24 @@ fn validation_errors(errors: Vec<(&'static str, String)>) -> (StatusCode, Json<P
     (StatusCode::BAD_REQUEST, Json(ProfileResult { ok: false, errors: Some(serde_json::Value::Object(map)), profile: None }))
 }
 
+// Shared by create, update and new_version: a spool-specific profile's spool must exist and be
+// of the profile's own filament. Some((field, message)) on a problem.
+async fn check_filament_and_spool(pool: &SqlitePool, filament_id: i64, spool_id: Option<i64>) -> Option<(&'static str, &'static str)> {
+    let filament_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM filaments WHERE id = ?1)").bind(filament_id).fetch_one(pool).await.expect("query failed");
+    if !filament_exists {
+        return Some(("filamentId", "Unknown filament."));
+    }
+    let spool_id = spool_id?;
+    let spool_filament: Option<i64> =
+        sqlx::query_scalar("SELECT filament_id FROM spools WHERE id = ?1").bind(spool_id).fetch_optional(pool).await.expect("query failed");
+    match spool_filament {
+        None => Some(("spoolId", "Unknown spool.")),
+        Some(f) if f != filament_id => Some(("spoolId", "That spool is a different filament.")),
+        Some(_) => None,
+    }
+}
+
 async fn create(
     _editor: crate::auth::Editor,
     State(pool): State<SqlitePool>,
@@ -525,6 +549,9 @@ async fn create(
 ) -> (StatusCode, Json<ProfileResult>) {
     if input.name.trim().is_empty() {
         return validation_error("name", "Name is required");
+    }
+    if let Some((field, message)) = check_filament_and_spool(&pool, q.filament_id, input.spool_id).await {
+        return validation_error(field, message);
     }
     let parsed = match crate::profile_field_spec::parse_fields(&input.fields) {
         Ok(p) => p,
@@ -753,11 +780,34 @@ async fn update(
             }),
         );
     }
+    if let Some(existing) = get_by_id(&pool, id).await
+        && let Some((field, message)) = check_filament_and_spool(&pool, existing.filament_id, input.spool_id).await
+    {
+        return validation_error(field, message);
+    }
     let parsed = match crate::profile_field_spec::parse_fields(&input.fields) {
         Ok(p) => p,
         Err(errors) => return validation_errors(errors),
     };
 
+    let profile = apply_input(&pool, id, &input, &parsed).await;
+
+    match profile {
+        Some(profile) => (StatusCode::OK, Json(ProfileResult { ok: true, errors: None, profile: Some(profile) })),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(ProfileResult { ok: false, errors: Some(serde_json::json!({ "id": "not_found" })), profile: None }),
+        ),
+    }
+}
+
+
+// Shared by update (edit in place) and new_version (edit applied onto a fresh copy) — the one
+// place the ~135-column UPDATE lives. None for a missing id.
+async fn apply_input<'e, E>(executor: E, id: i64, input: &ProfileInput, parsed: &ParsedProfileFields) -> Option<PrintProfile>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     let sql = format!(
         "UPDATE print_profiles SET
             spool_id = ?, name = ?, print_speed_mm_s = ?,
@@ -800,12 +850,12 @@ async fn update(
             start_gcode = ?, end_gcode = ?, default_colour_hex = ?,
             source = COALESCE(?, source), source_slicer = COALESCE(?, source_slicer),
             raw_settings_json = COALESCE(?, raw_settings_json), source_preset_path = COALESCE(?, source_preset_path),
-            version_name = ?, notes = ?
+            version_name = COALESCE(?, version_name), notes = COALESCE(?, notes)
         WHERE id = ?
         RETURNING {COLUMNS}"
     );
 
-    let profile = sqlx::query_as::<_, PrintProfile>(&sql)
+    sqlx::query_as::<_, PrintProfile>(&sql)
         .bind(input.spool_id)
         .bind(&input.name)
         .bind(parsed.print_speed_mm_s)
@@ -941,33 +991,94 @@ async fn update(
         .bind(None::<String>) // version_name — not reachable from the wire shape yet
         .bind(None::<String>) // notes — not reachable from the wire shape yet
         .bind(id)
-        .fetch_optional(&pool)
+        .fetch_optional(executor)
         .await
-        .expect("update failed");
+        .expect("update failed")
+}
 
-    match profile {
-        Some(profile) => (StatusCode::OK, Json(ProfileResult { ok: true, errors: None, profile: Some(profile) })),
-        None => (
-            StatusCode::NOT_FOUND,
-            Json(ProfileResult { ok: false, errors: Some(serde_json::json!({ "id": "not_found" })), profile: None }),
-        ),
+// "Save as new version": the explicit way to edit a version a Print has locked (update refuses
+// it), or to keep an unlocked one as history. Copies the source row wholesale (provenance, notes,
+// raw settings all carry over), applies the edits to the copy, and demotes the source — one
+// transaction, so a failure never leaves two current versions or a half-built one.
+async fn new_version(
+    _editor: crate::auth::Editor,
+    State(pool): State<SqlitePool>,
+    Path(id): Path<i64>,
+    Json(input): Json<ProfileInput>,
+) -> (StatusCode, Json<ProfileResult>) {
+    let Some(source) = get_by_id(&pool, id).await else {
+        return (StatusCode::NOT_FOUND, Json(ProfileResult { ok: false, errors: Some(serde_json::json!({ "id": "not_found" })), profile: None }));
+    };
+    if !source.is_current_version {
+        return validation_error("id", "not_current_version");
     }
+    if input.name.trim().is_empty() {
+        return validation_error("name", "Name is required");
+    }
+    if let Some((field, message)) = check_filament_and_spool(&pool, source.filament_id, input.spool_id).await {
+        return validation_error(field, message);
+    }
+    let parsed = match crate::profile_field_spec::parse_fields(&input.fields) {
+        Ok(p) => p,
+        Err(errors) => return validation_errors(errors),
+    };
+    // Provenance always comes from the copied source row (apply_input's COALESCE keeps it when
+    // these are None) — a new version is the same profile edited, not a re-import.
+    let input = ProfileInput { source: None, source_slicer: None, raw_settings_json: None, ..input };
+
+    let copied = COLUMNS.trim_start_matches("id, ");
+    let mut tx = pool.begin().await.expect("begin failed");
+    let new_id: i64 = sqlx::query_scalar(&format!(
+        "INSERT INTO print_profiles ({copied}) SELECT {copied} FROM print_profiles WHERE id = ?1 RETURNING id"
+    ))
+    .bind(id)
+    .fetch_one(&mut *tx)
+    .await
+    .expect("insert failed");
+    sqlx::query(
+        "UPDATE print_profiles SET version_number = ?1, previous_version_profile_id = ?2, is_current_version = 1, version_name = NULL WHERE id = ?3",
+    )
+    .bind(source.version_number + 1)
+    .bind(id)
+    .bind(new_id)
+    .execute(&mut *tx)
+    .await
+    .expect("update failed");
+    sqlx::query("UPDATE print_profiles SET is_current_version = 0 WHERE id = ?1").bind(id).execute(&mut *tx).await.expect("update failed");
+    let profile = apply_input(&mut *tx, new_id, &input, &parsed).await.expect("just inserted");
+    tx.commit().await.expect("commit failed");
+
+    (StatusCode::OK, Json(ProfileResult { ok: true, errors: None, profile: Some(profile) }))
 }
 
 async fn delete(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Path(id): Path<i64>) -> (StatusCode, Json<serde_json::Value>) {
     if has_prints(&pool, id).await {
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "has_prints" })));
     }
-
-    let result = sqlx::query("DELETE FROM print_profiles WHERE id = ?1")
+    let has_newer: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM print_profiles WHERE previous_version_profile_id = ?1)")
         .bind(id)
-        .execute(&pool)
+        .fetch_one(&pool)
+        .await
+        .expect("query failed");
+    if has_newer {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "has_newer_version" })));
+    }
+
+    // Deleting the current version hands "current" back to the one it was built on, so the
+    // chain never ends up with no current version (and vanishes from every list).
+    let mut tx = pool.begin().await.expect("begin failed");
+    let previous: Option<Option<i64>> = sqlx::query_scalar("DELETE FROM print_profiles WHERE id = ?1 RETURNING previous_version_profile_id")
+        .bind(id)
+        .fetch_optional(&mut *tx)
         .await
         .expect("delete failed");
-
-    if result.rows_affected() == 0 {
+    let Some(previous) = previous else {
         return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "ok": false, "error": "not_found" })));
+    };
+    if let Some(previous) = previous {
+        sqlx::query("UPDATE print_profiles SET is_current_version = 1 WHERE id = ?1").bind(previous).execute(&mut *tx).await.expect("update failed");
     }
+    tx.commit().await.expect("commit failed");
 
     (StatusCode::OK, Json(serde_json::json!({ "ok": true })))
 }

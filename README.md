@@ -46,14 +46,15 @@ it grew into are both retired.
 
 - **Filaments** — browse/search the catalog, add/edit entries, sync from the external catalog.
 - **Spools** — track individual rolls against a Filament.
-- **Profiles** — reusable print settings, generic or spool-specific; import Bambu Studio filament
-  presets directly from the JSON files Bambu Studio saves on disk (not `.3mf` project files —
-  those just embed the same JSON), including reading whichever fields are present when a preset
-  inherits from a system base.
-- **Prints** — log a print job with a profile + spool + printer reference, an optional linked
-  `.3mf` Project, ambient conditions, and outcome.
+- **Profiles** — reusable print settings, generic or for one specific spool; start from a Bambu
+  Studio system preset, a sliced `.3mf`, or a preset `.json` Bambu Studio saved (its `inherits`
+  chain resolved). Versioned: a version used by a print is locked, and "Save as new version"
+  keeps edits as the next version.
+- **Prints** — created automatically when you send a job to a printer (profile + spool + printer
+  + `.3mf` Project), then filled in as it runs: outcome, bed photo, outdoor weather, chamber
+  temperature, AMS humidity and layer progress.
 - **Dashboard** — at-a-glance view across the above.
-- **Settings** — Bambu preset directories, filament catalog source (default + user-added
+- **Settings** — location (for outdoor weather), filament catalog source (default + user-added
   additional source URLs, merged on every sync), filament DB version/sync status, app version,
   and the list of owned Printers.
 
@@ -111,3 +112,10 @@ See the "Release checklist" in `CLAUDE.md`. `.github/workflows/docker-images.yml
 pushes the `spoolbook`/`spoolbook-slicer` images to GHCR (gated on a real slicing smoke test
 against the latest-stable BambuStudio). Release notes go in `docs/releases/`, indexed by
 `CHANGELOG.md`. `.github/workflows/tests.yml` runs the test suite on every push/PR.
+
+## License
+
+[AGPL-3.0-or-later](LICENSE). You can use, modify and redistribute Spoolbook freely; if you run
+a modified version for other people — including over a network — you must offer them its
+source under the same license. The sidebar's "Source" link points at this repository; a fork
+that others use should point it at the fork's own source.

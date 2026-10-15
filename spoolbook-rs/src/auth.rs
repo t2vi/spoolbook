@@ -2,8 +2,8 @@
 // this crate used to run on. Session tokens are opaque random values looked up server-side
 // (sessions.id), not a recomputable proof the way the old HMAC(password, "editor") cookie was —
 // that trick only worked because the shared password doubled as both credential and signing key,
-// which breaks once login means "verify against an argon2 hash in a users row." See
-// docs/adr/0027 for the full reasoning.
+// which breaks once login means "verify against an argon2 hash in a users row." A signed
+// stateless token was the alternative; server-side sessions are simpler and can be revoked.
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng as PwOsRng};
 use argon2::Argon2;
 use axum::extract::{FromRef, FromRequestParts};
@@ -217,13 +217,35 @@ async fn update_account(editor: Editor, axum::extract::State(pool): axum::extrac
         return (StatusCode::UNAUTHORIZED, Json(json!({ "ok": false, "error": "wrong_current_password" }))).into_response();
     }
 
-    if let Some(username) = req.new_username.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-        sqlx::query("UPDATE users SET username = ?1 WHERE id = ?2").bind(username).bind(editor.user_id).execute(&pool).await.expect("update failed");
+    let bad_request = |error: &str| (StatusCode::BAD_REQUEST, Json(json!({ "ok": false, "error": error }))).into_response();
+    let new_username = req.new_username.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let new_password = req.new_password.as_deref().filter(|p| !p.is_empty());
+
+    // Validate everything before changing anything, then apply both together.
+    if new_password.is_some_and(|p| p.len() < MIN_PASSWORD_LEN) {
+        return bad_request("password_too_short");
     }
-    if let Some(password) = req.new_password.as_deref().filter(|p| p.len() >= MIN_PASSWORD_LEN) {
+    if let Some(username) = new_username {
+        let taken: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE username = ?1 AND id != ?2)")
+            .bind(username)
+            .bind(editor.user_id)
+            .fetch_one(&pool)
+            .await
+            .expect("query failed");
+        if taken {
+            return bad_request("username_taken");
+        }
+    }
+
+    let mut tx = pool.begin().await.expect("begin failed");
+    if let Some(username) = new_username {
+        sqlx::query("UPDATE users SET username = ?1 WHERE id = ?2").bind(username).bind(editor.user_id).execute(&mut *tx).await.expect("update failed");
+    }
+    if let Some(password) = new_password {
         let hash = hash_password(password);
-        sqlx::query("UPDATE users SET password_hash = ?1 WHERE id = ?2").bind(hash).bind(editor.user_id).execute(&pool).await.expect("update failed");
+        sqlx::query("UPDATE users SET password_hash = ?1 WHERE id = ?2").bind(hash).bind(editor.user_id).execute(&mut *tx).await.expect("update failed");
     }
+    tx.commit().await.expect("commit failed");
 
     (StatusCode::OK, Json(json!({ "ok": true }))).into_response()
 }

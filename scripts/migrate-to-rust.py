@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """One-time migration: .NET/EF Core spoolbook.db -> spoolbook-rs's own SQLite schema.
 
-Per docs/adr/0026: Rust develops against its own DB; a single one-time migration
+The Rust backend develops against its own DB (no coupling to EF Core mid-port); a single one-time migration
 copies real data across at cutover, then .NET is deleted. Source DB is opened
 read-only (immutable=1) -- this script never writes to it.
 
@@ -180,9 +180,7 @@ PRINTS = [
 PRINT_FAILURE_MODES = [("Id", "id", None), ("Mode", "mode", lambda v: enum_str(FAILURE_MODE, v))]
 # PrintId handled via id_map.
 
-APP_SETTINGS = [("BambuUserPresetsDir", "bambu_user_presets_dir", None),
-                ("BambuSystemProfilesDir", "bambu_system_profiles_dir", None),
-                ("LastFilamentSyncAt", "last_filament_sync_at", None),
+APP_SETTINGS = [("LastFilamentSyncAt", "last_filament_sync_at", None),
                 ("AdditionalFilamentSourceUrls", "additional_filament_source_urls", None)]
 
 
@@ -292,13 +290,12 @@ def main():
                id_map_cols={"PrintId": ("print_id", print_ids, False)})
 
     settings_row = source.execute(
-        'SELECT "BambuUserPresetsDir", "BambuSystemProfilesDir", "LastFilamentSyncAt", "AdditionalFilamentSourceUrls" '
+        'SELECT "LastFilamentSyncAt", "AdditionalFilamentSourceUrls" '
         'FROM "AppSettings" WHERE "Id" = 1'
     ).fetchone()
     if settings_row:
         target.execute(
-            "UPDATE app_settings SET bambu_user_presets_dir = ?, bambu_system_profiles_dir = ?, "
-            "last_filament_sync_at = ?, additional_filament_source_urls = ? WHERE id = 1",
+            "UPDATE app_settings SET last_filament_sync_at = ?, additional_filament_source_urls = ? WHERE id = 1",
             settings_row,
         )
 

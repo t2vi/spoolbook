@@ -35,3 +35,9 @@ docs, not the other way around, so a TDD/spec cycle is the wrong shape.
   change that's supposed to take effect live, check with an independent
   probe (`dig` against a real resolver, `openssl s_client` against the
   actual port, a freshly-pulled log) before declaring it done.
+- **Verify specifics before they go external.** A version number, config
+  value, or timestamp going into anything a third party will read (a
+  filed GitHub issue, a comment, a support request) gets checked against
+  live state first — not pulled from memory or an older doc note, even if
+  confident. A wrong but confident-sounding detail in something public
+  that someone else then acts on is worse than no detail at all.

@@ -1,4 +1,4 @@
-// Data export/import (docs/adr/0033): a zip bundle merged into the target install rather than
+// Data export/import: a zip bundle merged into the target install rather than
 // replacing it. print_profiles alone has ~140 columns -- rather than hand-writing/maintaining a
 // typed struct twice over (once to serialize, once to bind an INSERT) for every mergeable table,
 // these two functions read/write any row generically by column name, reused across every table.
@@ -40,7 +40,7 @@ async fn read_uploaded_zip(multipart: &mut Multipart) -> Result<Vec<u8>, String>
 // Some(target id) when a row with the same natural key already exists in the target; None means
 // this row is new. Shared by preview (just needs new-vs-matched counts) and commit (also needs
 // the actual matched id, to remap children's foreign keys onto it instead of inserting a dupe).
-async fn find_matching_filament(pool: &SqlitePool, row: &Map<String, Value>) -> Option<i64> {
+async fn find_matching_filament<'e, E: sqlx::Executor<'e, Database = sqlx::Sqlite>>(pool: E, row: &Map<String, Value>) -> Option<i64> {
     sqlx::query_scalar("SELECT id FROM filaments WHERE brand = ?1 AND material = ?2 AND variant IS ?3 AND color = ?4")
         .bind(row["brand"].as_str())
         .bind(row["material"].as_str())
@@ -51,13 +51,13 @@ async fn find_matching_filament(pool: &SqlitePool, row: &Map<String, Value>) -> 
         .expect("query failed")
 }
 
-async fn find_matching_printer(pool: &SqlitePool, row: &Map<String, Value>) -> Option<i64> {
+async fn find_matching_printer<'e, E: sqlx::Executor<'e, Database = sqlx::Sqlite>>(pool: E, row: &Map<String, Value>) -> Option<i64> {
     sqlx::query_scalar("SELECT id FROM printers WHERE name = ?1").bind(row["name"].as_str()).fetch_optional(pool).await.expect("query failed")
 }
 
 // Same lookup-table shape as Filament/Printer, and dedupes the same way the app's own
 // filament-creation flow already does (filaments.rs's ensure_color_exists).
-async fn find_matching_filament_color(pool: &SqlitePool, row: &Map<String, Value>) -> Option<i64> {
+async fn find_matching_filament_color<'e, E: sqlx::Executor<'e, Database = sqlx::Sqlite>>(pool: E, row: &Map<String, Value>) -> Option<i64> {
     sqlx::query_scalar("SELECT id FROM filament_colors WHERE name = ?1").bind(row["name"].as_str()).fetch_optional(pool).await.expect("query failed")
 }
 
@@ -135,8 +135,14 @@ async fn preview(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, m
     (StatusCode::OK, Json(Value::Object(result)))
 }
 
-fn rows_of<'a>(manifest: &'a Value, table: &str) -> Vec<Map<String, Value>> {
-    manifest[table].as_array().cloned().unwrap_or_default().into_iter().map(|v| v.as_object().unwrap().clone()).collect()
+fn rows_of(manifest: &Value, table: &str) -> Result<Vec<Map<String, Value>>, String> {
+    manifest[table]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|v| v.as_object().cloned().ok_or_else(|| format!("{table}: a row isn't an object")))
+        .collect()
 }
 
 async fn commit(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, mut multipart: Multipart) -> (StatusCode, Json<Value>) {
@@ -156,6 +162,30 @@ async fn commit(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, mu
         );
     }
 
+    // All or nothing: every row goes in one transaction, and project files are only written once
+    // it has committed — a bad row anywhere rolls back everything and leaves no orphan files.
+    let mut tx = pool.begin().await.expect("begin failed");
+    match commit_rows(&mut tx, &manifest).await {
+        Ok((summary, project_files)) => {
+            tx.commit().await.expect("commit failed");
+            write_project_files(&bytes, &project_files);
+            (StatusCode::OK, Json(serde_json::json!({ "ok": true, "tables": summary })))
+        }
+        Err(error) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": error }))),
+    }
+}
+
+fn row_id(row: &Map<String, Value>, table: &str) -> Result<i64, String> {
+    row.get("id").and_then(Value::as_i64).ok_or_else(|| format!("{table}: a row has no id"))
+}
+
+async fn insert_row(conn: &mut sqlx::SqliteConnection, table: &str, row: &Map<String, Value>) -> Result<i64, String> {
+    try_insert_json_row(conn, table, row).await.map_err(|e| format!("{table}: {e}"))
+}
+
+type ProjectFiles = Vec<(String, std::path::PathBuf)>;
+
+async fn commit_rows(conn: &mut sqlx::SqliteConnection, manifest: &Value) -> Result<(Map<String, Value>, ProjectFiles), String> {
     let mut summary = Map::new();
     let mut filament_map = std::collections::HashMap::new();
     let mut printer_map = std::collections::HashMap::new();
@@ -163,12 +193,12 @@ async fn commit(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, mu
     let mut profile_map = std::collections::HashMap::new();
     let mut project_map = std::collections::HashMap::new();
     let mut print_map = std::collections::HashMap::new();
+    let mut project_files = Vec::new();
 
-    let mut inserted = 0;
-    let mut matched = 0;
-    for mut row in rows_of(&manifest, "filaments") {
-        let source_id = row["id"].as_i64().unwrap();
-        let target_id = match find_matching_filament(&pool, &row).await {
+    let (mut inserted, mut matched) = (0, 0);
+    for mut row in rows_of(manifest, "filaments")? {
+        let source_id = row_id(&row, "filaments")?;
+        let target_id = match find_matching_filament(&mut *conn, &row).await {
             Some(id) => {
                 matched += 1;
                 id
@@ -176,31 +206,29 @@ async fn commit(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, mu
             None => {
                 inserted += 1;
                 row.remove("id");
-                insert_json_row(&pool, "filaments", &row).await
+                insert_row(conn, "filaments", &row).await?
             }
         };
         filament_map.insert(source_id, target_id);
     }
     summary.insert("filaments".to_string(), serde_json::json!({ "inserted": inserted, "matched": matched }));
 
-    let mut inserted = 0;
-    let mut matched = 0;
-    for mut row in rows_of(&manifest, "filament_colors") {
-        if find_matching_filament_color(&pool, &row).await.is_some() {
+    let (mut inserted, mut matched) = (0, 0);
+    for mut row in rows_of(manifest, "filament_colors")? {
+        if find_matching_filament_color(&mut *conn, &row).await.is_some() {
             matched += 1;
             continue;
         }
         row.remove("id");
-        insert_json_row(&pool, "filament_colors", &row).await;
+        insert_row(conn, "filament_colors", &row).await?;
         inserted += 1;
     }
     summary.insert("filament_colors".to_string(), serde_json::json!({ "inserted": inserted, "matched": matched }));
 
-    let mut inserted = 0;
-    let mut matched = 0;
-    for mut row in rows_of(&manifest, "printers") {
-        let source_id = row["id"].as_i64().unwrap();
-        let target_id = match find_matching_printer(&pool, &row).await {
+    let (mut inserted, mut matched) = (0, 0);
+    for mut row in rows_of(manifest, "printers")? {
+        let source_id = row_id(&row, "printers")?;
+        let target_id = match find_matching_printer(&mut *conn, &row).await {
             Some(id) => {
                 matched += 1;
                 id
@@ -208,7 +236,7 @@ async fn commit(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, mu
             None => {
                 inserted += 1;
                 row.remove("id");
-                insert_json_row(&pool, "printers", &row).await
+                insert_row(conn, "printers", &row).await?
             }
         };
         printer_map.insert(source_id, target_id);
@@ -216,94 +244,96 @@ async fn commit(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, mu
     summary.insert("printers".to_string(), serde_json::json!({ "inserted": inserted, "matched": matched }));
 
     let mut inserted = 0;
-    for mut row in rows_of(&manifest, "spools") {
-        let source_id = row["id"].as_i64().unwrap();
+    for mut row in rows_of(manifest, "spools")? {
+        let source_id = row_id(&row, "spools")?;
         remap_fk(&mut row, "filament_id", &filament_map);
         row.remove("id");
-        let target_id = insert_json_row(&pool, "spools", &row).await;
-        spool_map.insert(source_id, target_id);
+        spool_map.insert(source_id, insert_row(conn, "spools", &row).await?);
         inserted += 1;
     }
     summary.insert("spools".to_string(), serde_json::json!({ "inserted": inserted, "matched": 0 }));
 
     let mut inserted = 0;
-    for mut row in rows_of(&manifest, "print_profiles") {
-        let source_id = row["id"].as_i64().unwrap();
+    for mut row in rows_of(manifest, "print_profiles")? {
+        let source_id = row_id(&row, "print_profiles")?;
         remap_fk(&mut row, "filament_id", &filament_map);
+        remap_fk(&mut row, "spool_id", &spool_map);
+        // Exported in id order, so a version's predecessor is always already in profile_map.
+        remap_fk(&mut row, "previous_version_profile_id", &profile_map);
         row.remove("id");
-        let target_id = insert_json_row(&pool, "print_profiles", &row).await;
-        profile_map.insert(source_id, target_id);
+        profile_map.insert(source_id, insert_row(conn, "print_profiles", &row).await?);
         inserted += 1;
     }
     summary.insert("print_profiles".to_string(), serde_json::json!({ "inserted": inserted, "matched": 0 }));
 
     let mut inserted = 0;
-    let mut files_archive = zip::ZipArchive::new(std::io::Cursor::new(&bytes)).ok();
     let storage_dir = crate::project_upload::storage_dir();
-    for mut row in rows_of(&manifest, "projects") {
-        let source_id = row["id"].as_i64().unwrap();
-        let source_path = row["file_path"].as_str().unwrap_or("").to_string();
+    for mut row in rows_of(manifest, "projects")? {
+        let source_id = row_id(&row, "projects")?;
+        let source_path = row.get("file_path").and_then(Value::as_str).unwrap_or("").to_string();
         if let Some(name) = std::path::Path::new(&source_path).file_name().and_then(|n| n.to_str()) {
             let target_path = storage_dir.join(name);
-            if !target_path.exists() {
-                if let Some(archive) = files_archive.as_mut() {
-                    if let Ok(mut zip_file) = archive.by_name(&format!("files/{name}")) {
-                        let mut content = Vec::new();
-                        if std::io::Read::read_to_end(&mut zip_file, &mut content).is_ok() {
-                            std::fs::write(&target_path, &content).ok();
-                        }
-                    }
-                }
-            }
             row.insert("file_path".to_string(), Value::from(target_path.to_str().unwrap_or_default()));
+            project_files.push((name.to_string(), target_path));
         }
+        // Same id-order guarantee as profiles: the previous version is already mapped.
+        remap_fk(&mut row, "previous_version_project_id", &project_map);
         row.remove("id");
-        let target_id = insert_json_row(&pool, "projects", &row).await;
-        project_map.insert(source_id, target_id);
+        project_map.insert(source_id, insert_row(conn, "projects", &row).await?);
         inserted += 1;
     }
     summary.insert("projects".to_string(), serde_json::json!({ "inserted": inserted, "matched": 0 }));
 
     let mut inserted = 0;
-    for mut row in rows_of(&manifest, "prints") {
-        let source_id = row["id"].as_i64().unwrap();
+    for mut row in rows_of(manifest, "prints")? {
+        let source_id = row_id(&row, "prints")?;
         remap_fk(&mut row, "profile_id", &profile_map);
         remap_fk(&mut row, "spool_id", &spool_map);
         remap_fk(&mut row, "printer_id", &printer_map);
         remap_fk(&mut row, "project_id", &project_map);
         row.remove("id");
-        let target_id = insert_json_row(&pool, "prints", &row).await;
-        print_map.insert(source_id, target_id);
+        print_map.insert(source_id, insert_row(conn, "prints", &row).await?);
         inserted += 1;
     }
     summary.insert("prints".to_string(), serde_json::json!({ "inserted": inserted, "matched": 0 }));
 
-    let mut inserted = 0;
-    for mut row in rows_of(&manifest, "print_failure_modes") {
-        remap_fk(&mut row, "print_id", &print_map);
-        row.remove("id");
-        insert_json_row(&pool, "print_failure_modes", &row).await;
-        inserted += 1;
+    for table in ["print_failure_modes", "print_hourly_weather"] {
+        let mut inserted = 0;
+        for mut row in rows_of(manifest, table)? {
+            remap_fk(&mut row, "print_id", &print_map);
+            row.remove("id");
+            insert_row(conn, table, &row).await?;
+            inserted += 1;
+        }
+        summary.insert(table.to_string(), serde_json::json!({ "inserted": inserted, "matched": 0 }));
     }
-    summary.insert("print_failure_modes".to_string(), serde_json::json!({ "inserted": inserted, "matched": 0 }));
 
-    let mut inserted = 0;
-    for mut row in rows_of(&manifest, "print_hourly_weather") {
-        remap_fk(&mut row, "print_id", &print_map);
-        row.remove("id");
-        insert_json_row(&pool, "print_hourly_weather", &row).await;
-        inserted += 1;
+    Ok((summary, project_files))
+}
+
+// After the import transaction commits (FR-044): copy each Project's bundled .3mf into storage,
+// never overwriting a file already there. A file missing from the bundle is skipped — the
+// Project row still points at where it would be, same drift tolerance as export.
+fn write_project_files(bytes: &[u8], project_files: &ProjectFiles) {
+    let Ok(mut archive) = zip::ZipArchive::new(std::io::Cursor::new(bytes)) else { return };
+    for (name, target_path) in project_files {
+        if target_path.exists() {
+            continue;
+        }
+        if let Ok(mut zip_file) = archive.by_name(&format!("files/{name}")) {
+            let mut content = Vec::new();
+            if std::io::Read::read_to_end(&mut zip_file, &mut content).is_ok() {
+                std::fs::write(target_path, &content).ok();
+            }
+        }
     }
-    summary.insert("print_hourly_weather".to_string(), serde_json::json!({ "inserted": inserted, "matched": 0 }));
-
-    (StatusCode::OK, Json(serde_json::json!({ "ok": true, "tables": summary })))
 }
 
 // Dependency order: a child row's foreign key must point at an already-inserted parent, so
 // import processes tables in this order. Export doesn't care about order but reuses the same
 // list so both sides agree on exactly what's in scope. Deliberately excludes users/sessions (the
 // target has its own login), app_settings (single-row host config, not a merge candidate), and
-// printer_jobs/printer_readings (transient MQTT scaffolding per ADR-0032 -- a Print's permanent
+// printer_jobs/printer_readings (transient MQTT scaffolding -- a Print's permanent
 // telemetry record is already covered by exporting `prints`, which carries telemetry_json).
 pub const EXPORT_TABLES: &[&str] = &[
     "filaments",
@@ -338,7 +368,7 @@ pub fn row_to_json(row: &SqliteRow) -> Map<String, Value> {
 
 // Inserts every field in `row` except "id" (a fresh one is always assigned) and returns it.
 // Callers own foreign-key remapping -- this only ever inserts whatever's already in the map.
-pub async fn insert_json_row(pool: &SqlitePool, table: &str, row: &Map<String, Value>) -> i64 {
+pub async fn try_insert_json_row<'e, E: sqlx::Executor<'e, Database = sqlx::Sqlite>>(executor: E, table: &str, row: &Map<String, Value>) -> Result<i64, String> {
     let columns: Vec<&String> = row.keys().filter(|k| k.as_str() != "id").collect();
     let placeholders: Vec<String> = (1..=columns.len()).map(|i| format!("?{i}")).collect();
     let sql = format!("INSERT INTO {table} ({}) VALUES ({}) RETURNING id", columns.iter().map(|c| c.as_str()).collect::<Vec<_>>().join(", "), placeholders.join(", "));
@@ -350,14 +380,18 @@ pub async fn insert_json_row(pool: &SqlitePool, table: &str, row: &Map<String, V
             Value::Number(n) if n.is_i64() => query.bind(n.as_i64()),
             Value::Number(n) => query.bind(n.as_f64()),
             Value::String(s) => query.bind(s.clone()),
-            other => panic!("insert_json_row: unsupported value for column {col}: {other:?}"),
+            other => return Err(format!("unsupported value for column {col}: {other}")),
         };
     }
-    query.fetch_one(pool).await.expect("insert failed")
+    query.fetch_one(executor).await.map_err(|e| e.to_string())
+}
+
+pub async fn insert_json_row(pool: &SqlitePool, table: &str, row: &Map<String, Value>) -> i64 {
+    try_insert_json_row(pool, table, row).await.expect("insert failed")
 }
 
 async fn table_rows(pool: &SqlitePool, table: &str) -> Vec<Map<String, Value>> {
-    sqlx::query(&format!("SELECT * FROM {table}")).fetch_all(pool).await.expect("query failed").iter().map(row_to_json).collect()
+    sqlx::query(&format!("SELECT * FROM {table} ORDER BY id")).fetch_all(pool).await.expect("query failed").iter().map(row_to_json).collect()
 }
 
 async fn export(_editor: crate::auth::Editor, State(pool): State<SqlitePool>) -> Response {

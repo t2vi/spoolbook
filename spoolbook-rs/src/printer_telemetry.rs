@@ -3,9 +3,9 @@ use serde::Serialize;
 use sqlx::SqlitePool;
 
 // Buffers live MQTT telemetry into Jobs/Readings and matches them to the retrospective Print
-// form afterward. See docs/adr/0017-printer-telemetry-mqtt-job-print-separation.md — the actual
-// MQTT wire client (subscribing to a real printer) is a separate, later slice; this is the pure
-// DB logic behind it, exercised directly by tests rather than over a network.
+// form afterward. A Job is what the printer reports; a Print is the user's record — kept separate
+// so telemetry never edits history by itself. This is the DB side; printer_mqtt.rs is the wire
+// client feeding it, and tests drive this directly rather than over a network.
 #[derive(Serialize, sqlx::FromRow, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct PrinterJob {
@@ -82,7 +82,7 @@ async fn try_record_reading(
     .execute(pool)
     .await?;
 
-    // Auto-create-on-send (docs/adr/0017's 2026-08-14 addendum): a brand-new Job attaches
+    // Auto-create-on-send: a brand-new Job attaches
     // straight to the printer's open (InProgress, not yet attached) Print instead of waiting for
     // the retrospective dismissible-chip match — there's no ambiguity, since the Print was
     // created moments before by the same "send" action that produced this Job. Only checked for
@@ -122,7 +122,7 @@ pub struct ReadingSnapshot {
 }
 
 // Collapses a finished Job's raw Readings into a fixed one-minute-bucketed snapshot stored on
-// its Print, then deletes the raw rows -- see docs/adr/0032. Last value per bucket, deliberately
+// its Print, then deletes the raw rows. Last value per bucket, deliberately
 // not averaged: averaging would smooth over abrupt real jumps (e.g. a chamber door opening) that
 // this feature exists to surface. No-op (leaves telemetry_json untouched) when there are no
 // readings for this job -- nothing to collapse.
@@ -208,7 +208,7 @@ pub async fn end_job(
     chamber_temp_c: Option<f64>,
     ams_humidity_pct: Option<i64>,
     camera_registry: &crate::printer_camera::CameraRegistry,
-) {
+) -> Option<tokio::task::JoinHandle<()>> {
     let job = sqlx::query_as::<_, (i64, Option<i64>)>(
         "SELECT id, print_id FROM printer_jobs WHERE printer_id = ?1 AND external_job_id = ?2 AND ended_at IS NULL",
     )
@@ -218,7 +218,7 @@ pub async fn end_job(
     .await
     .expect("query failed");
 
-    let Some((job_id, print_id)) = job else { return };
+    let (job_id, print_id) = job?;
 
     sqlx::query("UPDATE printer_jobs SET ended_at = COALESCE(?1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) WHERE id = ?2")
         .bind(at)
@@ -227,27 +227,31 @@ pub async fn end_job(
         .await
         .expect("update failed");
 
-    if let Some(print_id) = print_id {
-        // Snapshot the printer's last-known chamber temp / AMS humidity at end-of-print — the
-        // only point either is ever known, since neither is client-writable (see prints.rs).
-        sqlx::query(
-            "UPDATE prints SET ended_at = COALESCE(?1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), status = ?2,
-             chamber_temp_c = ?3, ams_humidity_pct = ?4
-             WHERE id = ?5 AND status = 'InProgress'",
-        )
-        .bind(at)
-        .bind(map_terminal_gcode_state(terminal_gcode_state))
-        .bind(chamber_temp_c)
-        .bind(ams_humidity_pct)
-        .bind(print_id)
-        .execute(pool)
-        .await
-        .expect("update failed");
+    let print_id = print_id?;
+    // Snapshot the printer's last-known chamber temp / AMS humidity at end-of-print — the
+    // only point either is ever known, since neither is client-writable (see prints.rs).
+    sqlx::query(
+        "UPDATE prints SET ended_at = COALESCE(?1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), status = ?2,
+         chamber_temp_c = ?3, ams_humidity_pct = ?4
+         WHERE id = ?5 AND status = 'InProgress'",
+    )
+    .bind(at)
+    .bind(map_terminal_gcode_state(terminal_gcode_state))
+    .bind(chamber_temp_c)
+    .bind(ams_humidity_pct)
+    .bind(print_id)
+    .execute(pool)
+    .await
+    .expect("update failed");
 
-        crate::weather::fetch_and_store(pool, print_id).await;
-        crate::printer_camera::capture_and_store(pool, camera_registry, print_id, printer_id).await;
-        collapse_readings_to_snapshot(pool, print_id, job_id).await;
-    }
+    // Spawned, not awaited: end_job runs inside the printer's MQTT poll loop, and a slow weather
+    // API or camera would otherwise stall that connection. The handle is for tests to wait on.
+    let (pool, camera_registry) = (pool.clone(), camera_registry.clone());
+    Some(tokio::spawn(async move {
+        crate::weather::fetch_and_store(&pool, print_id).await;
+        crate::printer_camera::capture_and_store(&pool, &camera_registry, print_id, printer_id).await;
+        collapse_readings_to_snapshot(&pool, print_id, job_id).await;
+    }))
 }
 
 // Auto-match candidate for the retrospective Print form: closest unattached Job for this Printer
@@ -277,11 +281,17 @@ pub async fn attach_job_to_print(pool: &SqlitePool, job_id: i64, print_id: i64) 
 }
 
 // Unattached Jobs (and their Readings, via ON DELETE CASCADE) older than the cutoff are
-// discarded — ADR-0017's 7-day retention window. Attached Jobs are kept regardless of age.
+// discarded — the 7-day retention window. Attached Jobs are kept regardless of age.
+// Logs rather than panics: it runs inside the long-lived purge loop, and a panic would end that
+// loop for the life of the process.
 pub async fn purge_unattached_jobs_older_than(pool: &SqlitePool, cutoff: &str) {
-    sqlx::query("DELETE FROM printer_jobs WHERE print_id IS NULL AND started_at < ?1")
-        .bind(cutoff)
-        .execute(pool)
-        .await
-        .expect("delete failed");
+    if let Err(e) = sqlx::query("DELETE FROM printer_jobs WHERE print_id IS NULL AND started_at < ?1").bind(cutoff).execute(pool).await {
+        eprintln!("stale job purge failed: {e}");
+    }
+}
+
+// What the startup/24-hourly purge loop runs: unattached Jobs started more than 7 days ago.
+pub async fn purge_stale_jobs(pool: &SqlitePool) {
+    let cutoff = (chrono::Utc::now() - chrono::TimeDelta::days(7)).to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    purge_unattached_jobs_older_than(pool, &cutoff).await;
 }

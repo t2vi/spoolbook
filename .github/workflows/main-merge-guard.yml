@@ -1,0 +1,26 @@
+name: Main merge guard
+
+# Gitflow: only release/* and hotfix/* branches may merge into main —
+# never develop or a topic branch directly. Make this check required via
+# branch protection on main (see docs/gitflow.md "Merge guard"), or it only
+# warns. `edited` re-runs it when a PR's base is switched to main.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, edited]
+
+permissions: {}
+
+jobs:
+  guard:
+    name: main-merge-guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Source branch must be release/* or hotfix/*
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          case "$HEAD_REF" in
+            release/*|hotfix/*) echo "ok: $HEAD_REF -> main" ;;
+            *) echo "::error::$HEAD_REF -> main is not allowed. Only release/* or hotfix/* merge into main; target develop instead (docs/gitflow.md)."; exit 1 ;;
+          esac

@@ -8,11 +8,13 @@ use std::io::Write;
 use std::path::PathBuf;
 use tower::ServiceExt;
 
+// spec: 005/FR-001
 #[test]
 fn storage_dir_for_lives_alongside_the_db_file_in_docker() {
     assert_eq!(storage_dir_for("/data/spoolbook-rs.db"), PathBuf::from("/data/projects"));
 }
 
+// spec: 005/FR-001
 #[test]
 fn storage_dir_for_relative_dev_db_uses_the_current_directory() {
     assert_eq!(storage_dir_for("dev.db"), PathBuf::from("projects"));
@@ -94,6 +96,7 @@ fn fake_3mf_bytes() -> Vec<u8> {
     buf
 }
 
+// spec: 005/FR-002, 005/FR-004
 #[tokio::test]
 async fn upload_saves_the_file_and_creates_a_project() {
     let pool = test_pool().await;
@@ -111,6 +114,7 @@ async fn upload_saves_the_file_and_creates_a_project() {
     assert_eq!(all.as_array().unwrap().len(), 1);
 }
 
+// spec: 005/FR-002
 #[tokio::test]
 async fn upload_the_same_bytes_twice_dedupes_to_one_project() {
     let pool = test_pool().await;
@@ -131,6 +135,7 @@ async fn upload_the_same_bytes_twice_dedupes_to_one_project() {
 // .3mf's size (embedded gcode + thumbnails). Padding fake_3mf_bytes() past that line without a
 // real DefaultBodyLimit::max() layer on the app used to fail the multipart read entirely with a
 // generic "Couldn't read the uploaded file." error, not just reject cleanly.
+// spec: 005/FR-002, 002/FR-005
 #[tokio::test]
 async fn upload_accepts_a_file_larger_than_axums_default_2mb_body_limit() {
     let pool = test_pool().await;
@@ -143,6 +148,7 @@ async fn upload_accepts_a_file_larger_than_axums_default_2mb_body_limit() {
     assert_eq!(body["ok"], true);
 }
 
+// spec: 005/FR-002
 #[tokio::test]
 async fn upload_rejects_a_request_with_no_file_field() {
     let pool = test_pool().await;
@@ -151,6 +157,7 @@ async fn upload_rejects_a_request_with_no_file_field() {
     assert_eq!(body["error"], "No file provided.");
 }
 
+// spec: 005/FR-003
 #[tokio::test]
 async fn import_url_rejects_a_non_http_url() {
     let pool = test_pool().await;
@@ -159,10 +166,87 @@ async fn import_url_rejects_a_non_http_url() {
     assert_eq!(body["error"], "Enter a valid http(s) URL.");
 }
 
+// spec: 005/FR-003
 #[tokio::test]
 async fn import_url_rejects_a_malformed_url() {
     let pool = test_pool().await;
     let (status, body) = send(&pool, "POST", "/api/projects/import-url", Some(json!({ "url": "not a url" }))).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["error"], "Enter a valid http(s) URL.");
+}
+
+async fn project_count(pool: &sqlx::SqlitePool) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM projects").fetch_one(pool).await.unwrap()
+}
+
+// Serves `app` on a random local port; returns its base URL.
+async fn serve(app: axum::Router) -> String {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    format!("http://{addr}")
+}
+
+// spec: 005/FR-002
+#[tokio::test]
+async fn upload_rejects_bytes_that_are_not_a_zip() {
+    let pool = test_pool().await;
+
+    let (status, body) = post_multipart(&pool, "/api/projects/upload", "file", "fake.3mf", b"not a zip").await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    assert_eq!(body["error"], "Not a .3mf file.");
+    assert_eq!(project_count(&pool).await, 0);
+}
+
+// spec: 005/FR-003
+#[tokio::test]
+async fn import_url_rejects_bytes_that_are_not_a_zip() {
+    let pool = test_pool().await;
+    let base = serve(axum::Router::new().route("/model.3mf", axum::routing::get(|| async { "<html>login page</html>" }))).await;
+
+    let (status, body) = send(&pool, "POST", "/api/projects/import-url", Some(json!({ "url": format!("{base}/model.3mf") }))).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    assert_eq!(body["error"], "Not a .3mf file.");
+    assert_eq!(project_count(&pool).await, 0);
+}
+
+// spec: 005/FR-003
+#[tokio::test(start_paused = true)]
+async fn download_gives_up_on_a_hung_server() {
+    let base = serve(axum::Router::new().route(
+        "/model.3mf",
+        axum::routing::get(|| async {
+            tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+            "late"
+        }),
+    ))
+    .await;
+
+    let result = spoolbook_rs::project_upload::download(&reqwest::Url::parse(&format!("{base}/model.3mf")).unwrap()).await;
+
+    assert!(result.is_err(), "should time out before the hour-late response, got {} bytes", result.map(|b| b.len()).unwrap_or(0));
+}
+
+// spec: 005/FR-003
+#[tokio::test]
+async fn download_stops_once_it_passes_100_mb() {
+    let base = serve(axum::Router::new().route(
+        "/model.3mf",
+        axum::routing::get(|| async {
+            let chunk = axum::body::Bytes::from(vec![0u8; 1024 * 1024]);
+            axum::body::Body::from_stream(tokio_stream::iter(std::iter::repeat(chunk).map(Ok::<_, std::io::Error>)))
+        }),
+    ))
+    .await;
+
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        spoolbook_rs::project_upload::download(&reqwest::Url::parse(&format!("{base}/model.3mf")).unwrap()),
+    )
+    .await
+    .expect("download of an endless body never stopped");
+
+    assert_eq!(result.unwrap_err(), "Downloaded file is too large (over 100 MB).");
 }

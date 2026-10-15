@@ -41,7 +41,7 @@ async fn post_multipart(uri: &str, field_name: &str, filename: &str, content: &[
 }
 
 // A minimal but real .3mf zip carrying Metadata/project_settings.config, the same baked-preset
-// shape Bambu Studio writes at slice time (docs/adr/0018).
+// shape Bambu Studio writes at slice time.
 fn fake_3mf_with_settings(settings_json: &str) -> Vec<u8> {
     let mut buf = Vec::new();
     {
@@ -55,6 +55,7 @@ fn fake_3mf_with_settings(settings_json: &str) -> Vec<u8> {
     buf
 }
 
+// spec: 006/FR-030, 006/FR-031
 #[tokio::test]
 async fn imports_temperature_bool_and_percent_fields_from_a_real_3mf() {
     let settings = r##"{
@@ -83,6 +84,7 @@ async fn imports_temperature_bool_and_percent_fields_from_a_real_3mf() {
     assert!(body["rawSettingsJson"].as_str().unwrap().contains("nozzle_temperature"));
 }
 
+// spec: 006/FR-031
 #[tokio::test]
 async fn treats_nil_and_empty_string_values_as_absent() {
     let settings = r#"{ "nozzle_temperature": ["nil"], "filament_notes": [""] }"#;
@@ -94,6 +96,7 @@ async fn treats_nil_and_empty_string_values_as_absent() {
     assert!(body["fields"].get("SlicerNotes").is_none());
 }
 
+// spec: 006/FR-030
 #[tokio::test]
 async fn returns_no_project_settings_when_the_config_entry_is_missing() {
     let mut buf = Vec::new();
@@ -112,6 +115,7 @@ async fn returns_no_project_settings_when_the_config_entry_is_missing() {
 }
 
 // Neither a zip nor valid JSON -- fails both the .3mf and the raw-preset fallback.
+// spec: 006/FR-030
 #[tokio::test]
 async fn returns_invalid_file_when_upload_is_neither_a_3mf_nor_json() {
     let (status, body) = post_multipart("/api/profiles/import-preset", "file", "x.3mf", b"not a zip").await;
@@ -119,6 +123,7 @@ async fn returns_invalid_file_when_upload_is_neither_a_3mf_nor_json() {
     assert_eq!(body["error"], "invalid_file");
 }
 
+// spec: 006/FR-030
 #[tokio::test]
 async fn returns_bad_request_when_no_file_field_is_present() {
     let (status, body) = post_multipart("/api/profiles/import-preset", "not_file", "x.3mf", b"junk").await;
@@ -203,6 +208,7 @@ async fn post_json(pool: &sqlx::SqlitePool, uri: &str, cookie: &str, body: Value
     (status, json)
 }
 
+// spec: 006/FR-032
 #[tokio::test]
 async fn system_presets_lists_names_from_the_slicer_services_bundled_manifest() {
     let _guard = ENV_LOCK.lock().unwrap();
@@ -216,6 +222,7 @@ async fn system_presets_lists_names_from_the_slicer_services_bundled_manifest() 
     assert!(names.contains(&Value::String("Bambu PLA Basic @BBL X1C".to_string())), "{names:?}");
 }
 
+// spec: 006/FR-033
 #[tokio::test]
 async fn resolving_a_system_preset_walks_the_full_inherits_chain() {
     let _guard = ENV_LOCK.lock().unwrap();
@@ -234,6 +241,7 @@ async fn resolving_a_system_preset_walks_the_full_inherits_chain() {
     assert_eq!(body["fields"]["Soluble"], "false", "inherited from the base ancestor two levels up");
 }
 
+// spec: 006/FR-033
 #[tokio::test]
 async fn resolving_an_unknown_system_preset_name_fails_cleanly() {
     let _guard = ENV_LOCK.lock().unwrap();
@@ -247,6 +255,7 @@ async fn resolving_an_unknown_system_preset_name_fails_cleanly() {
     assert_eq!(body["ok"], false);
 }
 
+// spec: 006/FR-030
 #[tokio::test]
 async fn importing_a_raw_preset_json_resolves_its_inherits_chain() {
     let _guard = ENV_LOCK.lock().unwrap();
@@ -267,4 +276,27 @@ async fn importing_a_raw_preset_json_resolves_its_inherits_chain() {
     assert_eq!(body["suggestedName"], "My Cold Day PLA", "own JSON's name field wins over the filename");
     assert_eq!(body["fields"]["NozzleTempC"], "230", "uploaded file's own value wins");
     assert_eq!(body["fields"]["HotPlateTempC"], "55", "inherited from the resolved chain");
+}
+
+// spec: 006/FR-030, 006/FR-032
+#[tokio::test]
+async fn system_presets_gives_up_on_a_hung_slicer_service() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let app = axum::Router::new().fallback(|| async {
+        tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+        "{}"
+    });
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    unsafe { std::env::set_var("RESLICE_SERVICE_URL", format!("http://{addr}")) };
+    let pool = sqlx::sqlite::SqlitePoolOptions::new().max_connections(1).connect("sqlite::memory:").await.unwrap();
+    sqlx::migrate!().run(&pool).await.unwrap();
+    // Paused after the DB is up: the clock then jumps straight to the next timer, so the 30 s
+    // timeout (or, without one, the hour-late reply) arrives instantly.
+    tokio::time::pause();
+
+    let (status, body) = get_json(&pool, "/api/profiles/system-presets", None).await;
+
+    assert_eq!(status, StatusCode::BAD_GATEWAY, "{body:?}");
 }

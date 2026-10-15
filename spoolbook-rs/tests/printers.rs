@@ -40,6 +40,7 @@ fn printer_body(name: &str) -> Value {
     json!({ "name": name, "model": "P2S", "ipAddress": "192.168.1.50", "accessCode": "12345678", "serialNumber": "ABC123" })
 }
 
+// spec: 004/FR-001
 #[tokio::test]
 async fn list_returns_empty_array_when_none_exist() {
     let pool = test_pool().await;
@@ -48,6 +49,7 @@ async fn list_returns_empty_array_when_none_exist() {
     assert_eq!(body.as_array().unwrap().len(), 0);
 }
 
+// spec: 004/FR-003
 #[tokio::test]
 async fn create_persists_and_returns_the_printer() {
     let pool = test_pool().await;
@@ -58,10 +60,11 @@ async fn create_persists_and_returns_the_printer() {
     assert_eq!(body["printer"]["name"], "P2S #1");
     assert_eq!(body["printer"]["model"], "P2S");
     assert_eq!(body["printer"]["ipAddress"], "192.168.1.50");
-    assert_eq!(body["printer"]["accessCode"], "12345678");
+    assert_eq!(body["printer"]["hasAccessCode"], true);
     assert_eq!(body["printer"]["serialNumber"], "ABC123");
 }
 
+// spec: 004/FR-003
 #[tokio::test]
 async fn create_rejects_blank_name() {
     let pool = test_pool().await;
@@ -70,6 +73,7 @@ async fn create_rejects_blank_name() {
     assert_eq!(body["ok"], false);
 }
 
+// spec: 004/FR-003
 #[tokio::test]
 async fn create_rejects_duplicate_name() {
     let pool = test_pool().await;
@@ -79,6 +83,7 @@ async fn create_rejects_duplicate_name() {
     assert_eq!(body["error"], "duplicate");
 }
 
+// spec: 004/FR-003
 #[tokio::test]
 async fn update_persists_changes() {
     let pool = test_pool().await;
@@ -91,6 +96,7 @@ async fn update_persists_changes() {
     assert_eq!(body["printer"]["name"], "P2S renamed");
 }
 
+// spec: 004/FR-003
 #[tokio::test]
 async fn update_rejects_duplicate_against_another_row() {
     let pool = test_pool().await;
@@ -104,6 +110,7 @@ async fn update_rejects_duplicate_against_another_row() {
     assert_eq!(body["error"], "duplicate");
 }
 
+// spec: 004/FR-003
 #[tokio::test]
 async fn update_returns_not_found_for_missing_id() {
     let pool = test_pool().await;
@@ -111,6 +118,7 @@ async fn update_returns_not_found_for_missing_id() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
+// spec: 004/FR-004
 #[tokio::test]
 async fn delete_rejects_a_printer_with_prints() {
     let pool = test_pool().await;
@@ -152,6 +160,7 @@ async fn delete_rejects_a_printer_with_prints() {
     assert_eq!(all.as_array().unwrap().len(), 1, "printer must survive the rejected delete");
 }
 
+// spec: 004/FR-004
 #[tokio::test]
 async fn delete_removes_the_printer() {
     let pool = test_pool().await;
@@ -166,9 +175,43 @@ async fn delete_removes_the_printer() {
     assert_eq!(all.as_array().unwrap().len(), 0);
 }
 
+// spec: 004/FR-004
 #[tokio::test]
 async fn delete_returns_not_found_for_missing_id() {
     let pool = test_pool().await;
     let (status, _) = send(&pool, "DELETE", "/api/printers/999", None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+// spec: 004/FR-002
+#[tokio::test]
+async fn no_response_ever_contains_the_access_code() {
+    let pool = test_pool().await;
+    let (_, created) = send(&pool, "POST", "/api/printers", Some(printer_body("P2S #1"))).await;
+    let id = created["printer"]["id"].as_i64().unwrap();
+    let (_, updated) = send(&pool, "PUT", &format!("/api/printers/{id}"), Some(printer_body("P2S #1"))).await;
+    let (_, list) = send(&pool, "GET", "/api/printers", None).await;
+
+    for printer in [&created["printer"], &updated["printer"], &list[0]] {
+        assert!(printer.get("accessCode").is_none(), "{printer}");
+        assert_eq!(printer["hasAccessCode"], true);
+    }
+    assert!(!list.to_string().contains("12345678"));
+}
+
+// spec: 004/FR-003
+#[tokio::test]
+async fn update_with_a_blank_access_code_keeps_the_stored_one() {
+    let pool = test_pool().await;
+    let (_, created) = send(&pool, "POST", "/api/printers", Some(printer_body("P2S #1"))).await;
+    let id = created["printer"]["id"].as_i64().unwrap();
+
+    let mut body = printer_body("P2S #1");
+    body["accessCode"] = Value::Null;
+    send(&pool, "PUT", &format!("/api/printers/{id}"), Some(body.clone())).await;
+    body["accessCode"] = json!("  ");
+    send(&pool, "PUT", &format!("/api/printers/{id}"), Some(body)).await;
+
+    let stored: Option<String> = sqlx::query_scalar("SELECT access_code FROM printers WHERE id = ?1").bind(id).fetch_one(&pool).await.unwrap();
+    assert_eq!(stored.as_deref(), Some("12345678"));
 }

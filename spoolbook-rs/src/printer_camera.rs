@@ -1,5 +1,5 @@
 // Port of PrinterCameraService.cs — relays a printer's RTSPS camera feed to the browser as
-// MJPEG (docs/adr/0024). One broadcaster per printer (Bambu firmware allows exactly one camera
+// MJPEG. One broadcaster per printer (Bambu firmware allows exactly one camera
 // connection at a time), shared by every viewer. RTSP-only (X1/X2/H2/P2 family) — the port-6000
 // chamber-image protocol (A1/P1) is deliberately not implemented (no printer of that family in
 // this system).
@@ -77,6 +77,17 @@ pub async fn last_error_of(registry: &CameraRegistry, printer_id: i64) -> Option
 pub async fn retry(registry: &CameraRegistry, printer_id: i64) {
     if let Some(b) = registry.lock().await.get(&printer_id) {
         b.retry().await;
+    }
+}
+
+// Drops a printer's camera connection (its details changed, or the printer is gone): stops the
+// pipeline and ends every open viewer stream, so the next view starts fresh from the DB.
+pub async fn forget(registry: &CameraRegistry, printer_id: i64) {
+    let Some(broadcaster) = registry.lock().await.remove(&printer_id) else { return };
+    let mut state = broadcaster.state.lock().await;
+    state.subscribers.clear();
+    for token in [state.pipeline_cancel.take(), state.stop_grace_cancel.take()].into_iter().flatten() {
+        token.cancel();
     }
 }
 
@@ -577,7 +588,7 @@ async fn stream(
 // until the browser's <img> tag actually reconnects, so the real "start" trigger is
 // stream()/subscribe(), same as the very first view. The UI is expected to re-render the <img>
 // (cache-busted) right after calling this.
-async fn retry_endpoint(Extension(registry): Extension<CameraRegistry>, Path(id): Path<i64>) -> axum::Json<serde_json::Value> {
+async fn retry_endpoint(_editor: crate::auth::Editor, Extension(registry): Extension<CameraRegistry>, Path(id): Path<i64>) -> axum::Json<serde_json::Value> {
     retry(&registry, id).await;
     axum::Json(serde_json::json!({ "ok": true }))
 }

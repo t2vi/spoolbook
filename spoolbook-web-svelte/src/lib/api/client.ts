@@ -139,8 +139,9 @@ export const createPrinter = (input: PrinterInput) => request<PrinterResult>('/a
 export const updatePrinter = (id: number, input: PrinterInput) =>
 	request<PrinterResult>(`/api/printers/${id}`, { method: 'PUT', body: JSON.stringify(input) });
 export const deletePrinter = (id: number) => request<PrinterControlResult>(`/api/printers/${id}`, { method: 'DELETE' });
-export const testPrinterConnection = (ipAddress: string, accessCode: string) =>
-	request<PrinterControlResult>('/api/printers/test', json({ ipAddress, accessCode }));
+// Blank accessCode + printerId -> the backend tests with that printer's stored code.
+export const testPrinterConnection = (ipAddress: string, accessCode: string, printerId: number | null) =>
+	request<PrinterControlResult>('/api/printers/test', json({ ipAddress, accessCode, printerId }));
 
 export const controlPrinter = (id: number, command: 'pause' | 'resume' | 'stop') =>
 	request<PrinterControlResult>(`/api/printers/${id}/control`, json({ command }));
@@ -232,9 +233,10 @@ export const resolveSystemPreset = (name: string) =>
 export interface ProfileInput {
 	name: string;
 	fields: Record<string, string>;
-	source: ProfileSource | null;
-	sourceSlicer: SlicerType | null;
-	rawSettingsJson: string | null;
+	// Left out on an edit with no import, so the stored provenance is kept (FR-012).
+	source?: ProfileSource | null;
+	sourceSlicer?: SlicerType | null;
+	rawSettingsJson?: string | null;
 	spoolId: number | null;
 }
 
@@ -247,6 +249,9 @@ export const createProfile = (filamentId: number, input: ProfileInput) =>
 	requestAllowingError<ProfileResult>(`/api/profiles?filamentId=${filamentId}`, json(input));
 export const updateProfile = (id: number, input: ProfileInput) =>
 	requestAllowingError<ProfileResult>(`/api/profiles/${id}`, { method: 'PUT', body: JSON.stringify(input) });
+// Saves the edits as version n+1 of profile `id` (the way to edit a version a Print has locked).
+export const saveProfileAsNewVersion = (id: number, input: ProfileInput) =>
+	requestAllowingError<ProfileResult>(`/api/profiles/${id}/versions`, json(input));
 
 export interface SpoolInput {
 	lotCode: string | null;

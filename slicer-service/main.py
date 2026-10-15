@@ -11,7 +11,7 @@ stable release) fails to slice real spoolbook project files two ways — a file-
 (fixable) and, more fundamentally, a parse error in the P2S's own start-gcode macro syntax
 that OrcaSlicer's older macro engine doesn't support at all. Bambu Studio — the tool that
 actually produced these files, exact version match — sliced the same real project cleanly on
-the first try. See docs/adr or the re-slicing session notes for the full comparison.
+the first try.
 """
 
 import asyncio

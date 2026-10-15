@@ -8,7 +8,8 @@ export interface Printer {
 	name: string;
 	model: string | null;
 	ipAddress: string | null;
-	accessCode: string | null;
+	// The access code itself is write-only — never sent back by the API.
+	hasAccessCode: boolean;
 	serialNumber: string | null;
 }
 
@@ -128,6 +129,11 @@ export interface ProfileFieldTab {
 export interface ProfileFieldSpecResponse {
 	name: string;
 	tabs: ProfileFieldTab[];
+	// Present only for an existing profile (the edit page).
+	versionNumber?: number;
+	isCurrentVersion?: boolean;
+	filamentId?: number;
+	spoolId?: number | null;
 }
 
 export interface ProfileInventoryResult {
@@ -200,7 +206,7 @@ export interface PrintReading {
 	progressPct: number | null;
 }
 
-// docs/adr/0033 — export/import. Table keys are dynamic (EXPORT_TABLES on the backend), so these
+// Export/import. Table keys are dynamic (EXPORT_TABLES on the backend), so these
 // stay Records rather than a field per table.
 export type ImportPreview = Record<string, { total: number; new: number }>;
 export type ImportCommitResult = { ok: boolean; tables: Record<string, { inserted: number; matched: number }> };

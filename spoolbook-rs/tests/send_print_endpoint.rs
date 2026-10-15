@@ -63,6 +63,14 @@ fn write_fixture_3mf_without_gcode(name: &str) -> std::path::PathBuf {
     path
 }
 
+// A real filament + spool + profile, so validation gets past them (returns (spool_id, profile_id)).
+async fn seed_spool_and_profile(pool: &sqlx::SqlitePool) -> (i64, i64) {
+    let filament_id: i64 = sqlx::query_scalar("INSERT INTO filaments (brand, material, color) VALUES ('Bambu Lab', 'PLA', 'Black') RETURNING id").fetch_one(pool).await.unwrap();
+    let spool_id: i64 = sqlx::query_scalar("INSERT INTO spools (filament_id) VALUES (?1) RETURNING id").bind(filament_id).fetch_one(pool).await.unwrap();
+    let profile_id: i64 = sqlx::query_scalar("INSERT INTO print_profiles (filament_id, name, nozzle_temp_c) VALUES (?1, 'Std', 220) RETURNING id").bind(filament_id).fetch_one(pool).await.unwrap();
+    (spool_id, profile_id)
+}
+
 async fn seed_project(pool: &sqlx::SqlitePool, file_path: &str) -> i64 {
     sqlx::query_scalar::<_, i64>(
         "INSERT INTO projects (file_path, file_name, last_known_write_time_utc, last_known_file_size_bytes)
@@ -74,6 +82,7 @@ async fn seed_project(pool: &sqlx::SqlitePool, file_path: &str) -> i64 {
     .unwrap()
 }
 
+// spec: 004/FR-030
 #[tokio::test]
 async fn start_print_rejects_a_printer_missing_connection_details() {
     let pool = test_pool().await;
@@ -86,17 +95,18 @@ async fn start_print_rejects_a_printer_missing_connection_details() {
     assert_eq!(body["error"], "Printer is missing connection details.");
 }
 
+// spec: 004/FR-030
 #[tokio::test]
-async fn start_print_rejects_a_missing_printer() {
+async fn start_print_returns_not_found_for_a_missing_printer() {
     let pool = test_pool().await;
 
     let (status, body) = send(&pool, "/api/printers/999/print", print_request_body(1)).await;
 
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body["ok"], false);
-    assert_eq!(body["error"], "Printer is missing connection details.");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["error"], "not_found");
 }
 
+// spec: 004/FR-030
 #[tokio::test]
 async fn start_print_returns_not_found_for_a_missing_project() {
     let pool = test_pool().await;
@@ -108,18 +118,59 @@ async fn start_print_returns_not_found_for_a_missing_project() {
     assert_eq!(body["error"], "not_found");
 }
 
+// spec: 004/FR-031
 #[tokio::test]
 async fn start_print_reports_an_error_when_the_plate_gcode_entry_is_missing() {
     let pool = test_pool().await;
     let printer_id = seed_printer_with_details(&pool).await;
     let fixture_path = write_fixture_3mf_without_gcode("spoolbook_rs_test_send_print_no_gcode.3mf");
     let project_id = seed_project(&pool, fixture_path.to_str().unwrap()).await;
+    let (spool_id, profile_id) = seed_spool_and_profile(&pool).await;
+    let mut request = print_request_body(project_id);
+    request["spoolId"] = json!(spool_id);
+    request["profileId"] = json!(profile_id);
 
-    let (status, body) = send(&pool, &format!("/api/printers/{printer_id}/print"), print_request_body(project_id)).await;
+    let (status, body) = send(&pool, &format!("/api/printers/{printer_id}/print"), request).await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["ok"], false);
     assert!(body["error"].as_str().unwrap().starts_with("Couldn't find Metadata/plate_1.gcode"), "{body:?}");
 
     std::fs::remove_file(fixture_path).ok();
+}
+
+// spec: 004/FR-030
+#[tokio::test]
+async fn start_print_rejects_an_unknown_profile_before_sending_anything() {
+    let pool = test_pool().await;
+    let printer_id = seed_printer_with_details(&pool).await;
+    let fixture_path = write_fixture_3mf_without_gcode("spoolbook_rs_test_send_print_bad_profile.3mf");
+    let project_id = seed_project(&pool, fixture_path.to_str().unwrap()).await;
+    let (spool_id, _) = seed_spool_and_profile(&pool).await;
+    let mut request = print_request_body(project_id);
+    request["spoolId"] = json!(spool_id);
+    request["profileId"] = json!(999);
+
+    let (status, body) = send(&pool, &format!("/api/printers/{printer_id}/print"), request).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Unknown print profile.");
+}
+
+// spec: 004/FR-030
+#[tokio::test]
+async fn start_print_rejects_an_unknown_spool_before_sending_anything() {
+    let pool = test_pool().await;
+    let printer_id = seed_printer_with_details(&pool).await;
+    let fixture_path = write_fixture_3mf_without_gcode("spoolbook_rs_test_send_print_bad_spool.3mf");
+    let project_id = seed_project(&pool, fixture_path.to_str().unwrap()).await;
+    let (_, profile_id) = seed_spool_and_profile(&pool).await;
+    let mut request = print_request_body(project_id);
+    request["spoolId"] = json!(999);
+    request["profileId"] = json!(profile_id);
+
+    let (status, body) = send(&pool, &format!("/api/printers/{printer_id}/print"), request).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Unknown spool.");
 }

@@ -9,7 +9,7 @@
 // ranking instead of chamber (see prints.rs), and is never hand-typed: the only way in today is
 // this fetch (auto_source records that), with a future thermometer integration as a possible
 // second source.
-use chrono::{DateTime, NaiveDateTime};
+use chrono::{DateTime, DurationRound, NaiveDateTime, TimeDelta};
 use serde::Deserialize;
 use sqlx::SqlitePool;
 
@@ -41,7 +41,10 @@ pub struct HourlyReading {
 // the archive API only takes whole-day date params, so a short print still gets its own window's
 // readings, not the whole day's.
 async fn fetch_hourly_readings(latitude: f64, longitude: f64, started_at: &str, ended_at: &str) -> Result<Vec<HourlyReading>, String> {
-    let start = DateTime::parse_from_rfc3339(started_at).map_err(|e| e.to_string())?.naive_utc();
+    // Floored to the hour: each hourly sample stands for its whole hour, so the hour the print
+    // started in counts too (a 10:30-10:50 print uses the 10:00 sample).
+    let start = DateTime::parse_from_rfc3339(started_at).map_err(|e| e.to_string())?.naive_utc()
+        .duration_trunc(TimeDelta::hours(1)).map_err(|e| e.to_string())?;
     let end = DateTime::parse_from_rfc3339(ended_at).map_err(|e| e.to_string())?.naive_utc();
 
     // Built via reqwest::Url's own query-pair encoder rather than RequestBuilder::query (not
@@ -55,7 +58,8 @@ async fn fetch_hourly_readings(latitude: f64, longitude: f64, started_at: &str, 
         .append_pair("hourly", "temperature_2m,relative_humidity_2m")
         .append_pair("timezone", "UTC");
 
-    let resp = reqwest::Client::new().get(url).send().await.map_err(|e| e.to_string())?;
+    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(10)).build().map_err(|e| e.to_string())?;
+    let resp = client.get(url).send().await.map_err(|e| e.to_string())?;
     if !resp.status().is_success() {
         return Err(format!("archive fetch failed: {}", resp.status()));
     }

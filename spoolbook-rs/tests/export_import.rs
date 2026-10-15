@@ -63,6 +63,7 @@ async fn post_zip(pool: &sqlx::SqlitePool, uri: &str, zip_bytes: &[u8]) -> (Stat
     (status, json)
 }
 
+// spec: 002/FR-041
 #[tokio::test]
 async fn import_preview_reports_matched_vs_new_for_dedupeable_tables() {
     let pool = test_pool().await;
@@ -88,6 +89,7 @@ async fn import_preview_reports_matched_vs_new_for_dedupeable_tables() {
     assert_eq!(body["printers"]["new"], 1, "one matches the existing 'Pitus' by name");
 }
 
+// spec: 002/FR-041
 #[tokio::test]
 async fn import_preview_reports_every_row_as_new_for_non_dedupeable_tables() {
     let pool = test_pool().await;
@@ -105,6 +107,7 @@ async fn import_preview_reports_every_row_as_new_for_non_dedupeable_tables() {
 // (ensure_color_exists), which already dedupes by name before inserting. Found via a real test:
 // self-importing a real DB (a natural sanity check, not a supported scenario) added 1391
 // duplicate colors before this dedupe rule existed.
+// spec: 002/FR-041
 #[tokio::test]
 async fn import_preview_dedupes_filament_colors_by_name() {
     let pool = test_pool().await;
@@ -119,6 +122,7 @@ async fn import_preview_dedupes_filament_colors_by_name() {
     assert_eq!(body["filament_colors"]["new"], 1);
 }
 
+// spec: 002/FR-040
 #[tokio::test]
 async fn import_preview_rejects_a_manifest_from_a_newer_version() {
     let pool = test_pool().await;
@@ -130,6 +134,7 @@ async fn import_preview_rejects_a_manifest_from_a_newer_version() {
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
 }
 
+// spec: 002/FR-040
 #[tokio::test]
 async fn import_preview_requires_auth() {
     let pool = test_pool().await;
@@ -154,6 +159,7 @@ fn build_zip_with_file(manifest: &serde_json::Value, file_name: &str, file_bytes
     buf
 }
 
+// spec: 002/FR-042, 002/FR-044
 #[tokio::test]
 async fn import_commit_merges_the_full_chain_with_dedupe_and_fk_remap() {
     let pool = test_pool().await;
@@ -228,6 +234,7 @@ async fn import_commit_merges_the_full_chain_with_dedupe_and_fk_remap() {
     assert_eq!(hw_print_id, real_print_id);
 }
 
+// spec: 002/FR-040
 #[tokio::test]
 async fn import_commit_requires_auth() {
     let pool = test_pool().await;
@@ -249,6 +256,7 @@ async fn get_bytes(pool: &sqlx::SqlitePool, uri: &str, authed: bool) -> (StatusC
     (status, bytes.to_vec())
 }
 
+// spec: 002/FR-030
 #[tokio::test]
 async fn export_requires_auth() {
     let pool = test_pool().await;
@@ -292,6 +300,7 @@ async fn seed_one_row_per_table(pool: &sqlx::SqlitePool) {
     sqlx::query("INSERT INTO print_hourly_weather (print_id, hour, temp_c, humidity_pct) VALUES (?1, '2026-01-01T00:00', 20.0, 50.0)").bind(print_id).execute(pool).await.unwrap();
 }
 
+// spec: 002/FR-030
 #[tokio::test]
 async fn export_includes_every_mergeable_table_including_print_profiles() {
     let pool = test_pool().await;
@@ -315,6 +324,7 @@ async fn export_includes_every_mergeable_table_including_print_profiles() {
     assert_eq!(manifest["prints"][0]["status"], "Success");
 }
 
+// spec: 002/FR-031
 #[tokio::test]
 async fn export_bundles_the_projects_3mf_bytes_under_files() {
     let pool = test_pool().await;
@@ -340,6 +350,7 @@ async fn export_bundles_the_projects_3mf_bytes_under_files() {
     assert_eq!(content, b"fake 3mf bytes");
 }
 
+// spec: 002/FR-030
 #[tokio::test]
 async fn export_produces_a_zip_with_a_manifest_containing_seeded_filaments() {
     let pool = test_pool().await;
@@ -360,6 +371,7 @@ async fn export_produces_a_zip_with_a_manifest_containing_seeded_filaments() {
     assert_eq!(filaments[0]["brand"], "Bambu Lab");
 }
 
+// spec: 002/FR-030, 002/FR-042
 #[tokio::test]
 async fn row_to_json_and_insert_json_row_round_trip_a_filament() {
     let pool = test_pool().await;
@@ -387,6 +399,7 @@ async fn row_to_json_and_insert_json_row_round_trip_a_filament() {
     assert_eq!(reinserted.get::<String, _>("color"), "Black");
 }
 
+// spec: 002/FR-030, 002/FR-042
 #[tokio::test]
 async fn row_to_json_and_insert_json_row_handle_null_columns() {
     let pool = test_pool().await;
@@ -400,6 +413,7 @@ async fn row_to_json_and_insert_json_row_handle_null_columns() {
     assert_eq!(reinserted.get::<Option<String>, _>("variant"), None);
 }
 
+// spec: 002/FR-030, 002/FR-042
 #[tokio::test]
 async fn row_to_json_and_insert_json_row_round_trip_real_columns_and_fk_columns() {
     let pool = test_pool().await;
@@ -415,4 +429,111 @@ async fn row_to_json_and_insert_json_row_round_trip_real_columns_and_fk_columns(
     let reinserted = sqlx::query("SELECT filament_id, diameter_mm FROM spools WHERE id = ?1").bind(new_id).fetch_one(&pool).await.unwrap();
     assert_eq!(reinserted.get::<f64, _>("diameter_mm"), 1.75);
     assert_eq!(reinserted.get::<i64, _>("filament_id"), filament_id, "no remap applied -- insert_json_row just inserts what it's given");
+}
+
+// spec: 002/FR-042, 006/FR-021
+#[tokio::test]
+async fn import_commit_remaps_a_profile_version_chain() {
+    let pool = test_pool().await;
+    // Pre-existing rows so the target's new ids can't coincide with the source's.
+    let filament_id: i64 = sqlx::query_scalar("INSERT INTO filaments (brand, material, color) VALUES ('Elegoo', 'PLA', 'Red') RETURNING id").fetch_one(&pool).await.unwrap();
+    for _ in 0..3 {
+        sqlx::query("INSERT INTO print_profiles (filament_id, name, nozzle_temp_c) VALUES (?1, 'Existing', 210)").bind(filament_id).execute(&pool).await.unwrap();
+    }
+
+    let mut manifest = empty_manifest();
+    manifest["filaments"] = serde_json::json!([{ "id": 1, "brand": "Bambu Lab", "material": "PLA", "variant": "Basic", "color": "Black" }]);
+    manifest["print_profiles"] = serde_json::json!([
+        { "id": 1, "filament_id": 1, "name": "Standard", "nozzle_temp_c": 220, "version_number": 1, "is_current_version": 0, "previous_version_profile_id": null },
+        { "id": 2, "filament_id": 1, "name": "Standard", "nozzle_temp_c": 225, "version_number": 2, "is_current_version": 1, "previous_version_profile_id": 1 }
+    ]);
+
+    let (status, body) = post_zip(&pool, "/api/import/commit", &build_zip(&manifest)).await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+
+    let v1: i64 = sqlx::query_scalar("SELECT id FROM print_profiles WHERE name = 'Standard' AND version_number = 1").fetch_one(&pool).await.unwrap();
+    let v2_previous: Option<i64> =
+        sqlx::query_scalar("SELECT previous_version_profile_id FROM print_profiles WHERE name = 'Standard' AND version_number = 2").fetch_one(&pool).await.unwrap();
+    assert_eq!(v2_previous, Some(v1));
+}
+
+// spec: 002/FR-042
+#[tokio::test]
+async fn import_commit_remaps_a_spool_specific_profiles_spool() {
+    let pool = test_pool().await;
+    // Existing spools so the imported spool's new id can't coincide with its source id (1).
+    let filament_id: i64 = sqlx::query_scalar("INSERT INTO filaments (brand, material, color) VALUES ('Elegoo', 'PLA', 'Red') RETURNING id").fetch_one(&pool).await.unwrap();
+    for _ in 0..3 {
+        sqlx::query("INSERT INTO spools (filament_id) VALUES (?1)").bind(filament_id).execute(&pool).await.unwrap();
+    }
+
+    let mut manifest = empty_manifest();
+    manifest["filaments"] = serde_json::json!([{ "id": 1, "brand": "Bambu Lab", "material": "PLA", "variant": "Basic", "color": "Black" }]);
+    manifest["spools"] = serde_json::json!([{ "id": 1, "filament_id": 1, "lot_code": "LOT-A" }]);
+    manifest["print_profiles"] = serde_json::json!([{ "id": 1, "filament_id": 1, "spool_id": 1, "name": "For LOT-A", "nozzle_temp_c": 220 }]);
+
+    let (status, body) = post_zip(&pool, "/api/import/commit", &build_zip(&manifest)).await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+
+    let lot_a_spool: i64 = sqlx::query_scalar("SELECT id FROM spools WHERE lot_code = 'LOT-A'").fetch_one(&pool).await.unwrap();
+    let profile_spool: Option<i64> = sqlx::query_scalar("SELECT spool_id FROM print_profiles WHERE name = 'For LOT-A'").fetch_one(&pool).await.unwrap();
+    assert_eq!(profile_spool, Some(lot_a_spool));
+}
+
+// spec: 002/FR-042
+#[tokio::test]
+async fn import_commit_remaps_a_project_version_chain() {
+    let pool = test_pool().await;
+    for i in 0..3 {
+        sqlx::query("INSERT INTO projects (file_path, file_name, last_known_write_time_utc, last_known_file_size_bytes) VALUES (?1, 'existing.3mf', '2026-01-01T00:00:00Z', 1)")
+            .bind(format!("/existing/{i}.3mf")).execute(&pool).await.unwrap();
+    }
+
+    let mut manifest = empty_manifest();
+    manifest["projects"] = serde_json::json!([
+        { "id": 1, "file_path": "/src/a.3mf", "file_name": "part.3mf", "last_known_write_time_utc": "2026-01-01T00:00:00Z", "last_known_file_size_bytes": 4, "version_number": 1, "is_current_version": 0, "previous_version_project_id": null },
+        { "id": 2, "file_path": "/src/b.3mf", "file_name": "part.3mf", "last_known_write_time_utc": "2026-01-02T00:00:00Z", "last_known_file_size_bytes": 4, "version_number": 2, "is_current_version": 1, "previous_version_project_id": 1 }
+    ]);
+
+    let (status, body) = post_zip(&pool, "/api/import/commit", &build_zip(&manifest)).await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+
+    let v1: i64 = sqlx::query_scalar("SELECT id FROM projects WHERE file_name = 'part.3mf' AND version_number = 1").fetch_one(&pool).await.unwrap();
+    let v2_previous: Option<i64> = sqlx::query_scalar("SELECT previous_version_project_id FROM projects WHERE file_name = 'part.3mf' AND version_number = 2").fetch_one(&pool).await.unwrap();
+    assert_eq!(v2_previous, Some(v1));
+}
+
+// spec: 002/FR-043, 002/FR-044
+#[tokio::test]
+async fn a_failing_import_commit_changes_nothing_and_writes_no_files() {
+    let pool = test_pool().await;
+    let file_name = format!("rollback-{}.3mf", std::process::id());
+    let mut manifest = empty_manifest();
+    manifest["filaments"] = serde_json::json!([{ "id": 1, "brand": "Bambu Lab", "material": "PLA", "variant": "Basic", "color": "Black" }]);
+    manifest["projects"] = serde_json::json!([{ "id": 1, "file_path": format!("/src/{file_name}"), "file_name": "part.3mf", "last_known_write_time_utc": "2026-01-01T00:00:00Z", "last_known_file_size_bytes": 4 }]);
+    // References a profile/spool/printer that aren't in the bundle -> can't be resolved.
+    manifest["prints"] = serde_json::json!([{ "id": 1, "profile_id": 7, "spool_id": 7, "printer_id": 7, "started_at": "2026-01-01T00:00:00Z", "status": "Success" }]);
+
+    let (status, body) = post_zip(&pool, "/api/import/commit", &build_zip_with_file(&manifest, &file_name, b"fake")).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    assert_eq!(body["ok"], false);
+    assert!(body["error"].as_str().unwrap().contains("prints"), "{body:?}");
+    let filaments: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM filaments").fetch_one(&pool).await.unwrap();
+    let projects: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM projects").fetch_one(&pool).await.unwrap();
+    assert_eq!((filaments, projects), (0, 0), "earlier tables rolled back");
+    assert!(!spoolbook_rs::project_upload::storage_dir_for("dev.db").join(&file_name).exists(), "no orphan file");
+}
+
+// spec: 002/FR-043
+#[tokio::test]
+async fn an_import_row_without_an_id_is_a_400_not_a_crash() {
+    let pool = test_pool().await;
+    let mut manifest = empty_manifest();
+    manifest["filaments"] = serde_json::json!([{ "brand": "Bambu Lab", "material": "PLA", "variant": "Basic", "color": "Black" }]);
+
+    let (status, body) = post_zip(&pool, "/api/import/commit", &build_zip(&manifest)).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    assert_eq!(body["ok"], false);
 }

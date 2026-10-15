@@ -1,7 +1,7 @@
 use spoolbook_rs::bambu_mqtt_payload_parser::ReadingInput;
 use spoolbook_rs::printer_telemetry::{
     attach_job_to_print, backfill_reading_snapshots, collapse_readings_to_snapshot, end_job, find_match_for_print,
-    purge_unattached_jobs_older_than, record_reading,
+    purge_stale_jobs, purge_unattached_jobs_older_than, record_reading,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::str::FromStr;
@@ -107,6 +107,7 @@ async fn reading_count(pool: &sqlx::SqlitePool) -> i64 {
     sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM printer_readings").fetch_one(pool).await.unwrap()
 }
 
+// spec: 001/FR-012
 #[tokio::test]
 async fn record_reading_creates_new_job_on_first_reading_for_external_id() {
     let pool = test_pool().await;
@@ -120,6 +121,7 @@ async fn record_reading_creates_new_job_on_first_reading_for_external_id() {
     assert_eq!(external_id, "job-1");
 }
 
+// spec: 001/FR-013
 #[tokio::test]
 async fn record_reading_persists_ams_humidity_and_layer_progress() {
     let pool = test_pool().await;
@@ -146,6 +148,7 @@ async fn record_reading_persists_ams_humidity_and_layer_progress() {
     assert_eq!(row, (Some(38), Some(21), Some(908)));
 }
 
+// spec: 001/FR-012
 #[tokio::test]
 async fn record_reading_appends_reading_to_existing_active_job() {
     let pool = test_pool().await;
@@ -158,6 +161,7 @@ async fn record_reading_appends_reading_to_existing_active_job() {
     assert_eq!(reading_count(&pool).await, 2);
 }
 
+// spec: 001/FR-012
 #[tokio::test]
 async fn record_reading_different_external_ids_create_separate_jobs() {
     let pool = test_pool().await;
@@ -169,6 +173,7 @@ async fn record_reading_different_external_ids_create_separate_jobs() {
     assert_eq!(job_count(&pool).await, 2);
 }
 
+// spec: 001/FR-021
 #[tokio::test]
 async fn end_job_sets_ended_at() {
     let pool = test_pool().await;
@@ -176,12 +181,17 @@ async fn end_job_sets_ended_at() {
     let camera_registry = spoolbook_rs::printer_camera::new_registry();
     record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
 
-    end_job(&pool, printer_id, "job-1", None, None, None, None, &camera_registry).await;
+    if let Some(follow_up) = end_job(&pool, printer_id, "job-1", None, None, None, None, &camera_registry).await {
+
+        follow_up.await.unwrap();
+
+    }
 
     let ended_at: Option<String> = sqlx::query_scalar("SELECT ended_at FROM printer_jobs").fetch_one(&pool).await.unwrap();
     assert!(ended_at.is_some());
 }
 
+// spec: 001/FR-021
 #[tokio::test]
 async fn end_job_snapshots_chamber_temp_and_ams_humidity_onto_the_print() {
     let pool = test_pool().await;
@@ -191,7 +201,11 @@ async fn end_job_snapshots_chamber_temp_and_ams_humidity_onto_the_print() {
     let print_id = seed_in_progress_print(&pool, profile_id, spool_id, printer_id, "2026-01-01T08:00:00Z").await;
     record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
 
-    end_job(&pool, printer_id, "job-1", Some("FINISH"), None, Some(38.5), Some(21), &camera_registry).await;
+    if let Some(follow_up) = end_job(&pool, printer_id, "job-1", Some("FINISH"), None, Some(38.5), Some(21), &camera_registry).await {
+
+        follow_up.await.unwrap();
+
+    }
 
     let (chamber_temp_c, ams_humidity_pct): (Option<f64>, Option<i64>) =
         sqlx::query_as("SELECT chamber_temp_c, ams_humidity_pct FROM prints WHERE id = ?1").bind(print_id).fetch_one(&pool).await.unwrap();
@@ -199,6 +213,7 @@ async fn end_job_snapshots_chamber_temp_and_ams_humidity_onto_the_print() {
     assert_eq!(ams_humidity_pct, Some(21));
 }
 
+// spec: 001/FR-022, 001/FR-030
 #[tokio::test]
 async fn end_job_collapses_readings_into_a_print_snapshot_and_deletes_raw_rows() {
     let pool = test_pool().await;
@@ -209,7 +224,11 @@ async fn end_job_collapses_readings_into_a_print_snapshot_and_deletes_raw_rows()
     record_reading(&pool, printer_id, "job-1", &reading(245.0), Some("2026-01-01T08:00:10Z")).await;
     record_reading(&pool, printer_id, "job-1", &reading(246.0), Some("2026-01-01T08:00:40Z")).await;
 
-    end_job(&pool, printer_id, "job-1", Some("FINISH"), None, None, None, &camera_registry).await;
+    if let Some(follow_up) = end_job(&pool, printer_id, "job-1", Some("FINISH"), None, None, None, &camera_registry).await {
+
+        follow_up.await.unwrap();
+
+    }
 
     assert_eq!(reading_count(&pool).await, 0, "raw readings deleted once end_job collapses them");
     let json: Option<String> = sqlx::query_scalar("SELECT telemetry_json FROM prints WHERE id = ?1").bind(print_id).fetch_one(&pool).await.unwrap();
@@ -217,6 +236,7 @@ async fn end_job_collapses_readings_into_a_print_snapshot_and_deletes_raw_rows()
     assert_eq!(snapshot.len(), 1, "both readings fall in the same minute");
 }
 
+// spec: 001/FR-015
 #[tokio::test]
 async fn record_reading_auto_attaches_new_job_to_open_in_progress_print_for_same_printer() {
     let pool = test_pool().await;
@@ -230,6 +250,7 @@ async fn record_reading_auto_attaches_new_job_to_open_in_progress_print_for_same
     assert_eq!(job_print_id, Some(print_id));
 }
 
+// spec: 001/FR-015
 #[tokio::test]
 async fn record_reading_does_not_reattach_on_subsequent_readings_for_same_job() {
     let pool = test_pool().await;
@@ -248,6 +269,7 @@ async fn record_reading_does_not_reattach_on_subsequent_readings_for_same_job() 
     assert_ne!(job_print_id, Some(second_print_id));
 }
 
+// spec: 001/FR-015
 #[tokio::test]
 async fn record_reading_does_not_auto_attach_when_no_in_progress_print_exists() {
     let pool = test_pool().await;
@@ -259,6 +281,7 @@ async fn record_reading_does_not_auto_attach_when_no_in_progress_print_exists() 
     assert_eq!(job_print_id, None);
 }
 
+// spec: 001/FR-021
 #[tokio::test]
 async fn end_job_sets_attached_print_status_from_terminal_gcode_state() {
     for (gcode_state, expected_status) in [
@@ -274,7 +297,11 @@ async fn end_job_sets_attached_print_status_from_terminal_gcode_state() {
         let print_id = seed_in_progress_print(&pool, profile_id, spool_id, printer_id, "2026-01-01T08:00:00Z").await;
         record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
 
-        end_job(&pool, printer_id, "job-1", gcode_state, None, None, None, &camera_registry).await;
+        if let Some(follow_up) = end_job(&pool, printer_id, "job-1", gcode_state, None, None, None, &camera_registry).await {
+
+            follow_up.await.unwrap();
+
+        }
 
         let (status, ended_at): (String, Option<String>) =
             sqlx::query_as("SELECT status, ended_at FROM prints WHERE id = ?1").bind(print_id).fetch_one(&pool).await.unwrap();
@@ -283,6 +310,7 @@ async fn end_job_sets_attached_print_status_from_terminal_gcode_state() {
     }
 }
 
+// spec: 001/FR-022, 002/FR-013, 003/FR-040
 #[tokio::test]
 async fn end_job_fetches_and_stores_ambient_weather_when_location_is_configured() {
     let _guard = ENV_LOCK.lock().unwrap();
@@ -295,7 +323,11 @@ async fn end_job_fetches_and_stores_ambient_weather_when_location_is_configured(
     let print_id = seed_in_progress_print(&pool, profile_id, spool_id, printer_id, "2026-01-01T07:00:00Z").await;
     record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
 
-    end_job(&pool, printer_id, "job-1", Some("FINISH"), Some("2026-01-01T09:00:00Z"), None, None, &camera_registry).await;
+    if let Some(follow_up) = end_job(&pool, printer_id, "job-1", Some("FINISH"), Some("2026-01-01T09:00:00Z"), None, None, &camera_registry).await {
+
+        follow_up.await.unwrap();
+
+    }
 
     let (temp, humidity, source): (Option<f64>, Option<f64>, Option<String>) =
         sqlx::query_as("SELECT ambient_temp_c, ambient_humidity_pct, ambient_source FROM prints WHERE id = ?1").bind(print_id).fetch_one(&pool).await.unwrap();
@@ -304,6 +336,7 @@ async fn end_job_fetches_and_stores_ambient_weather_when_location_is_configured(
     assert_eq!(source.as_deref(), Some("open-meteo"));
 }
 
+// spec: 003/FR-040
 #[tokio::test]
 async fn end_job_persists_every_hour_of_the_print_window_for_the_graph() {
     let _guard = ENV_LOCK.lock().unwrap();
@@ -316,7 +349,11 @@ async fn end_job_persists_every_hour_of_the_print_window_for_the_graph() {
     let print_id = seed_in_progress_print(&pool, profile_id, spool_id, printer_id, "2026-01-01T07:00:00Z").await;
     record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
 
-    end_job(&pool, printer_id, "job-1", Some("FINISH"), Some("2026-01-01T09:00:00Z"), None, None, &camera_registry).await;
+    if let Some(follow_up) = end_job(&pool, printer_id, "job-1", Some("FINISH"), Some("2026-01-01T09:00:00Z"), None, None, &camera_registry).await {
+
+        follow_up.await.unwrap();
+
+    }
 
     let rows: Vec<(String, Option<f64>, Option<f64>)> =
         sqlx::query_as("SELECT hour, temp_c, humidity_pct FROM print_hourly_weather WHERE print_id = ?1 ORDER BY hour")
@@ -333,6 +370,7 @@ async fn end_job_persists_every_hour_of_the_print_window_for_the_graph() {
     assert!((rows[2].1.unwrap() - 24.0).abs() < 0.01);
 }
 
+// spec: 002/FR-013, 003/FR-041
 #[tokio::test]
 async fn end_job_leaves_ambient_weather_null_when_no_location_is_configured() {
     let _guard = ENV_LOCK.lock().unwrap();
@@ -343,7 +381,11 @@ async fn end_job_leaves_ambient_weather_null_when_no_location_is_configured() {
     let print_id = seed_in_progress_print(&pool, profile_id, spool_id, printer_id, "2026-01-01T07:00:00Z").await;
     record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
 
-    end_job(&pool, printer_id, "job-1", Some("FINISH"), Some("2026-01-01T09:00:00Z"), None, None, &camera_registry).await;
+    if let Some(follow_up) = end_job(&pool, printer_id, "job-1", Some("FINISH"), Some("2026-01-01T09:00:00Z"), None, None, &camera_registry).await {
+
+        follow_up.await.unwrap();
+
+    }
 
     let (temp, source): (Option<f64>, Option<String>) =
         sqlx::query_as("SELECT ambient_temp_c, ambient_source FROM prints WHERE id = ?1").bind(print_id).fetch_one(&pool).await.unwrap();
@@ -351,6 +393,7 @@ async fn end_job_leaves_ambient_weather_null_when_no_location_is_configured() {
     assert_eq!(source, None);
 }
 
+// spec: 001/FR-021
 #[tokio::test]
 async fn end_job_does_not_touch_print_status_when_job_has_no_attached_print() {
     let pool = test_pool().await;
@@ -358,7 +401,11 @@ async fn end_job_does_not_touch_print_status_when_job_has_no_attached_print() {
     let camera_registry = spoolbook_rs::printer_camera::new_registry();
     record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
 
-    end_job(&pool, printer_id, "job-1", Some("FINISH"), None, None, None, &camera_registry).await;
+    if let Some(follow_up) = end_job(&pool, printer_id, "job-1", Some("FINISH"), None, None, None, &camera_registry).await {
+
+        follow_up.await.unwrap();
+
+    }
 
     let (ended_at, print_id): (Option<String>, Option<i64>) =
         sqlx::query_as("SELECT ended_at, print_id FROM printer_jobs").fetch_one(&pool).await.unwrap();
@@ -366,6 +413,7 @@ async fn end_job_does_not_touch_print_status_when_job_has_no_attached_print() {
     assert_eq!(print_id, None);
 }
 
+// spec: 001/FR-040
 #[tokio::test]
 async fn find_match_for_print_returns_closest_unattached_job_by_start_time() {
     let pool = test_pool().await;
@@ -378,6 +426,7 @@ async fn find_match_for_print_returns_closest_unattached_job_by_start_time() {
     assert_eq!(matched.unwrap().external_job_id, "job-close");
 }
 
+// spec: 001/FR-040
 #[tokio::test]
 async fn find_match_for_print_excludes_already_attached_jobs() {
     let pool = test_pool().await;
@@ -402,6 +451,7 @@ async fn find_match_for_print_excludes_already_attached_jobs() {
     assert!(matched.is_none());
 }
 
+// spec: 001/FR-040
 #[tokio::test]
 async fn find_match_for_print_returns_none_when_no_unattached_jobs_exist() {
     let pool = test_pool().await;
@@ -412,6 +462,7 @@ async fn find_match_for_print_returns_none_when_no_unattached_jobs_exist() {
     assert!(matched.is_none());
 }
 
+// spec: 001/FR-030
 #[tokio::test]
 async fn collapse_readings_to_snapshot_keeps_last_value_per_minute_and_deletes_raw_rows() {
     let pool = test_pool().await;
@@ -444,6 +495,7 @@ async fn collapse_readings_to_snapshot_keeps_last_value_per_minute_and_deletes_r
     assert_eq!(snapshot[0]["layerNum"], 6);
 }
 
+// spec: 001/FR-030
 #[tokio::test]
 async fn collapse_readings_to_snapshot_produces_one_bucket_per_minute_spanned() {
     let pool = test_pool().await;
@@ -466,6 +518,7 @@ async fn collapse_readings_to_snapshot_produces_one_bucket_per_minute_spanned() 
     assert_eq!(snapshot[2]["recordedAt"], "2026-01-01T08:02:10Z");
 }
 
+// spec: 001/FR-030
 #[tokio::test]
 async fn collapse_readings_to_snapshot_leaves_telemetry_json_null_when_no_readings_exist() {
     let pool = test_pool().await;
@@ -485,6 +538,7 @@ async fn collapse_readings_to_snapshot_leaves_telemetry_json_null_when_no_readin
     assert_eq!(json, None);
 }
 
+// spec: 001/FR-031
 #[tokio::test]
 async fn backfill_reading_snapshots_converts_an_already_finished_print_with_no_snapshot_yet() {
     let pool = test_pool().await;
@@ -513,6 +567,7 @@ async fn backfill_reading_snapshots_converts_an_already_finished_print_with_no_s
     assert!(json.is_some());
 }
 
+// spec: 001/FR-031
 #[tokio::test]
 async fn backfill_reading_snapshots_skips_prints_that_already_have_a_snapshot() {
     let pool = test_pool().await;
@@ -541,6 +596,7 @@ async fn backfill_reading_snapshots_skips_prints_that_already_have_a_snapshot() 
     assert_eq!(reading_count(&pool).await, 1, "second pass skips prints that already have telemetry_json");
 }
 
+// spec: 001/FR-041
 #[tokio::test]
 async fn attach_job_to_print_sets_print_id() {
     let pool = test_pool().await;
@@ -565,6 +621,7 @@ async fn attach_job_to_print_sets_print_id() {
     assert_eq!(updated, Some(print_id));
 }
 
+// spec: 001/FR-032
 #[tokio::test]
 async fn purge_unattached_jobs_older_than_removes_old_unattached_jobs_and_their_readings() {
     let pool = test_pool().await;
@@ -577,6 +634,7 @@ async fn purge_unattached_jobs_older_than_removes_old_unattached_jobs_and_their_
     assert_eq!(reading_count(&pool).await, 0, "readings must cascade-delete with their job");
 }
 
+// spec: 001/FR-032
 #[tokio::test]
 async fn purge_unattached_jobs_older_than_keeps_attached_jobs_regardless_of_age() {
     let pool = test_pool().await;
@@ -601,6 +659,7 @@ async fn purge_unattached_jobs_older_than_keeps_attached_jobs_regardless_of_age(
     assert_eq!(job_count(&pool).await, 1);
 }
 
+// spec: 001/FR-032
 #[tokio::test]
 async fn purge_unattached_jobs_older_than_keeps_recent_unattached_jobs() {
     let pool = test_pool().await;
@@ -610,4 +669,54 @@ async fn purge_unattached_jobs_older_than_keeps_recent_unattached_jobs() {
     purge_unattached_jobs_older_than(&pool, "2026-01-05T00:00:00Z").await;
 
     assert_eq!(job_count(&pool).await, 1);
+}
+
+// spec: 001/FR-032
+#[tokio::test]
+async fn purge_stale_jobs_deletes_unattached_jobs_started_more_than_7_days_ago() {
+    use chrono::{SecondsFormat, TimeDelta, Utc};
+    let pool = test_pool().await;
+    let printer_id = seed_printer(&pool).await;
+    let days_ago = |d| (Utc::now() - TimeDelta::days(d)).to_rfc3339_opts(SecondsFormat::Millis, true);
+    record_reading(&pool, printer_id, "8-days", &reading(245.0), Some(&days_ago(8))).await;
+    record_reading(&pool, printer_id, "6-days", &reading(245.0), Some(&days_ago(6))).await;
+
+    purge_stale_jobs(&pool).await;
+
+    let left: Vec<String> = sqlx::query_scalar("SELECT external_job_id FROM printer_jobs").fetch_all(&pool).await.unwrap();
+    assert_eq!(left, vec!["6-days"]);
+}
+
+// spec: 001/FR-022
+#[tokio::test]
+async fn end_job_returns_without_waiting_for_a_hung_weather_fetch() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let app = axum::Router::new().route(
+        "/v1/archive",
+        axum::routing::get(|| async {
+            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+            "{}"
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    unsafe { std::env::set_var("ARCHIVE_URL", format!("http://{addr}/v1/archive")) };
+    let pool = test_pool().await;
+    set_location(&pool, -37.8, 144.9).await;
+    let printer_id = seed_printer(&pool).await;
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
+    let (profile_id, spool_id) = seed_print_deps(&pool).await;
+    let print_id = seed_in_progress_print(&pool, profile_id, spool_id, printer_id, "2026-01-01T07:00:00Z").await;
+    record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
+
+    let ended = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        end_job(&pool, printer_id, "job-1", Some("FINISH"), Some("2026-01-01T09:00:00Z"), None, None, &camera_registry),
+    )
+    .await;
+
+    assert!(ended.is_ok(), "end_job waited on the weather fetch");
+    let status: String = sqlx::query_scalar("SELECT status FROM prints WHERE id = ?1").bind(print_id).fetch_one(&pool).await.unwrap();
+    assert_eq!(status, "Success", "Print is finalized before end_job returns");
 }

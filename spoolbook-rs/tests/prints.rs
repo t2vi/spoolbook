@@ -106,6 +106,7 @@ fn print_body(f: &Fixtures, status: &str, failure_modes: Vec<&str>) -> Value {
     })
 }
 
+// spec: 003/FR-010
 #[tokio::test]
 async fn create_persists_and_nests_profile_spool_printer() {
     let pool = test_pool().await;
@@ -126,6 +127,7 @@ async fn create_persists_and_nests_profile_spool_printer() {
     assert_eq!(p["failureModes"].as_array().unwrap().len(), 0);
 }
 
+// spec: 003/FR-010, 003/FR-011
 #[tokio::test]
 async fn create_persists_failure_modes_when_not_success() {
     let pool = test_pool().await;
@@ -140,6 +142,7 @@ async fn create_persists_failure_modes_when_not_success() {
     assert!(modes.contains(&"Stringing"));
 }
 
+// spec: 003/FR-011
 #[tokio::test]
 async fn create_rejects_failure_modes_on_a_success_status() {
     let pool = test_pool().await;
@@ -151,6 +154,7 @@ async fn create_rejects_failure_modes_on_a_success_status() {
     assert_eq!(body["error"], "failure_modes_require_failed_or_partial");
 }
 
+// spec: 003/FR-010
 #[tokio::test]
 async fn create_nests_project_when_provided() {
     let pool = test_pool().await;
@@ -167,6 +171,7 @@ async fn create_nests_project_when_provided() {
     assert_eq!(resp["print"]["projectPlaterId"], "1");
 }
 
+// spec: 003/FR-001
 #[tokio::test]
 async fn get_by_id_returns_not_found_for_missing_id() {
     let pool = test_pool().await;
@@ -174,6 +179,7 @@ async fn get_by_id_returns_not_found_for_missing_id() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
+// spec: 003/FR-001
 #[tokio::test]
 async fn get_by_id_returns_the_full_nested_print() {
     let pool = test_pool().await;
@@ -188,6 +194,7 @@ async fn get_by_id_returns_the_full_nested_print() {
     assert_eq!(body["profile"]["nozzleTempC"], 220);
 }
 
+// spec: 003/FR-002
 #[tokio::test]
 async fn list_filters_by_printer_and_caps_at_five() {
     let pool = test_pool().await;
@@ -207,6 +214,7 @@ async fn list_filters_by_printer_and_caps_at_five() {
     assert!(prints.iter().all(|p| p["printerId"] == f.printer_id), "excludes the other printer's print");
 }
 
+// spec: 003/FR-002
 #[tokio::test]
 async fn list_filters_by_project_id() {
     let pool = test_pool().await;
@@ -226,6 +234,7 @@ async fn list_filters_by_project_id() {
     assert_eq!(prints[0]["projectId"], project_id);
 }
 
+// spec: 003/FR-002
 #[tokio::test]
 async fn list_without_printer_id_returns_everything() {
     let pool = test_pool().await;
@@ -238,6 +247,7 @@ async fn list_without_printer_id_returns_everything() {
     assert_eq!(body.as_array().unwrap().len(), 1);
 }
 
+// spec: 003/FR-003
 #[tokio::test]
 async fn inventory_filters_by_status_and_paginates() {
     let pool = test_pool().await;
@@ -252,6 +262,7 @@ async fn inventory_filters_by_status_and_paginates() {
     assert_eq!(body["prints"][0]["status"], "Success");
 }
 
+// spec: 003/FR-020
 #[tokio::test]
 async fn recommend_profile_picks_success_over_failed() {
     let pool = test_pool().await;
@@ -274,6 +285,7 @@ async fn recommend_profile_picks_success_over_failed() {
     assert_eq!(body["name"], "Success Profile");
 }
 
+// spec: 003/FR-020
 #[tokio::test]
 async fn recommend_profile_returns_null_when_no_prints_reference_the_project() {
     let pool = test_pool().await;
@@ -283,6 +295,7 @@ async fn recommend_profile_returns_null_when_no_prints_reference_the_project() {
     assert_eq!(body, Value::Null);
 }
 
+// spec: 003/FR-013
 #[tokio::test]
 async fn update_persists_changes() {
     let pool = test_pool().await;
@@ -308,6 +321,7 @@ async fn update_persists_changes() {
     assert_eq!(modes, vec!["Clog"]);
 }
 
+// spec: 003/FR-013
 #[tokio::test]
 async fn update_returns_not_found_for_missing_id() {
     let pool = test_pool().await;
@@ -320,6 +334,7 @@ async fn update_returns_not_found_for_missing_id() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
+// spec: 003/FR-014
 #[tokio::test]
 async fn delete_removes_the_print() {
     let pool = test_pool().await;
@@ -335,6 +350,7 @@ async fn delete_removes_the_print() {
     assert_eq!(all.as_array().unwrap().len(), 0);
 }
 
+// spec: 003/FR-014
 #[tokio::test]
 async fn delete_returns_not_found_for_missing_id() {
     let pool = test_pool().await;
@@ -354,6 +370,7 @@ async fn seed_printer_job(pool: &sqlx::SqlitePool, printer_id: i64, external_job
     .unwrap()
 }
 
+// spec: 003/FR-030
 #[tokio::test]
 async fn job_match_returns_the_closest_unattached_job() {
     let pool = test_pool().await;
@@ -368,6 +385,7 @@ async fn job_match_returns_the_closest_unattached_job() {
     assert_eq!(body["externalJobId"], "job-close");
 }
 
+// spec: 003/FR-030
 #[tokio::test]
 async fn job_match_returns_null_when_no_unattached_jobs_exist() {
     let pool = test_pool().await;
@@ -380,6 +398,7 @@ async fn job_match_returns_null_when_no_unattached_jobs_exist() {
     assert_eq!(body, Value::Null);
 }
 
+// spec: 003/FR-031
 #[tokio::test]
 async fn attach_job_sets_the_jobs_print_id() {
     let pool = test_pool().await;
@@ -399,6 +418,7 @@ async fn attach_job_sets_the_jobs_print_id() {
     assert_eq!(attached_print_id, Some(print_id));
 }
 
+// spec: 003/FR-004
 #[tokio::test]
 async fn hourly_weather_returns_rows_ordered_by_hour() {
     let pool = test_pool().await;
@@ -421,6 +441,7 @@ async fn hourly_weather_returns_rows_ordered_by_hour() {
     assert_eq!(rows[1]["hour"], "2026-01-01T08:00");
 }
 
+// spec: 003/FR-005
 #[tokio::test]
 async fn readings_returns_the_stored_telemetry_snapshot() {
     let pool = test_pool().await;
@@ -439,6 +460,7 @@ async fn readings_returns_the_stored_telemetry_snapshot() {
     assert_eq!(rows[0]["layerNum"], 6);
 }
 
+// spec: 003/FR-005
 #[tokio::test]
 async fn readings_returns_empty_array_when_no_snapshot_exists() {
     let pool = test_pool().await;
@@ -452,6 +474,7 @@ async fn readings_returns_empty_array_when_no_snapshot_exists() {
     assert_eq!(body.as_array().unwrap().len(), 0);
 }
 
+// spec: 003/FR-004
 #[tokio::test]
 async fn hourly_weather_returns_empty_array_when_none_recorded() {
     let pool = test_pool().await;
@@ -463,4 +486,141 @@ async fn hourly_weather_returns_empty_array_when_none_recorded() {
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body.as_array().unwrap().len(), 0);
+}
+
+// spec: 003/FR-014
+#[tokio::test]
+async fn delete_removes_a_print_with_failure_modes_weather_and_an_attached_job() {
+    let pool = test_pool().await;
+    let f = seed_all(&pool).await;
+    let (_, created) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Failed", vec!["Stringing", "Warping"]))).await;
+    let id = created["print"]["id"].as_i64().unwrap();
+    sqlx::query("INSERT INTO print_hourly_weather (print_id, hour, temp_c, humidity_pct) VALUES (?1, '2026-08-15T10:00', 18.0, 60.0)").bind(id).execute(&pool).await.unwrap();
+    let job_id = seed_printer_job(&pool, f.printer_id, "task-1", "2026-08-15T10:00:00Z").await;
+    sqlx::query("UPDATE printer_jobs SET print_id = ?1 WHERE id = ?2").bind(id).bind(job_id).execute(&pool).await.unwrap();
+
+    let (status, body) = send(&pool, "DELETE", &format!("/api/prints/{id}"), None).await;
+
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let count = |sql: &'static str| { let pool = pool.clone(); async move { sqlx::query_scalar::<_, i64>(sql).fetch_one(&pool).await.unwrap() } };
+    assert_eq!(count("SELECT COUNT(*) FROM prints").await, 0);
+    assert_eq!(count("SELECT COUNT(*) FROM print_failure_modes").await, 0);
+    assert_eq!(count("SELECT COUNT(*) FROM print_hourly_weather").await, 0);
+    let job_print: Option<i64> = sqlx::query_scalar("SELECT print_id FROM printer_jobs WHERE id = ?1").bind(job_id).fetch_one(&pool).await.unwrap();
+    assert_eq!(job_print, None, "the Job is kept, just unlinked");
+}
+
+async fn print_count(pool: &sqlx::SqlitePool) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM prints").fetch_one(pool).await.unwrap()
+}
+
+// spec: 003/FR-012
+#[tokio::test]
+async fn create_rejects_invalid_input_with_400_and_saves_nothing() {
+    let pool = test_pool().await;
+    let f = seed_all(&pool).await;
+    let cases: Vec<(&str, Value, &str)> = vec![
+        ("status", json!({ "input": { "status": "Great" } }), "Unknown status."),
+        ("failure mode", json!({ "input": { "status": "Failed", "failureModes": ["Spaghetti"] } }), "Unknown failure mode: Spaghetti."),
+        ("profile", json!({ "profileId": 999 }), "Unknown print profile."),
+        ("spool", json!({ "spoolId": 999 }), "Unknown spool."),
+        ("printer", json!({ "printerId": 999 }), "Unknown printer."),
+        ("project", json!({ "input": { "projectId": 999 } }), "Unknown project."),
+        ("times", json!({ "input": { "endedAt": "2026-08-15T09:00:00Z" } }), "Ended before it started."),
+    ];
+
+    for (name, patch, expected) in cases {
+        let mut body = print_body(&f, "Success", vec![]);
+        for (k, v) in patch.as_object().unwrap() {
+            if k == "input" {
+                for (ik, iv) in v.as_object().unwrap() {
+                    body["input"][ik] = iv.clone();
+                }
+            } else {
+                body[k] = v.clone();
+            }
+        }
+        let (status, res) = send(&pool, "POST", "/api/prints", Some(body)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{name}: {res:?}");
+        assert_eq!(res["error"], expected, "{name}");
+    }
+    assert_eq!(print_count(&pool).await, 0);
+}
+
+// spec: 003/FR-012
+#[tokio::test]
+async fn create_accepts_a_blank_ended_at() {
+    let pool = test_pool().await;
+    let f = seed_all(&pool).await;
+    let mut body = print_body(&f, "InProgress", vec![]);
+    body["input"]["endedAt"] = json!("");
+
+    let (status, res) = send(&pool, "POST", "/api/prints", Some(body)).await;
+
+    assert_eq!(status, StatusCode::OK, "{res:?}");
+}
+
+// spec: 003/FR-012
+#[tokio::test]
+async fn update_rejects_invalid_input_with_400_and_changes_nothing() {
+    let pool = test_pool().await;
+    let f = seed_all(&pool).await;
+    let (_, created) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
+    let id = created["print"]["id"].as_i64().unwrap();
+    let cases: Vec<(&str, i64, Value, &str)> = vec![
+        ("status", f.printer_id, json!({ "status": "Great" }), "Unknown status."),
+        ("failure mode", f.printer_id, json!({ "status": "Failed", "failureModes": ["Spaghetti"] }), "Unknown failure mode: Spaghetti."),
+        ("printer", 999, json!({}), "Unknown printer."),
+        ("project", f.printer_id, json!({ "projectId": 999 }), "Unknown project."),
+        ("times", f.printer_id, json!({ "endedAt": "2026-08-15T09:00:00Z" }), "Ended before it started."),
+    ];
+
+    for (name, printer_id, patch, expected) in cases {
+        let mut input = print_body(&f, "Success", vec![])["input"].clone();
+        for (k, v) in patch.as_object().unwrap() {
+            input[k] = v.clone();
+        }
+        input["notes"] = json!("changed");
+        let (status, res) = send(&pool, "PUT", &format!("/api/prints/{id}"), Some(json!({ "printerId": printer_id, "input": input }))).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{name}: {res:?}");
+        assert_eq!(res["error"], expected, "{name}");
+    }
+    let notes: String = sqlx::query_scalar("SELECT notes FROM prints WHERE id = ?1").bind(id).fetch_one(&pool).await.unwrap();
+    assert_eq!(notes, "test print");
+}
+
+// spec: 003/FR-031
+#[tokio::test]
+async fn attach_job_returns_404_for_a_missing_print_or_job() {
+    let pool = test_pool().await;
+    let f = seed_all(&pool).await;
+    let (_, created) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
+    let print_id = created["print"]["id"].as_i64().unwrap();
+    let job_id = seed_printer_job(&pool, f.printer_id, "job-1", "2026-01-01T08:00:00Z").await;
+
+    let (status, _) = send(&pool, "POST", "/api/prints/999/attach-job", Some(json!({ "jobId": job_id }))).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = send(&pool, "POST", &format!("/api/prints/{print_id}/attach-job"), Some(json!({ "jobId": 999 }))).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+// spec: 003/FR-031
+#[tokio::test]
+async fn attach_job_refuses_a_job_attached_to_another_print() {
+    let pool = test_pool().await;
+    let f = seed_all(&pool).await;
+    let (_, a) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
+    let (_, b) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
+    let (a, b) = (a["print"]["id"].as_i64().unwrap(), b["print"]["id"].as_i64().unwrap());
+    let job_id = seed_printer_job(&pool, f.printer_id, "job-1", "2026-01-01T08:00:00Z").await;
+    send(&pool, "POST", &format!("/api/prints/{a}/attach-job"), Some(json!({ "jobId": job_id }))).await;
+
+    let (status, res) = send(&pool, "POST", &format!("/api/prints/{b}/attach-job"), Some(json!({ "jobId": job_id }))).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{res:?}");
+    assert_eq!(res["error"], "already_attached");
+    let (status, _) = send(&pool, "POST", &format!("/api/prints/{a}/attach-job"), Some(json!({ "jobId": job_id }))).await;
+    assert_eq!(status, StatusCode::OK, "re-attaching to the same Print is fine");
+
+    let attached: Option<i64> = sqlx::query_scalar("SELECT print_id FROM printer_jobs WHERE id = ?1").bind(job_id).fetch_one(&pool).await.unwrap();
+    assert_eq!(attached, Some(a));
 }

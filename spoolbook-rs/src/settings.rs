@@ -1,9 +1,15 @@
+use axum::http::StatusCode;
 use axum::{Json, Router, extract::State, routing::get};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 
 pub const CATALOG_URL: &str =
     "https://raw.githubusercontent.com/t2vi/spoolbook-filament-sync/main/data/filament-catalog.json";
+
+// FILAMENT_CATALOG_URL overrides the published feed (tests point it at a local mock).
+pub fn catalog_url() -> String {
+    std::env::var("FILAMENT_CATALOG_URL").unwrap_or_else(|_| CATALOG_URL.to_string())
+}
 
 #[derive(sqlx::FromRow)]
 pub struct AppSettings {
@@ -18,7 +24,7 @@ pub struct AppSettings {
 struct SettingsResponse {
     additional_filament_source_urls: Option<String>,
     last_filament_sync_at: Option<String>,
-    catalog_url: &'static str,
+    catalog_url: String,
     latitude: Option<f64>,
     longitude: Option<f64>,
 }
@@ -56,13 +62,20 @@ async fn get_settings(State(pool): State<SqlitePool>) -> Json<SettingsResponse> 
     Json(SettingsResponse {
         additional_filament_source_urls: settings.additional_filament_source_urls,
         last_filament_sync_at: settings.last_filament_sync_at,
-        catalog_url: CATALOG_URL,
+        catalog_url: catalog_url(),
         latitude: settings.latitude,
         longitude: settings.longitude,
     })
 }
 
-async fn save_settings(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Json(req): Json<SaveSettingsRequest>) -> Json<serde_json::Value> {
+async fn save_settings(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Json(req): Json<SaveSettingsRequest>) -> (StatusCode, Json<serde_json::Value>) {
+    // An out-of-range location would make every later Print's weather fetch fail silently.
+    if req.latitude.is_some_and(|lat| !(-90.0..=90.0).contains(&lat)) {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "Latitude must be between -90 and 90." })));
+    }
+    if req.longitude.is_some_and(|lon| !(-180.0..=180.0).contains(&lon)) {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "Longitude must be between -180 and 180." })));
+    }
     fetch(&pool).await;
     let urls = req.additional_filament_source_urls.filter(|u| !u.trim().is_empty());
     sqlx::query("UPDATE app_settings SET additional_filament_source_urls = ?1, latitude = ?2, longitude = ?3 WHERE id = 1")
@@ -73,5 +86,5 @@ async fn save_settings(_editor: crate::auth::Editor, State(pool): State<SqlitePo
         .await
         .expect("update failed");
 
-    Json(serde_json::json!({ "ok": true }))
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true })))
 }

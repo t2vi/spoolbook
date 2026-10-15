@@ -134,6 +134,7 @@ async fn spawn_failing_slicer_service() -> String {
     format!("http://{addr}")
 }
 
+// spec: 005/FR-030
 #[tokio::test]
 async fn reslice_returns_not_found_for_a_missing_project() {
     let pool = test_pool().await;
@@ -146,6 +147,7 @@ async fn reslice_returns_not_found_for_a_missing_project() {
     assert_eq!(body["error"], "not_found");
 }
 
+// spec: 005/FR-030
 #[tokio::test]
 async fn reslice_returns_not_found_for_a_missing_profile() {
     let pool = test_pool().await;
@@ -160,6 +162,7 @@ async fn reslice_returns_not_found_for_a_missing_profile() {
     std::fs::remove_file(fixture_path).ok();
 }
 
+// spec: 005/FR-030
 #[tokio::test]
 async fn reslice_reports_an_error_when_the_project_has_no_settings_entry() {
     let pool = test_pool().await;
@@ -177,6 +180,7 @@ async fn reslice_reports_an_error_when_the_project_has_no_settings_entry() {
     std::fs::remove_file(fixture_path).ok();
 }
 
+// spec: 005/FR-030
 #[tokio::test]
 async fn reslice_reports_an_error_when_the_slicer_service_fails() {
     let _guard = ENV_LOCK.lock().unwrap();
@@ -197,6 +201,7 @@ async fn reslice_reports_an_error_when_the_slicer_service_fails() {
     std::fs::remove_file(fixture_path).ok();
 }
 
+// spec: 005/FR-030, 005/FR-031
 #[tokio::test]
 async fn reslice_patches_settings_and_saves_the_sliced_result() {
     let _guard = ENV_LOCK.lock().unwrap();
@@ -230,7 +235,8 @@ async fn reslice_patches_settings_and_saves_the_sliced_result() {
 
 // A real slicer's output is never byte-identical run to run, so project_upload's content-hash
 // dedup alone can never catch "re-sliced the same project again" -- reslicing.rs chains the
-// result onto the source project instead (docs/adr/0031's sibling gap, filed as issue #114).
+// result onto the source project instead (issue #114).
+// spec: 005/FR-032
 #[tokio::test]
 async fn reslice_chains_the_result_as_a_new_version_of_the_source_project() {
     let _guard = ENV_LOCK.lock().unwrap();
@@ -257,4 +263,26 @@ async fn reslice_chains_the_result_as_a_new_version_of_the_source_project() {
     assert!(ids.contains(&new_id), "{ids:?}");
 
     std::fs::remove_file(fixture_path).ok();
+}
+
+// spec: 005/FR-030
+#[tokio::test(start_paused = true)]
+async fn slicer_call_gives_up_on_a_hung_slicer_service() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let app = axum::Router::new().route(
+        "/slice",
+        axum::routing::post(|| async {
+            tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+            "late"
+        }),
+    );
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    unsafe { std::env::set_var("RESLICE_SERVICE_URL", format!("http://{addr}")) };
+    let path = write_fixture_3mf("hung-slicer.3mf");
+
+    let result = spoolbook_rs::reslicing::slice_via_service(&path).await;
+
+    assert!(result.is_err(), "should time out before the hour-late response");
 }

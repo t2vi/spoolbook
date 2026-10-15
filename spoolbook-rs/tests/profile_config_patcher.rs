@@ -26,6 +26,7 @@ fn minimal_profile() -> PrintProfile {
     PrintProfile { name: "Test".to_string(), filament_id: 1, nozzle_temp_c: 240, ..Default::default() }
 }
 
+// spec: 005/FR-031
 #[test]
 fn sets_scalar_field_mapped_to_array_key_at_index_zero_only() {
     let mut profile = minimal_profile();
@@ -37,6 +38,7 @@ fn sets_scalar_field_mapped_to_array_key_at_index_zero_only() {
     assert_eq!(result["nozzle_temperature"][1], "240", "second filament's value untouched");
 }
 
+// spec: 005/FR-031
 #[test]
 fn preserves_two_element_arrays_at_index_zero() {
     let mut profile = minimal_profile();
@@ -48,6 +50,7 @@ fn preserves_two_element_arrays_at_index_zero() {
     assert_eq!(result["nozzle_temperature_initial_layer"][1], "245");
 }
 
+// spec: 005/FR-031
 #[test]
 fn converts_bool_to_zero_one_not_true_false() {
     let mut profile = minimal_profile();
@@ -58,6 +61,7 @@ fn converts_bool_to_zero_one_not_true_false() {
     assert_eq!(result["long_retractions_when_cut"][0], "1");
 }
 
+// spec: 005/FR-031
 #[test]
 fn leaves_null_fields_original_value_untouched() {
     let profile = minimal_profile(); // hot_plate_temp_c left None
@@ -67,6 +71,7 @@ fn leaves_null_fields_original_value_untouched() {
     assert_eq!(result["hot_plate_temp"][0], "70", "fixture's original value, unchanged");
 }
 
+// spec: 005/FR-031
 #[test]
 fn leaves_keys_not_owned_by_print_profile_untouched() {
     let mut profile = minimal_profile();
@@ -79,6 +84,7 @@ fn leaves_keys_not_owned_by_print_profile_untouched() {
     assert_eq!(result["printer_model"], "Bambu Lab P2S");
 }
 
+// spec: 005/FR-031
 #[test]
 fn sets_a_plain_optional_int_field_at_index_zero() {
     let mut profile = minimal_profile();

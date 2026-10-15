@@ -28,6 +28,7 @@ fn finish_payload() -> &'static str {
     r#"{"print":{"gcode_state":"FINISH"}}"#
 }
 
+// spec: 001/FR-011, 001/FR-012
 #[tokio::test]
 async fn handle_message_records_a_reading_and_updates_the_live_store_on_active_state() {
     let pool = test_pool().await;
@@ -47,6 +48,7 @@ async fn handle_message_records_a_reading_and_updates_the_live_store_on_active_s
     assert_eq!(status.gcode_state.as_deref(), Some("RUNNING"));
 }
 
+// spec: 001/FR-020
 #[tokio::test]
 async fn handle_message_ends_the_active_job_on_transition_to_terminal_state() {
     let pool = test_pool().await;
@@ -66,6 +68,7 @@ async fn handle_message_ends_the_active_job_on_transition_to_terminal_state() {
     assert_eq!(status.gcode_state.as_deref(), Some("FINISH"));
 }
 
+// spec: 001/FR-020
 #[tokio::test]
 async fn handle_message_ends_the_open_job_via_db_fallback_when_active_task_id_was_lost_to_a_restart() {
     let pool = test_pool().await;
@@ -85,6 +88,7 @@ async fn handle_message_ends_the_open_job_via_db_fallback_when_active_task_id_wa
     assert!(ended_at.is_some(), "terminal message must end the DB's open job even with no in-memory active_task_id");
 }
 
+// spec: 001/FR-020
 #[tokio::test]
 async fn handle_message_does_not_end_a_job_twice_on_repeated_terminal_messages() {
     let pool = test_pool().await;
@@ -102,6 +106,7 @@ async fn handle_message_does_not_end_a_job_twice_on_repeated_terminal_messages()
     assert_eq!(active_task_id, None);
 }
 
+// spec: 001/FR-010
 #[tokio::test]
 async fn handle_message_ignores_unparseable_payloads() {
     let pool = test_pool().await;
@@ -118,6 +123,7 @@ async fn handle_message_ignores_unparseable_payloads() {
     assert!(!status.connected);
 }
 
+// spec: 001/FR-011
 #[tokio::test]
 async fn handle_message_does_not_overwrite_ams_units_with_an_empty_update() {
     let pool = test_pool().await;
@@ -155,6 +161,7 @@ async fn send_sse(pool: &sqlx::SqlitePool, store: &spoolbook_rs::printer_mqtt::L
     (status, String::from_utf8(first_chunk.to_vec()).unwrap())
 }
 
+// spec: 004/FR-010
 #[tokio::test]
 async fn live_endpoint_streams_the_stores_snapshot_for_the_requested_printer() {
     let pool = test_pool().await;
@@ -174,6 +181,7 @@ async fn live_endpoint_streams_the_stores_snapshot_for_the_requested_printer() {
     assert_eq!(json["cameraStatus"], "NotStarted");
 }
 
+// spec: 004/FR-010
 #[tokio::test]
 async fn live_endpoint_reports_disconnected_for_a_printer_with_no_live_status() {
     let pool = test_pool().await;

@@ -24,7 +24,7 @@ async fn main() {
     spoolbook_rs::auth::migrate_env_var_admin_if_needed(&pool).await;
 
     // Converts any already-finished Print's raw Readings into its telemetry_json snapshot --
-    // covers Prints that finished before docs/adr/0032 shipped. Idempotent, same posture as the
+    // covers Prints that finished before Readings were collapsed at job end. Idempotent, same posture as the
     // admin migration above.
     spoolbook_rs::printer_telemetry::backfill_reading_snapshots(&pool).await;
 

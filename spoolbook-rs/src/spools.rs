@@ -137,6 +137,16 @@ pub async fn fetch_by_id(pool: &SqlitePool, id: i64) -> Option<Spool> {
     Some(attach_filament(pool, row).await)
 }
 
+const DATES_OUT_OF_ORDER: &str = "Dates are out of order — purchased, then opened, then emptied.";
+
+// Compared by calendar day (first 10 chars of the ISO date/datetime), so a date-only value and a
+// full timestamp on the same day still count as in order.
+fn dates_in_order(input: &SpoolInput) -> bool {
+    let day = |d: &Option<String>| d.as_deref().map(|d| d.get(..10).unwrap_or(d).to_string());
+    let dates: Vec<String> = [&input.purchased_at, &input.opened_at, &input.emptied_at].into_iter().filter_map(day).collect();
+    dates.windows(2).all(|w| w[0] <= w[1])
+}
+
 fn err(status: StatusCode, message: &str) -> (StatusCode, Json<SpoolResult>) {
     (status, Json(SpoolResult { ok: false, error: Some(message.to_string()), spool: None }))
 }
@@ -147,6 +157,17 @@ async fn create(
     Json(body): Json<CreateSpoolInput>,
 ) -> (StatusCode, Json<SpoolResult>) {
     let input = body.input;
+    let filament_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM filaments WHERE id = ?1)")
+        .bind(body.filament_id)
+        .fetch_one(&pool)
+        .await
+        .expect("query failed");
+    if !filament_exists {
+        return err(StatusCode::BAD_REQUEST, "Unknown filament.");
+    }
+    if !dates_in_order(&input) {
+        return err(StatusCode::BAD_REQUEST, DATES_OUT_OF_ORDER);
+    }
     let row = sqlx::query_as::<_, SpoolRow>(
         "INSERT INTO spools (filament_id, lot_code, purchased_at, opened_at, emptied_at, weight_grams, diameter_mm, notes)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
@@ -174,6 +195,9 @@ async fn update(
     Path(id): Path<i64>,
     Json(input): Json<SpoolInput>,
 ) -> (StatusCode, Json<SpoolResult>) {
+    if !dates_in_order(&input) {
+        return err(StatusCode::BAD_REQUEST, DATES_OUT_OF_ORDER);
+    }
     let row = sqlx::query_as::<_, SpoolRow>(
         "UPDATE spools SET lot_code = ?1, purchased_at = ?2, opened_at = ?3, emptied_at = ?4,
          weight_grams = ?5, diameter_mm = ?6, notes = ?7

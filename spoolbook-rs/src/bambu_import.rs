@@ -261,7 +261,8 @@ fn slicer_base_url() -> String {
 }
 
 async fn fetch_json(url: &str) -> Result<Value, String> {
-    let resp = reqwest::get(url).await.map_err(|e| e.to_string())?;
+    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(30)).build().map_err(|e| e.to_string())?;
+    let resp = client.get(url).send().await.map_err(|e| e.to_string())?;
     if !resp.status().is_success() {
         return Err(format!("request to slicer-service failed: {}", resp.status()));
     }

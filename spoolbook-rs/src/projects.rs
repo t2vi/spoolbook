@@ -9,11 +9,8 @@ use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::io::Read;
 
-// Upload and import-from-url (see project_upload.rs) build on the mesh-hash/upsert helpers
-// below — plain file I/O and an HTTP GET, no different in kind from filament_catalog_sync's
-// fetch. Only reslicing stays out of scope: it shells out to Bambu Studio as an external
-// process, the same deferred tier as MQTT/camera (live hardware/process integration, not data
-// layer).
+// Upload and import-from-url (project_upload.rs) and re-slicing (reslicing.rs, via the
+// slicer-service container) build on the mesh-hash/upsert/version-chain helpers below.
 #[derive(Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {
@@ -40,7 +37,9 @@ pub(crate) const COLUMNS: &str = "id, file_path, file_name, last_known_write_tim
     mesh_hash, previous_version_project_id, version_number, is_current_version";
 
 // sha256 of just the mesh geometry entry, not the whole file — a re-slice of the same design
-// changes settings/thumbnails but usually not this. Byte-exact, not canonicalized (docs/adr/0023).
+// changes settings/thumbnails but usually not this. Byte-exact, not canonicalized: a re-export
+// that only reformats the XML misses the match and falls back to the filename signal — never a
+// wrong automatic link. Normalize only if byte-exact proves noisy in practice.
 // Returns None for anything that isn't a readable .3mf zip with that entry, rather than panicking.
 pub(crate) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -175,10 +174,41 @@ async fn delete(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Pa
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "has_prints" })));
     }
 
-    let result = sqlx::query("DELETE FROM projects WHERE id = ?1").bind(id).execute(&pool).await.expect("delete failed");
+    let has_newer_version: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM projects WHERE previous_version_project_id = ?1)")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .expect("query failed");
+    if has_newer_version {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "has_newer_version" })));
+    }
 
-    if result.rows_affected() == 0 {
+    // Same rule as print profiles: only the tip of a chain can go, and the previous version takes
+    // over as current so the history stays listed.
+    let mut tx = pool.begin().await.expect("begin failed");
+    let deleted = sqlx::query_as::<_, (String, Option<i64>, bool)>(
+        "DELETE FROM projects WHERE id = ?1 RETURNING file_path, previous_version_project_id, is_current_version",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await
+    .expect("delete failed");
+    let Some((file_path, previous_id, was_current)) = deleted else {
         return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "ok": false, "error": "not_found" })));
+    };
+    if was_current && let Some(previous_id) = previous_id {
+        sqlx::query("UPDATE projects SET is_current_version = 1 WHERE id = ?1").bind(previous_id).execute(&mut *tx).await.expect("update failed");
+    }
+    let file_still_used: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM projects WHERE file_path = ?1)")
+        .bind(&file_path)
+        .fetch_one(&mut *tx)
+        .await
+        .expect("query failed");
+    tx.commit().await.expect("commit failed");
+
+    // After commit, so a failed delete never loses the file; a missing file is fine.
+    if !file_still_used {
+        std::fs::remove_file(&file_path).ok();
     }
 
     (StatusCode::OK, Json(serde_json::json!({ "ok": true })))
@@ -315,6 +345,23 @@ async fn link_version(
     Path(new_id): Path<i64>,
     Json(input): Json<LinkVersionInput>,
 ) -> (StatusCode, Json<serde_json::Value>) {
+    // Walk the predecessor's own history: reaching new_id (or starting at it) means a loop.
+    let would_create_cycle: bool = sqlx::query_scalar(
+        "WITH RECURSIVE ancestors(id) AS (
+             SELECT ?1
+             UNION SELECT p.previous_version_project_id FROM projects p JOIN ancestors a ON p.id = a.id
+             WHERE p.previous_version_project_id IS NOT NULL
+         )
+         SELECT EXISTS(SELECT 1 FROM ancestors WHERE id = ?2)",
+    )
+    .bind(input.previous_version_project_id)
+    .bind(new_id)
+    .fetch_one(&pool)
+    .await
+    .expect("query failed");
+    if would_create_cycle {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "would_create_cycle" })));
+    }
     if link_version_chain(&pool, new_id, input.previous_version_project_id).await {
         (StatusCode::OK, Json(serde_json::json!({ "ok": true })))
     } else {

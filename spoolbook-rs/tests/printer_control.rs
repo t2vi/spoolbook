@@ -42,6 +42,7 @@ async fn seed_printer(pool: &sqlx::SqlitePool, serial_number: Option<&str>) -> i
         .unwrap()
 }
 
+// spec: 004/FR-013
 #[tokio::test]
 async fn control_returns_not_found_for_missing_printer() {
     let pool = test_pool().await;
@@ -53,6 +54,7 @@ async fn control_returns_not_found_for_missing_printer() {
     assert_eq!(body["error"], "not_found");
 }
 
+// spec: 004/FR-013
 #[tokio::test]
 async fn control_returns_not_found_for_a_printer_with_no_serial_number() {
     let pool = test_pool().await;
@@ -65,6 +67,7 @@ async fn control_returns_not_found_for_a_printer_with_no_serial_number() {
     assert_eq!(body["error"], "not_found");
 }
 
+// spec: 004/FR-013
 #[tokio::test]
 async fn control_rejects_an_unknown_command() {
     let pool = test_pool().await;
@@ -78,6 +81,7 @@ async fn control_rejects_an_unknown_command() {
     assert_eq!(body["error"], "Unknown command.");
 }
 
+// spec: 004/FR-013
 #[tokio::test]
 async fn control_fails_when_the_printer_has_no_live_connection() {
     let pool = test_pool().await;
@@ -91,6 +95,7 @@ async fn control_fails_when_the_printer_has_no_live_connection() {
     assert_eq!(body["error"], "Printer isn't connected — telemetry link is down or still reconnecting.");
 }
 
+// spec: 004/FR-013
 #[tokio::test]
 async fn control_publishes_when_a_live_client_is_registered() {
     let pool = test_pool().await;

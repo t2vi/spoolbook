@@ -81,6 +81,7 @@ async fn seed_project(pool: &sqlx::SqlitePool, file_path: &str, mesh_hash: Optio
     .unwrap()
 }
 
+// spec: 005/FR-010
 #[tokio::test]
 async fn list_returns_empty_array_when_none_exist() {
     let pool = test_pool().await;
@@ -101,6 +102,7 @@ async fn list_returns_seeded_projects() {
     assert_eq!(body[0]["filePath"], "/tmp/a.3mf");
 }
 
+// spec: 005/FR-010
 #[tokio::test]
 async fn get_one_returns_the_project() {
     let pool = test_pool().await;
@@ -113,6 +115,7 @@ async fn get_one_returns_the_project() {
     assert_eq!(body["filePath"], "/tmp/detail.3mf");
 }
 
+// spec: 005/FR-010
 #[tokio::test]
 async fn get_one_returns_not_found_for_missing_project() {
     let pool = test_pool().await;
@@ -122,6 +125,7 @@ async fn get_one_returns_not_found_for_missing_project() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
+// spec: 005/FR-011
 #[tokio::test]
 async fn plates_reads_real_zip_and_returns_plate_metadata_and_thumbnail() {
     let pool = test_pool().await;
@@ -140,6 +144,7 @@ async fn plates_reads_real_zip_and_returns_plate_metadata_and_thumbnail() {
     std::fs::remove_file(fixture_path).ok();
 }
 
+// spec: 005/FR-011
 #[tokio::test]
 async fn plates_returns_not_found_for_missing_project_id() {
     let pool = test_pool().await;
@@ -147,6 +152,7 @@ async fn plates_returns_not_found_for_missing_project_id() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
+// spec: 005/FR-021
 #[tokio::test]
 async fn version_candidate_matches_by_mesh_hash_first() {
     let pool = test_pool().await;
@@ -165,6 +171,7 @@ async fn version_candidate_matches_by_mesh_hash_first() {
     assert_eq!(body["filePath"], "/tmp/old.3mf");
 }
 
+// spec: 005/FR-021
 #[tokio::test]
 async fn version_candidate_falls_back_to_filename() {
     let pool = test_pool().await;
@@ -186,6 +193,7 @@ async fn version_candidate_falls_back_to_filename() {
     assert_eq!(body["fileName"], "match_me.3mf");
 }
 
+// spec: 005/FR-021
 #[tokio::test]
 async fn version_candidate_returns_null_when_nothing_matches() {
     let pool = test_pool().await;
@@ -194,6 +202,7 @@ async fn version_candidate_returns_null_when_nothing_matches() {
     assert_eq!(body, Value::Null);
 }
 
+// spec: 005/FR-020
 #[tokio::test]
 async fn link_version_marks_previous_superseded_and_bumps_version_number() {
     let pool = test_pool().await;
@@ -227,6 +236,7 @@ async fn link_version_marks_previous_superseded_and_bumps_version_number() {
     assert_eq!(new["previousVersionProjectId"], old_id);
 }
 
+// spec: 005/FR-020, 005/FR-010
 #[tokio::test]
 async fn link_version_hides_superseded_versions_from_list() {
     let pool = test_pool().await;
@@ -241,6 +251,7 @@ async fn link_version_hides_superseded_versions_from_list() {
     assert!(ids.contains(&new_id), "{ids:?}");
 }
 
+// spec: 005/FR-012
 #[tokio::test]
 async fn rename_updates_the_display_name() {
     let pool = test_pool().await;
@@ -255,6 +266,7 @@ async fn rename_updates_the_display_name() {
     assert_eq!(all[0]["fileName"], "Better name.3mf");
 }
 
+// spec: 005/FR-012
 #[tokio::test]
 async fn rename_rejects_a_blank_name() {
     let pool = test_pool().await;
@@ -265,6 +277,7 @@ async fn rename_rejects_a_blank_name() {
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
 }
 
+// spec: 005/FR-012
 #[tokio::test]
 async fn rename_returns_not_found_for_missing_project() {
     let pool = test_pool().await;
@@ -272,6 +285,7 @@ async fn rename_returns_not_found_for_missing_project() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
+// spec: 005/FR-013
 #[tokio::test]
 async fn delete_removes_an_unreferenced_project() {
     let pool = test_pool().await;
@@ -284,6 +298,7 @@ async fn delete_removes_an_unreferenced_project() {
     assert_eq!(all.as_array().unwrap().len(), 0);
 }
 
+// spec: 005/FR-013
 #[tokio::test]
 async fn delete_returns_not_found_for_missing_project() {
     let pool = test_pool().await;
@@ -315,6 +330,7 @@ async fn seed_print_referencing_project(pool: &sqlx::SqlitePool, project_id: i64
         .unwrap();
 }
 
+// spec: 005/FR-013
 #[tokio::test]
 async fn delete_rejects_a_project_referenced_by_a_print() {
     let pool = test_pool().await;
@@ -328,4 +344,72 @@ async fn delete_rejects_a_project_referenced_by_a_print() {
 
     let (_, all) = send(&pool, "GET", "/api/projects", None).await;
     assert_eq!(all.as_array().unwrap().len(), 1);
+}
+
+async fn seed_chain(pool: &sqlx::SqlitePool, v1_path: &str, v2_path: &str) -> (i64, i64) {
+    let v1 = seed_project(pool, v1_path, None).await;
+    let v2 = seed_project(pool, v2_path, None).await;
+    send(pool, "POST", &format!("/api/projects/{v2}/link-version"), Some(serde_json::json!({ "previousVersionProjectId": v1 }))).await;
+    (v1, v2)
+}
+
+// spec: 005/FR-013
+#[tokio::test]
+async fn delete_refuses_a_version_a_newer_one_builds_on() {
+    let pool = test_pool().await;
+    let (v1, _) = seed_chain(&pool, "/tmp/chain-a1.3mf", "/tmp/chain-a2.3mf").await;
+
+    let (status, body) = send(&pool, "DELETE", &format!("/api/projects/{v1}"), None).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    assert_eq!(body["error"], "has_newer_version");
+}
+
+// spec: 005/FR-013
+#[tokio::test]
+async fn deleting_the_current_version_makes_the_previous_one_current() {
+    let pool = test_pool().await;
+    let (v1, v2) = seed_chain(&pool, "/tmp/chain-b1.3mf", "/tmp/chain-b2.3mf").await;
+
+    let (status, body) = send(&pool, "DELETE", &format!("/api/projects/{v2}"), None).await;
+
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    let (_, all) = send(&pool, "GET", "/api/projects", None).await;
+    let ids: Vec<i64> = all.as_array().unwrap().iter().map(|p| p["id"].as_i64().unwrap()).collect();
+    assert_eq!(ids, vec![v1]);
+}
+
+// spec: 005/FR-013
+#[tokio::test]
+async fn delete_removes_the_stored_file_unless_another_project_uses_it() {
+    let pool = test_pool().await;
+    let own = write_fixture_3mf("delete-own.3mf");
+    let shared = write_fixture_3mf("delete-shared.3mf");
+    let a = seed_project(&pool, own.to_str().unwrap(), None).await;
+    let b = seed_project(&pool, shared.to_str().unwrap(), None).await;
+    seed_project(&pool, shared.to_str().unwrap(), None).await;
+
+    send(&pool, "DELETE", &format!("/api/projects/{a}"), None).await;
+    send(&pool, "DELETE", &format!("/api/projects/{b}"), None).await;
+
+    assert!(!own.exists(), "file of a deleted project should be removed");
+    assert!(shared.exists(), "file still used by another project must stay");
+    std::fs::remove_file(shared).ok();
+}
+
+// spec: 005/FR-020
+#[tokio::test]
+async fn link_version_refuses_a_self_link_or_a_cycle() {
+    let pool = test_pool().await;
+    let (v1, v2) = seed_chain(&pool, "/tmp/cycle-1.3mf", "/tmp/cycle-2.3mf").await;
+
+    for (id, previous) in [(v1, v1), (v1, v2)] {
+        let (status, body) =
+            send(&pool, "POST", &format!("/api/projects/{id}/link-version"), Some(serde_json::json!({ "previousVersionProjectId": previous }))).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{id} -> {previous}: {body:?}");
+        assert_eq!(body["error"], "would_create_cycle");
+    }
+    let previous_of_v1: Option<i64> =
+        sqlx::query_scalar("SELECT previous_version_project_id FROM projects WHERE id = ?1").bind(v1).fetch_one(&pool).await.unwrap();
+    assert_eq!(previous_of_v1, None);
 }

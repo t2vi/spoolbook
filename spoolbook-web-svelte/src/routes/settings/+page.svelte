@@ -104,8 +104,13 @@
 	async function save() {
 		const lat = latitude.trim() ? Number(latitude) : null;
 		const lon = longitude.trim() ? Number(longitude) : null;
-		await saveSettings(additionalUrls.trim() || null, lat, lon);
-		savedMessage = 'Saved.';
+		try {
+			await saveSettings(additionalUrls.trim() || null, lat, lon);
+			savedMessage = 'Saved.';
+		} catch (e) {
+			// A refused save (e.g. out-of-range location) is a 4xx, which request() throws on.
+			savedMessage = e instanceof Error ? e.message : 'Save failed.';
+		}
 	}
 
 	async function saveAccount() {
@@ -113,7 +118,12 @@
 		accountSavedMessage = null;
 		const result = await updateAccount(currentPassword, newUsername.trim() || undefined, newPassword || undefined);
 		if (!result.ok) {
-			accountError = result.error === 'wrong_current_password' ? 'Current password is wrong.' : 'Update failed.';
+			const messages: Record<string, string> = {
+				wrong_current_password: 'Current password is wrong.',
+				password_too_short: 'New password must be at least 8 characters.',
+				username_taken: 'That username is already taken.'
+			};
+			accountError = messages[result.error ?? ''] ?? 'Update failed.';
 			return;
 		}
 		currentPassword = '';

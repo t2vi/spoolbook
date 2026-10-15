@@ -92,6 +92,7 @@ fn full_profile_body() -> Value {
     })
 }
 
+// spec: 006/FR-010
 #[tokio::test]
 async fn create_persists_and_round_trips_fields_across_the_whole_column_list() {
     let pool = test_pool().await;
@@ -126,6 +127,7 @@ async fn create_persists_and_round_trips_fields_across_the_whole_column_list() {
     assert_eq!(p["nozzleTempRangeHighC"], Value::Null);
 }
 
+// spec: 006/FR-011
 #[tokio::test]
 async fn create_leaves_blank_fields_as_none() {
     let pool = test_pool().await;
@@ -145,6 +147,7 @@ async fn create_leaves_blank_fields_as_none() {
     assert_eq!(p["shrinkPct"], Value::Null);
 }
 
+// spec: 006/FR-011
 #[tokio::test]
 async fn create_rejects_blank_name() {
     let pool = test_pool().await;
@@ -158,6 +161,7 @@ async fn create_rejects_blank_name() {
     assert_eq!(resp["ok"], false);
 }
 
+// spec: 006/FR-011
 #[tokio::test]
 async fn create_rejects_blank_nozzle_temp_c() {
     let pool = test_pool().await;
@@ -172,6 +176,7 @@ async fn create_rejects_blank_nozzle_temp_c() {
     assert!(resp["errors"]["NozzleTempC"].is_string(), "{resp:?}");
 }
 
+// spec: 006/FR-011
 #[tokio::test]
 async fn create_rejects_unparseable_nozzle_temp_c() {
     let pool = test_pool().await;
@@ -186,6 +191,7 @@ async fn create_rejects_unparseable_nozzle_temp_c() {
     assert!(resp["errors"]["NozzleTempC"].is_string(), "{resp:?}");
 }
 
+// spec: 006/FR-011
 #[tokio::test]
 async fn create_rejects_an_unparseable_optional_numeric_field_instead_of_defaulting() {
     let pool = test_pool().await;
@@ -200,6 +206,7 @@ async fn create_rejects_an_unparseable_optional_numeric_field_instead_of_default
     assert!(resp["errors"]["RetractionMm"].is_string(), "{resp:?}");
 }
 
+// spec: 006/FR-001
 #[tokio::test]
 async fn list_for_filament_only_returns_current_versions_sorted_generic_first() {
     let pool = test_pool().await;
@@ -222,6 +229,7 @@ async fn list_for_filament_only_returns_current_versions_sorted_generic_first() 
     assert_eq!(names, vec!["Aaa second", "Zzz spool-specific"]);
 }
 
+// spec: 006/FR-002
 #[tokio::test]
 async fn inventory_returns_total_and_profiles() {
     let pool = test_pool().await;
@@ -237,6 +245,7 @@ async fn inventory_returns_total_and_profiles() {
     assert_eq!(body["profiles"][0]["filament"]["material"], "PLA");
 }
 
+// spec: 006/FR-012
 #[tokio::test]
 async fn update_persists_changes_across_the_column_list() {
     let pool = test_pool().await;
@@ -264,6 +273,7 @@ async fn update_persists_changes_across_the_column_list() {
     assert_eq!(p["versionNumber"], 1);
 }
 
+// spec: 006/FR-011
 #[tokio::test]
 async fn update_rejects_blank_nozzle_temp_c() {
     let pool = test_pool().await;
@@ -281,6 +291,7 @@ async fn update_rejects_blank_nozzle_temp_c() {
     assert!(resp["errors"]["NozzleTempC"].is_string(), "{resp:?}");
 }
 
+// spec: 006/FR-012
 #[tokio::test]
 async fn update_returns_not_found_for_missing_id() {
     let pool = test_pool().await;
@@ -316,6 +327,7 @@ async fn attach_print(pool: &sqlx::SqlitePool, profile_id: i64, spool_id: i64, p
     assert_eq!(status, StatusCode::OK, "{body:?}");
 }
 
+// spec: 006/FR-020
 #[tokio::test]
 async fn update_rejects_a_version_used_in_a_print() {
     let pool = test_pool().await;
@@ -338,6 +350,7 @@ async fn update_rejects_a_version_used_in_a_print() {
     assert_eq!(inventory["profiles"][0]["name"], "Cold day tune", "profile must survive the rejected update unchanged");
 }
 
+// spec: 006/FR-013
 #[tokio::test]
 async fn delete_rejects_a_version_used_in_a_print() {
     let pool = test_pool().await;
@@ -357,6 +370,7 @@ async fn delete_rejects_a_version_used_in_a_print() {
     assert_eq!(inventory["total"], 1, "profile must survive the rejected delete");
 }
 
+// spec: 006/FR-003
 #[tokio::test]
 async fn field_spec_returns_blank_tabs_when_no_profile_id() {
     let pool = test_pool().await;
@@ -396,6 +410,7 @@ async fn field_spec_returns_blank_tabs_when_no_profile_id() {
     assert_eq!(long_retraction["unit"], "");
 }
 
+// spec: 006/FR-003
 #[tokio::test]
 async fn field_spec_returns_not_found_for_missing_profile_id() {
     let pool = test_pool().await;
@@ -404,6 +419,7 @@ async fn field_spec_returns_not_found_for_missing_profile_id() {
     assert_eq!(body["error"], "not_found");
 }
 
+// spec: 006/FR-003
 #[tokio::test]
 async fn field_spec_returns_the_profiles_name_and_populated_values() {
     let pool = test_pool().await;
@@ -436,6 +452,7 @@ async fn field_spec_returns_the_profiles_name_and_populated_values() {
 
 // Round-trips the exact form flow: load blank spec -> save -> reload same profile's spec (now
 // pre-filled) -> edit -> save again, all through the same create/parse/update code path.
+// spec: 006/FR-003, 006/FR-012
 #[tokio::test]
 async fn field_spec_round_trips_through_create_then_edit_then_update() {
     let pool = test_pool().await;
@@ -465,6 +482,7 @@ async fn field_spec_round_trips_through_create_then_edit_then_update() {
     assert_eq!(nozzle_temp["value"], "205");
 }
 
+// spec: 006/FR-013
 #[tokio::test]
 async fn delete_removes_the_profile() {
     let pool = test_pool().await;
@@ -479,9 +497,277 @@ async fn delete_removes_the_profile() {
     assert_eq!(body["total"], 0);
 }
 
+// spec: 006/FR-013
 #[tokio::test]
 async fn delete_returns_not_found_for_missing_id() {
     let pool = test_pool().await;
     let (status, _) = send(&pool, "DELETE", "/api/profiles/999", None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+async fn create_profile(pool: &sqlx::SqlitePool, filament_id: i64) -> i64 {
+    let (_, created) = send(pool, "POST", &format!("/api/profiles?filamentId={filament_id}"), Some(full_profile_body())).await;
+    created["profile"]["id"].as_i64().unwrap()
+}
+
+async fn is_current(pool: &sqlx::SqlitePool, id: i64) -> bool {
+    sqlx::query_scalar("SELECT is_current_version FROM print_profiles WHERE id = ?1").bind(id).fetch_one(pool).await.unwrap()
+}
+
+// spec: 006/FR-021, 006/FR-022
+#[tokio::test]
+async fn new_version_of_a_locked_profile_chains_v2_and_demotes_v1() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    let spool_id = seed_spool(&pool, filament_id).await;
+    let printer_id = seed_printer(&pool).await;
+    attach_print(&pool, v1, spool_id, printer_id).await;
+
+    let mut edited = full_profile_body();
+    edited["fields"]["NozzleTempC"] = json!("230");
+    let (status, body) = send(&pool, "POST", &format!("/api/profiles/{v1}/versions"), Some(edited)).await;
+
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let v2 = &body["profile"];
+    assert_ne!(v2["id"], v1);
+    assert_eq!(v2["versionNumber"], 2);
+    assert_eq!(v2["previousVersionProfileId"], v1);
+    assert_eq!(v2["isCurrentVersion"], true);
+    assert_eq!(v2["nozzleTempC"], 230);
+    assert!(!is_current(&pool, v1).await);
+
+    let (_, listed) = send(&pool, "GET", &format!("/api/profiles?filamentId={filament_id}"), None).await;
+    let ids: Vec<i64> = listed.as_array().unwrap().iter().map(|p| p["id"].as_i64().unwrap()).collect();
+    assert_eq!(ids, vec![v2["id"].as_i64().unwrap()]);
+    let v1_temp: i64 = sqlx::query_scalar("SELECT nozzle_temp_c FROM print_profiles WHERE id = ?1").bind(v1).fetch_one(&pool).await.unwrap();
+    assert_eq!(v1_temp, 220, "the locked version itself never changes");
+}
+
+// spec: 006/FR-021
+#[tokio::test]
+async fn new_version_keeps_the_sources_provenance_and_notes_ignoring_the_requests_and_clears_the_version_name() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    sqlx::query("UPDATE print_profiles SET source = 'BambuPreset', source_preset_path = 'Bambu PLA Basic', notes = 'dries well', version_name = 'Winter' WHERE id = ?1")
+        .bind(v1).execute(&pool).await.unwrap();
+
+    let mut edited = full_profile_body();
+    edited["source"] = json!("Manual");
+    edited["rawSettingsJson"] = json!("{}");
+    let (_, body) = send(&pool, "POST", &format!("/api/profiles/{v1}/versions"), Some(edited)).await;
+
+    let v2 = body["profile"]["id"].as_i64().unwrap();
+    let (source, preset, notes, version_name): (String, Option<String>, Option<String>, Option<String>) =
+        sqlx::query_as("SELECT source, source_preset_path, notes, version_name FROM print_profiles WHERE id = ?1").bind(v2).fetch_one(&pool).await.unwrap();
+    assert_eq!(source, "BambuPreset");
+    assert_eq!(preset.as_deref(), Some("Bambu PLA Basic"));
+    assert_eq!(notes.as_deref(), Some("dries well"));
+    assert_eq!(version_name, None);
+}
+
+// spec: 006/FR-021
+#[tokio::test]
+async fn new_version_from_a_superseded_version_is_rejected() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    send(&pool, "POST", &format!("/api/profiles/{v1}/versions"), Some(full_profile_body())).await;
+
+    let (status, body) = send(&pool, "POST", &format!("/api/profiles/{v1}/versions"), Some(full_profile_body())).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["errors"]["id"], "not_current_version");
+}
+
+// spec: 006/FR-021
+#[tokio::test]
+async fn new_version_returns_not_found_for_missing_id() {
+    let pool = test_pool().await;
+    let (status, _) = send(&pool, "POST", "/api/profiles/999/versions", Some(full_profile_body())).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+// spec: 006/FR-021, 006/FR-011
+#[tokio::test]
+async fn new_version_with_invalid_fields_changes_nothing() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    let mut bad = full_profile_body();
+    bad["fields"]["NozzleTempC"] = json!("");
+
+    let (status, _) = send(&pool, "POST", &format!("/api/profiles/{v1}/versions"), Some(bad)).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM print_profiles").fetch_one(&pool).await.unwrap();
+    assert_eq!(count, 1);
+    assert!(is_current(&pool, v1).await);
+}
+
+// spec: 006/FR-013
+#[tokio::test]
+async fn delete_rejects_a_version_that_a_newer_version_builds_on() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    send(&pool, "POST", &format!("/api/profiles/{v1}/versions"), Some(full_profile_body())).await;
+
+    let (status, body) = send(&pool, "DELETE", &format!("/api/profiles/{v1}"), None).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "has_newer_version");
+}
+
+// spec: 006/FR-013
+#[tokio::test]
+async fn deleting_the_current_version_makes_the_previous_one_current_again() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    let (_, body) = send(&pool, "POST", &format!("/api/profiles/{v1}/versions"), Some(full_profile_body())).await;
+    let v2 = body["profile"]["id"].as_i64().unwrap();
+
+    let (status, _) = send(&pool, "DELETE", &format!("/api/profiles/{v2}"), None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(is_current(&pool, v1).await);
+}
+
+// spec: 006/FR-012
+#[tokio::test]
+async fn update_keeps_notes_and_version_name() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let id = create_profile(&pool, filament_id).await;
+    sqlx::query("UPDATE print_profiles SET notes = 'dries well', version_name = 'Winter' WHERE id = ?1").bind(id).execute(&pool).await.unwrap();
+
+    send(&pool, "PUT", &format!("/api/profiles/{id}"), Some(full_profile_body())).await;
+
+    let (notes, version_name): (Option<String>, Option<String>) =
+        sqlx::query_as("SELECT notes, version_name FROM print_profiles WHERE id = ?1").bind(id).fetch_one(&pool).await.unwrap();
+    assert_eq!(notes.as_deref(), Some("dries well"));
+    assert_eq!(version_name.as_deref(), Some("Winter"));
+}
+
+// spec: 006/FR-003
+#[tokio::test]
+async fn field_spec_reports_the_version_number_and_whether_it_is_current() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    let (_, body) = send(&pool, "POST", &format!("/api/profiles/{v1}/versions"), Some(full_profile_body())).await;
+    let v2 = body["profile"]["id"].as_i64().unwrap();
+
+    let (_, spec1) = send(&pool, "GET", &format!("/api/profiles/field-spec?profileId={v1}"), None).await;
+    let (_, spec2) = send(&pool, "GET", &format!("/api/profiles/field-spec?profileId={v2}"), None).await;
+
+    assert_eq!((spec1["versionNumber"].clone(), spec1["isCurrentVersion"].clone()), (json!(1), json!(false)));
+    assert_eq!((spec2["versionNumber"].clone(), spec2["isCurrentVersion"].clone()), (json!(2), json!(true)));
+}
+
+async fn seed_second_filament(pool: &sqlx::SqlitePool) -> i64 {
+    let (_, body) = send(
+        pool,
+        "POST",
+        "/api/filaments",
+        Some(json!({ "brand": "Polymaker", "material": "PETG", "variant": null, "color": "Blue" })),
+    )
+    .await;
+    body["entry"]["id"].as_i64().unwrap()
+}
+
+async fn profile_count(pool: &sqlx::SqlitePool) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM print_profiles").fetch_one(pool).await.unwrap()
+}
+
+// spec: 006/FR-010
+#[tokio::test]
+async fn create_rejects_an_unknown_filament_or_a_bad_spool() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let other_filament = seed_second_filament(&pool).await;
+    let other_spool = seed_spool(&pool, other_filament).await;
+
+    let cases = [
+        (999, Value::Null, "filamentId", "Unknown filament."),
+        (filament_id, json!(999), "spoolId", "Unknown spool."),
+        (filament_id, json!(other_spool), "spoolId", "That spool is a different filament."),
+    ];
+    for (filament, spool, field, message) in cases {
+        let mut body = full_profile_body();
+        body["spoolId"] = spool;
+        let (status, res) = send(&pool, "POST", &format!("/api/profiles?filamentId={filament}"), Some(body)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{field}: {res:?}");
+        assert_eq!(res["errors"][field], message);
+    }
+    assert_eq!(profile_count(&pool).await, 0);
+}
+
+// spec: 006/FR-010, 006/FR-012, 006/FR-021
+#[tokio::test]
+async fn update_and_new_version_reject_another_filaments_spool() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let other_spool = seed_spool(&pool, seed_second_filament(&pool).await).await;
+    let (_, created) = send(&pool, "POST", &format!("/api/profiles?filamentId={filament_id}"), Some(full_profile_body())).await;
+    let id = created["profile"]["id"].as_i64().unwrap();
+
+    let mut body = full_profile_body();
+    body["spoolId"] = json!(other_spool);
+    for uri in [format!("/api/profiles/{id}"), format!("/api/profiles/{id}/versions")] {
+        let method = if uri.ends_with("versions") { "POST" } else { "PUT" };
+        let (status, res) = send(&pool, method, &uri, Some(body.clone())).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{uri}: {res:?}");
+        assert_eq!(res["errors"]["spoolId"], "That spool is a different filament.");
+    }
+    assert_eq!(profile_count(&pool).await, 1);
+}
+
+// The edit page relies on this to keep an imported profile's provenance (FR-041, #183).
+// spec: 006/FR-012
+#[tokio::test]
+async fn update_without_provenance_keeps_the_stored_provenance() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let id = create_profile(&pool, filament_id).await;
+    sqlx::query("UPDATE print_profiles SET source = 'SlicerImport', source_slicer = 'BambuStudio', raw_settings_json = '{}' WHERE id = ?1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let mut body = full_profile_body();
+    for key in ["source", "sourceSlicer", "rawSettingsJson"] {
+        body.as_object_mut().unwrap().remove(key);
+    }
+
+    let (status, res) = send(&pool, "PUT", &format!("/api/profiles/{id}"), Some(body)).await;
+
+    assert_eq!(status, StatusCode::OK, "{res:?}");
+    let (source, slicer, raw): (String, Option<String>, Option<String>) =
+        sqlx::query_as("SELECT source, source_slicer, raw_settings_json FROM print_profiles WHERE id = ?1").bind(id).fetch_one(&pool).await.unwrap();
+    assert_eq!((source.as_str(), slicer.as_deref(), raw.as_deref()), ("SlicerImport", Some("BambuStudio"), Some("{}")));
+}
+
+// spec: 006/FR-003
+#[tokio::test]
+async fn field_spec_reports_the_profiles_filament_and_spool() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let spool_id = seed_spool(&pool, filament_id).await;
+    let generic = create_profile(&pool, filament_id).await;
+    let mut body = full_profile_body();
+    body["spoolId"] = json!(spool_id);
+    let (_, created) = send(&pool, "POST", &format!("/api/profiles?filamentId={filament_id}"), Some(body)).await;
+    let specific = created["profile"]["id"].as_i64().unwrap();
+
+    let (_, generic_spec) = send(&pool, "GET", &format!("/api/profiles/field-spec?profileId={generic}"), None).await;
+    let (_, specific_spec) = send(&pool, "GET", &format!("/api/profiles/field-spec?profileId={specific}"), None).await;
+
+    assert_eq!(generic_spec["filamentId"], filament_id);
+    assert_eq!(generic_spec["spoolId"], Value::Null);
+    assert!(generic_spec.as_object().unwrap().contains_key("spoolId"));
+    assert_eq!(specific_spec["filamentId"], filament_id);
+    assert_eq!(specific_spec["spoolId"], spool_id);
 }

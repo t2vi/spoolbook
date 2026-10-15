@@ -7,6 +7,7 @@ fn jpeg(body: &[u8]) -> Vec<u8> {
     frame
 }
 
+// spec: 004/FR-045
 #[test]
 fn single_complete_frame_in_one_chunk_yields_that_frame() {
     let mut extractor = JpegFrameExtractor::new();
@@ -17,6 +18,7 @@ fn single_complete_frame_in_one_chunk_yields_that_frame() {
     assert_eq!(result, vec![frame]);
 }
 
+// spec: 004/FR-045
 #[test]
 fn frame_split_across_two_chunks_yields_nothing_then_the_frame() {
     let mut extractor = JpegFrameExtractor::new();
@@ -29,6 +31,7 @@ fn frame_split_across_two_chunks_yields_nothing_then_the_frame() {
     assert_eq!(second, vec![frame]);
 }
 
+// spec: 004/FR-045
 #[test]
 fn two_frames_in_one_chunk_yields_both_in_order() {
     let mut extractor = JpegFrameExtractor::new();
@@ -42,6 +45,7 @@ fn two_frames_in_one_chunk_yields_both_in_order() {
     assert_eq!(result, vec![frame_a, frame_b]);
 }
 
+// spec: 004/FR-045
 #[test]
 fn garbage_before_start_marker_is_discarded() {
     let mut extractor = JpegFrameExtractor::new();
@@ -54,6 +58,7 @@ fn garbage_before_start_marker_is_discarded() {
     assert_eq!(result, vec![frame]);
 }
 
+// spec: 004/FR-045
 #[test]
 fn no_end_marker_yet_yields_nothing_and_retains_data() {
     let mut extractor = JpegFrameExtractor::new();

@@ -37,7 +37,12 @@
 		}
 		const deleteResult = await deleteFilament(id);
 		if (!deleteResult.ok) {
-			errorMessage = deleteResult.error === 'has_spools' ? "Can't delete — spools reference this filament." : (deleteResult.error ?? 'Delete failed.');
+			errorMessage =
+				deleteResult.error === 'has_spools'
+					? "Can't delete — spools reference this filament."
+					: deleteResult.error === 'has_profiles'
+						? "Can't delete — print profiles reference this filament."
+						: (deleteResult.error ?? 'Delete failed.');
 			return;
 		}
 		errorMessage = null;
@@ -51,6 +56,9 @@
 			const r = await syncFilamentCatalog();
 			syncStatusMessage = r.ok ? `Added ${r.added} new, skipped ${r.skipped} duplicates.` : `Sync failed: ${r.error}`;
 			if (r.ok) await load();
+		} catch (e) {
+			// A failed sync is a 4xx, which request() throws on.
+			syncStatusMessage = `Sync failed: ${e instanceof Error ? e.message : 'unknown error'}`;
 		} finally {
 			syncing = false;
 		}

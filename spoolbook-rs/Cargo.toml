@@ -1,7 +1,8 @@
 [package]
 name = "spoolbook-rs"
-version = "1.4.3"
+version = "1.5.0"
 edition = "2024"
+license = "AGPL-3.0-or-later"
 
 [dependencies]
 argon2 = "0.5.3"
@@ -29,3 +30,4 @@ curl = { version = "0.4.50", default-features = false, features = ["protocol-ftp
 [dev-dependencies]
 serde_json = "1.0.151"
 tower = { version = "0.5.3", features = ["util"] }
+tokio = { version = "1.53.1", features = ["test-util"] }

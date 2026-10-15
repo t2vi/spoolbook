@@ -22,6 +22,7 @@ async fn seed_printer(pool: &sqlx::SqlitePool, ip_address: Option<&str>, access_
         .unwrap()
 }
 
+// spec: 004/FR-040
 #[tokio::test]
 async fn camera_stream_returns_not_found_for_a_missing_printer() {
     let pool = test_pool().await;
@@ -36,6 +37,7 @@ async fn camera_stream_returns_not_found_for_a_missing_printer() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
+// spec: 004/FR-040
 #[tokio::test]
 async fn camera_stream_returns_not_found_for_a_printer_missing_connection_details() {
     let pool = test_pool().await;
@@ -61,6 +63,7 @@ async fn camera_stream_returns_not_found_for_a_printer_missing_connection_detail
 // Doesn't wait for any actual frame data (there's no real printer/ffmpeg in this environment) —
 // the response headers are already finalized by the time subscribe() returns, before any bytes
 // are streamed, so this proves the routing/header wiring without touching the unverifiable part.
+// spec: 004/FR-040
 #[tokio::test]
 async fn camera_stream_responds_with_multipart_headers_for_a_configured_printer() {
     let pool = test_pool().await;
@@ -92,10 +95,12 @@ async fn camera_stream_responds_with_multipart_headers_for_a_configured_printer(
     assert_ne!(status, CameraStreamStatus::NotStarted, "subscribing should have kicked off the pipeline");
 }
 
+// spec: 004/FR-042
 #[tokio::test]
 async fn retry_is_a_no_op_for_a_printer_with_no_broadcaster_yet() {
     let pool = test_pool().await;
     let printer_id = seed_printer(&pool, Some("127.0.0.1"), Some("12345678")).await;
+    let cookie = common::auth_cookie_header(&pool).await;
     let app = spoolbook_rs::app(pool);
 
     let response = app
@@ -104,6 +109,7 @@ async fn retry_is_a_no_op_for_a_printer_with_no_broadcaster_yet() {
                 .method("POST")
                 .uri(format!("/api/printers/{printer_id}/camera/retry"))
                 .header("content-type", "application/json")
+                .header("cookie", cookie)
                 .body(Body::from(json!({}).to_string()))
                 .unwrap(),
         )
@@ -114,4 +120,80 @@ async fn retry_is_a_no_op_for_a_printer_with_no_broadcaster_yet() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body: Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(body["ok"], true);
+}
+
+// spec: 004/FR-042, 008/FR-001
+#[tokio::test]
+async fn retry_requires_an_editor() {
+    let pool = test_pool().await;
+    let printer_id = seed_printer(&pool, Some("127.0.0.1"), Some("12345678")).await;
+
+    let response = spoolbook_rs::app(pool)
+        .oneshot(Request::builder().method("POST").uri(format!("/api/printers/{printer_id}/camera/retry")).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+// Opens a camera stream (creating the printer's broadcaster), then sends `method uri body` on the
+// same app. Returns whether the broadcaster survived and whether the open stream ended.
+async fn after_change(method: &str, uri_suffix: &str, body: Option<Value>) -> (bool, bool) {
+    let pool = test_pool().await;
+    let printer_id = seed_printer(&pool, Some("127.0.0.1"), Some("12345678")).await;
+    let camera_registry = spoolbook_rs::printer_camera::new_registry();
+    let cookie = common::auth_cookie_header(&pool).await;
+    let app = spoolbook_rs::app_with_camera(pool, spoolbook_rs::printer_mqtt::new_store(), camera_registry.clone());
+
+    let stream = app
+        .clone()
+        .oneshot(Request::builder().uri(format!("/printers/{printer_id}/camera")).header("cookie", &cookie).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert!(camera_registry.lock().await.contains_key(&printer_id));
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(method)
+                .uri(format!("/api/printers/{printer_id}{uri_suffix}"))
+                .header("content-type", "application/json")
+                .header("cookie", &cookie)
+                .body(body.map(|b| Body::from(b.to_string())).unwrap_or_default())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let kept = camera_registry.lock().await.contains_key(&printer_id);
+    let ended = tokio::time::timeout(std::time::Duration::from_secs(2), axum::body::to_bytes(stream.into_body(), usize::MAX)).await.is_ok();
+    (kept, ended)
+}
+
+fn printer_input(ip_address: &str) -> Value {
+    json!({ "name": "Garage P2S", "model": null, "ipAddress": ip_address, "accessCode": "", "serialNumber": null })
+}
+
+// spec: 004/FR-043
+#[tokio::test]
+async fn changing_a_printers_ip_drops_its_camera_connection() {
+    let (kept, ended) = after_change("PUT", "", Some(printer_input("127.0.0.2"))).await;
+    assert!(!kept, "camera connection still cached with the old IP");
+    assert!(ended, "open viewer stream should end");
+}
+
+// spec: 004/FR-043
+#[tokio::test]
+async fn saving_a_printer_unchanged_keeps_its_camera_connection() {
+    let (kept, _) = after_change("PUT", "", Some(printer_input("127.0.0.1"))).await;
+    assert!(kept);
+}
+
+// spec: 004/FR-043
+#[tokio::test]
+async fn deleting_a_printer_drops_its_camera_connection() {
+    let (kept, ended) = after_change("DELETE", "", None).await;
+    assert!(!kept);
+    assert!(ended);
 }
