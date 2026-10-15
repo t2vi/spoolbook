@@ -53,8 +53,8 @@ signed-in user can link a Google account and then sign in with it.
   requires the current password (wrong → 401 `wrong_current_password`) and applies a non-blank
   new username and/or new password. *Verify: integration*
 - **FR-021** — A new password under 8 chars → 400 `password_too_short`; a username already
-  taken → 400; on any error nothing is changed. *Verify: integration* — **short password
-  silently ignored, taken name → 500 (#178)**
+  taken by another user → 400 `username_taken`; on any error nothing is changed (username and
+  password are saved together or not at all). *Verify: integration*
 
 ### Google sign-in
 
@@ -83,13 +83,15 @@ signed-in user can link a Google account and then sign in with it.
 
 - **FR-040** — `/setup` (shown while setup is needed) creates the first account; `/login` signs
   in with username/password, or with Google when configured, and shows Google errors from the
-  query string; the Settings page edits the account and the Google config and links/unlinks.
+  query string; the Settings page edits the account (saying why a change was refused) and the
+  Google config and links/unlinks.
   *Verify: e2e*
 
 ## Notes
 
 - Retroactive: behavior read from the code at `3fdca27`.
-- **#178:** account update validation. **#179:** session purge, revoke-on-password-change,
+- **#178 (fixed):** a short new password was silently ignored (yet `ok`), and a taken
+  username was a 500. **#179:** session purge, revoke-on-password-change,
   login throttling, OAuth state cleanup. **#165:** camera retry route isn't editor-gated.
 - **#93:** once `password_hash` becomes nullable (Google-only users), unlinking needs a guard
   so the last credential can't be removed.

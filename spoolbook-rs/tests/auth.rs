@@ -284,3 +284,60 @@ async fn startup_migration_does_nothing_when_no_env_var_is_set() {
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users").fetch_one(&pool).await.unwrap();
     assert_eq!(count, 0);
 }
+
+async fn login_status(pool: &sqlx::SqlitePool, username: &str, password: &str) -> StatusCode {
+    send(pool, "POST", "/api/login", None, Some(json!({ "username": username, "password": password }))).await.0
+}
+
+// spec: 008/FR-021
+#[tokio::test]
+async fn account_update_rejects_a_short_new_password_and_changes_nothing() {
+    let pool = test_pool().await;
+    let cookie = setup_user(&pool, "vinny", "correct-horse-battery").await;
+
+    let (status, _, body) = send(
+        &pool,
+        "PUT",
+        "/api/account",
+        Some(&cookie),
+        Some(json!({ "currentPassword": "correct-horse-battery", "newUsername": "renamed", "newPassword": "short" })),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    assert_eq!(body["error"], "password_too_short");
+    assert_eq!(login_status(&pool, "vinny", "correct-horse-battery").await, StatusCode::OK, "username and password unchanged");
+}
+
+// spec: 008/FR-021
+#[tokio::test]
+async fn account_update_rejects_a_taken_username_and_changes_nothing() {
+    let pool = test_pool().await;
+    let cookie = setup_user(&pool, "vinny", "correct-horse-battery").await;
+    sqlx::query("INSERT INTO users (username, password_hash, role) VALUES ('taken', 'x', 'Admin')").execute(&pool).await.unwrap();
+
+    let (status, _, body) = send(
+        &pool,
+        "PUT",
+        "/api/account",
+        Some(&cookie),
+        Some(json!({ "currentPassword": "correct-horse-battery", "newUsername": "taken", "newPassword": "a-new-password" })),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    assert_eq!(body["error"], "username_taken");
+    assert_eq!(login_status(&pool, "vinny", "correct-horse-battery").await, StatusCode::OK, "username and password unchanged");
+}
+
+// spec: 008/FR-020, 008/FR-021
+#[tokio::test]
+async fn account_update_accepts_the_users_own_current_username() {
+    let pool = test_pool().await;
+    let cookie = setup_user(&pool, "vinny", "correct-horse-battery").await;
+
+    let (status, _, body) =
+        send(&pool, "PUT", "/api/account", Some(&cookie), Some(json!({ "currentPassword": "correct-horse-battery", "newUsername": "vinny" }))).await;
+
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+}
