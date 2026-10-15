@@ -72,7 +72,9 @@
 				<img src={spoolbookIcon} alt="Spoolbook" class="size-8 rounded-lg" />
 				<div class="flex flex-col leading-tight">
 					<span class="text-sm font-semibold">Spoolbook</span>
-					<span class="text-xs text-sidebar-foreground/70">{version ? `v${version}` : ''}</span>
+					<span class="text-xs text-sidebar-foreground/70">
+						{version ? `v${version} · ` : ''}<a href="https://github.com/t2vi/spoolbook" target="_blank" rel="noopener" class="underline-offset-2 hover:underline">Source</a>
+					</span>
 				</div>
 			</div>
 		</Sidebar.Header>
