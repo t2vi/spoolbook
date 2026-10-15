@@ -208,7 +208,7 @@ pub async fn end_job(
     chamber_temp_c: Option<f64>,
     ams_humidity_pct: Option<i64>,
     camera_registry: &crate::printer_camera::CameraRegistry,
-) {
+) -> Option<tokio::task::JoinHandle<()>> {
     let job = sqlx::query_as::<_, (i64, Option<i64>)>(
         "SELECT id, print_id FROM printer_jobs WHERE printer_id = ?1 AND external_job_id = ?2 AND ended_at IS NULL",
     )
@@ -218,7 +218,7 @@ pub async fn end_job(
     .await
     .expect("query failed");
 
-    let Some((job_id, print_id)) = job else { return };
+    let (job_id, print_id) = job?;
 
     sqlx::query("UPDATE printer_jobs SET ended_at = COALESCE(?1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) WHERE id = ?2")
         .bind(at)
@@ -227,27 +227,31 @@ pub async fn end_job(
         .await
         .expect("update failed");
 
-    if let Some(print_id) = print_id {
-        // Snapshot the printer's last-known chamber temp / AMS humidity at end-of-print — the
-        // only point either is ever known, since neither is client-writable (see prints.rs).
-        sqlx::query(
-            "UPDATE prints SET ended_at = COALESCE(?1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), status = ?2,
-             chamber_temp_c = ?3, ams_humidity_pct = ?4
-             WHERE id = ?5 AND status = 'InProgress'",
-        )
-        .bind(at)
-        .bind(map_terminal_gcode_state(terminal_gcode_state))
-        .bind(chamber_temp_c)
-        .bind(ams_humidity_pct)
-        .bind(print_id)
-        .execute(pool)
-        .await
-        .expect("update failed");
+    let print_id = print_id?;
+    // Snapshot the printer's last-known chamber temp / AMS humidity at end-of-print — the
+    // only point either is ever known, since neither is client-writable (see prints.rs).
+    sqlx::query(
+        "UPDATE prints SET ended_at = COALESCE(?1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), status = ?2,
+         chamber_temp_c = ?3, ams_humidity_pct = ?4
+         WHERE id = ?5 AND status = 'InProgress'",
+    )
+    .bind(at)
+    .bind(map_terminal_gcode_state(terminal_gcode_state))
+    .bind(chamber_temp_c)
+    .bind(ams_humidity_pct)
+    .bind(print_id)
+    .execute(pool)
+    .await
+    .expect("update failed");
 
-        crate::weather::fetch_and_store(pool, print_id).await;
-        crate::printer_camera::capture_and_store(pool, camera_registry, print_id, printer_id).await;
-        collapse_readings_to_snapshot(pool, print_id, job_id).await;
-    }
+    // Spawned, not awaited: end_job runs inside the printer's MQTT poll loop, and a slow weather
+    // API or camera would otherwise stall that connection. The handle is for tests to wait on.
+    let (pool, camera_registry) = (pool.clone(), camera_registry.clone());
+    Some(tokio::spawn(async move {
+        crate::weather::fetch_and_store(&pool, print_id).await;
+        crate::printer_camera::capture_and_store(&pool, &camera_registry, print_id, printer_id).await;
+        collapse_readings_to_snapshot(&pool, print_id, job_id).await;
+    }))
 }
 
 // Auto-match candidate for the retrospective Print form: closest unattached Job for this Printer
