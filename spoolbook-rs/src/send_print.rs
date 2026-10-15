@@ -191,7 +191,7 @@ async fn start_print(
     Json(req): Json<StartPrintRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let Some(printer) = crate::printers::get_by_id(&pool, id).await else {
-        return (StatusCode::BAD_REQUEST, Json(err_response("Printer is missing connection details.")));
+        return (StatusCode::NOT_FOUND, Json(json!({ "error": "not_found" })));
     };
     let (Some(ip_address), Some(access_code), Some(serial_number)) = (&printer.ip_address, &printer.access_code, &printer.serial_number) else {
         return (StatusCode::BAD_REQUEST, Json(err_response("Printer is missing connection details.")));
@@ -205,6 +205,14 @@ async fn start_print(
     let Some((file_path, file_name)) = project else {
         return (StatusCode::NOT_FOUND, Json(json!({ "error": "not_found" })));
     };
+    // Checked before anything reaches the printer: create_in_progress below runs only after the
+    // job has started, so a bad id there would start a print with no Print row to attach it to.
+    if crate::profiles::get_by_id(&pool, req.profile_id).await.is_none() {
+        return (StatusCode::BAD_REQUEST, Json(err_response("Unknown print profile.")));
+    }
+    if crate::spools::fetch_by_id(&pool, req.spool_id).await.is_none() {
+        return (StatusCode::BAD_REQUEST, Json(err_response("Unknown spool.")));
+    }
 
     let remote_file_name = sanitize_for_printer_filename(&file_name);
     let plate_gcode_file_name = format!("plate_{}.gcode", req.plater_id);
