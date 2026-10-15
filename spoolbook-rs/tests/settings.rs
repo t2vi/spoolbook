@@ -80,3 +80,29 @@ async fn post_blanks_out_whitespace_only_input() {
     let (_, get_body) = send(&pool, "GET", "/api/settings", None).await;
     assert_eq!(get_body["additionalFilamentSourceUrls"], Value::Null);
 }
+
+// spec: 002/FR-012
+#[tokio::test]
+async fn post_rejects_an_out_of_range_location_and_saves_nothing() {
+    let pool = test_pool().await;
+    send(&pool, "POST", "/api/settings", Some(json!({ "additionalFilamentSourceUrls": null, "latitude": -37.8, "longitude": 144.9 }))).await;
+
+    let (status, body) = send(&pool, "POST", "/api/settings", Some(json!({ "additionalFilamentSourceUrls": "https://x", "latitude": 91.0, "longitude": 144.9 }))).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Latitude must be between -90 and 90.");
+
+    let (status, body) = send(&pool, "POST", "/api/settings", Some(json!({ "additionalFilamentSourceUrls": "https://x", "latitude": -37.8, "longitude": -180.5 }))).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Longitude must be between -180 and 180.");
+
+    let (_, settings) = send(&pool, "GET", "/api/settings", None).await;
+    assert_eq!((settings["latitude"].clone(), settings["longitude"].clone(), settings["additionalFilamentSourceUrls"].clone()), (json!(-37.8), json!(144.9), Value::Null));
+}
+
+// spec: 002/FR-012
+#[tokio::test]
+async fn post_accepts_the_range_boundaries() {
+    let pool = test_pool().await;
+    let (status, _) = send(&pool, "POST", "/api/settings", Some(json!({ "additionalFilamentSourceUrls": null, "latitude": -90.0, "longitude": 180.0 }))).await;
+    assert_eq!(status, StatusCode::OK);
+}

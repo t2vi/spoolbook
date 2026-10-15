@@ -1,3 +1,4 @@
+use axum::http::StatusCode;
 use axum::{Json, Router, extract::State, routing::get};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
@@ -67,7 +68,14 @@ async fn get_settings(State(pool): State<SqlitePool>) -> Json<SettingsResponse> 
     })
 }
 
-async fn save_settings(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Json(req): Json<SaveSettingsRequest>) -> Json<serde_json::Value> {
+async fn save_settings(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Json(req): Json<SaveSettingsRequest>) -> (StatusCode, Json<serde_json::Value>) {
+    // An out-of-range location would make every later Print's weather fetch fail silently.
+    if req.latitude.is_some_and(|lat| !(-90.0..=90.0).contains(&lat)) {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "Latitude must be between -90 and 90." })));
+    }
+    if req.longitude.is_some_and(|lon| !(-180.0..=180.0).contains(&lon)) {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "Longitude must be between -180 and 180." })));
+    }
     fetch(&pool).await;
     let urls = req.additional_filament_source_urls.filter(|u| !u.trim().is_empty());
     sqlx::query("UPDATE app_settings SET additional_filament_source_urls = ?1, latitude = ?2, longitude = ?3 WHERE id = 1")
@@ -78,5 +86,5 @@ async fn save_settings(_editor: crate::auth::Editor, State(pool): State<SqlitePo
         .await
         .expect("update failed");
 
-    Json(serde_json::json!({ "ok": true }))
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true })))
 }

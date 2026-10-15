@@ -104,8 +104,13 @@
 	async function save() {
 		const lat = latitude.trim() ? Number(latitude) : null;
 		const lon = longitude.trim() ? Number(longitude) : null;
-		await saveSettings(additionalUrls.trim() || null, lat, lon);
-		savedMessage = 'Saved.';
+		try {
+			await saveSettings(additionalUrls.trim() || null, lat, lon);
+			savedMessage = 'Saved.';
+		} catch (e) {
+			// A refused save (e.g. out-of-range location) is a 4xx, which request() throws on.
+			savedMessage = e instanceof Error ? e.message : 'Save failed.';
+		}
 	}
 
 	async function saveAccount() {
