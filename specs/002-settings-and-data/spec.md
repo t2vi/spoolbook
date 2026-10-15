@@ -50,13 +50,15 @@ via an export zip that is *merged* into the target rather than replacing it.
 - **FR-011** — `POST /api/settings` (editor only) replaces additional source URLs, latitude and
   longitude together — a field omitted from the request is saved as null. Whitespace-only
   source-URL text is saved as null. *Verify: integration*
-- **FR-012** — Latitude outside [-90, 90] or longitude outside [-180, 180] is rejected with
-  400 and nothing is saved. *Verify: integration* — **not implemented, see Notes (#157)**
+- **FR-012** — Latitude outside [-90, 90] → 400 `{ ok: false, error: "Latitude must be between
+  -90 and 90." }`; longitude outside [-180, 180] → 400 `Longitude must be between -180 and
+  180.`; nothing is saved. *Verify: integration*
 - **FR-013** — Effects: latitude/longitude drive the ambient weather fetch for ended Prints
   (Prints spec); additional source URLs are fetched alongside the published catalog on sync
   (Catalog spec). Neither has any other effect.
 - **FR-014** — The Settings page shows the published catalog URL and last sync time, edits
-  additional source URLs (one per line) and location, and confirms a save. *Verify: e2e*
+  additional source URLs (one per line) and location, and confirms a save — or shows the
+  server's error when it's refused. *Verify: e2e*
 
 ### Dashboard
 
@@ -107,8 +109,8 @@ via an export zip that is *merged* into the target rather than replacing it.
 ## Notes
 
 - Retroactive: behavior read from the code at `3fdca27`.
-- **FR-012 (#157):** `save_settings` binds latitude/longitude unvalidated; a bad value is
-  accepted and the weather fetch for every later Print just fails silently.
+- **#157 (fixed):** `save_settings` used to accept any latitude/longitude, so a bad value made
+  every later Print's weather fetch fail silently.
 - **#158 (fixed):** commit used to skip remapping `print_profiles.spool_id` and
   `projects.previous_version_project_id` — failing the insert, or silently linking the wrong row.
 - **#159 (fixed):** commit used to run without a transaction and panic on a bad row, leaving a
