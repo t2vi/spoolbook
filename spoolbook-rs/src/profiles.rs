@@ -521,6 +521,24 @@ fn validation_errors(errors: Vec<(&'static str, String)>) -> (StatusCode, Json<P
     (StatusCode::BAD_REQUEST, Json(ProfileResult { ok: false, errors: Some(serde_json::Value::Object(map)), profile: None }))
 }
 
+// Shared by create, update and new_version: a spool-specific profile's spool must exist and be
+// of the profile's own filament. Some((field, message)) on a problem.
+async fn check_filament_and_spool(pool: &SqlitePool, filament_id: i64, spool_id: Option<i64>) -> Option<(&'static str, &'static str)> {
+    let filament_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM filaments WHERE id = ?1)").bind(filament_id).fetch_one(pool).await.expect("query failed");
+    if !filament_exists {
+        return Some(("filamentId", "Unknown filament."));
+    }
+    let spool_id = spool_id?;
+    let spool_filament: Option<i64> =
+        sqlx::query_scalar("SELECT filament_id FROM spools WHERE id = ?1").bind(spool_id).fetch_optional(pool).await.expect("query failed");
+    match spool_filament {
+        None => Some(("spoolId", "Unknown spool.")),
+        Some(f) if f != filament_id => Some(("spoolId", "That spool is a different filament.")),
+        Some(_) => None,
+    }
+}
+
 async fn create(
     _editor: crate::auth::Editor,
     State(pool): State<SqlitePool>,
@@ -529,6 +547,9 @@ async fn create(
 ) -> (StatusCode, Json<ProfileResult>) {
     if input.name.trim().is_empty() {
         return validation_error("name", "Name is required");
+    }
+    if let Some((field, message)) = check_filament_and_spool(&pool, q.filament_id, input.spool_id).await {
+        return validation_error(field, message);
     }
     let parsed = match crate::profile_field_spec::parse_fields(&input.fields) {
         Ok(p) => p,
@@ -756,6 +777,11 @@ async fn update(
                 profile: None,
             }),
         );
+    }
+    if let Some(existing) = get_by_id(&pool, id).await
+        && let Some((field, message)) = check_filament_and_spool(&pool, existing.filament_id, input.spool_id).await
+    {
+        return validation_error(field, message);
     }
     let parsed = match crate::profile_field_spec::parse_fields(&input.fields) {
         Ok(p) => p,
@@ -986,6 +1012,9 @@ async fn new_version(
     }
     if input.name.trim().is_empty() {
         return validation_error("name", "Name is required");
+    }
+    if let Some((field, message)) = check_filament_and_spool(&pool, source.filament_id, input.spool_id).await {
+        return validation_error(field, message);
     }
     let parsed = match crate::profile_field_spec::parse_fields(&input.fields) {
         Ok(p) => p,

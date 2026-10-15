@@ -666,3 +666,61 @@ async fn field_spec_reports_the_version_number_and_whether_it_is_current() {
     assert_eq!((spec1["versionNumber"].clone(), spec1["isCurrentVersion"].clone()), (json!(1), json!(false)));
     assert_eq!((spec2["versionNumber"].clone(), spec2["isCurrentVersion"].clone()), (json!(2), json!(true)));
 }
+
+async fn seed_second_filament(pool: &sqlx::SqlitePool) -> i64 {
+    let (_, body) = send(
+        pool,
+        "POST",
+        "/api/filaments",
+        Some(json!({ "brand": "Polymaker", "material": "PETG", "variant": null, "color": "Blue" })),
+    )
+    .await;
+    body["entry"]["id"].as_i64().unwrap()
+}
+
+async fn profile_count(pool: &sqlx::SqlitePool) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM print_profiles").fetch_one(pool).await.unwrap()
+}
+
+// spec: 006/FR-010
+#[tokio::test]
+async fn create_rejects_an_unknown_filament_or_a_bad_spool() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let other_filament = seed_second_filament(&pool).await;
+    let other_spool = seed_spool(&pool, other_filament).await;
+
+    let cases = [
+        (999, Value::Null, "filamentId", "Unknown filament."),
+        (filament_id, json!(999), "spoolId", "Unknown spool."),
+        (filament_id, json!(other_spool), "spoolId", "That spool is a different filament."),
+    ];
+    for (filament, spool, field, message) in cases {
+        let mut body = full_profile_body();
+        body["spoolId"] = spool;
+        let (status, res) = send(&pool, "POST", &format!("/api/profiles?filamentId={filament}"), Some(body)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{field}: {res:?}");
+        assert_eq!(res["errors"][field], message);
+    }
+    assert_eq!(profile_count(&pool).await, 0);
+}
+
+// spec: 006/FR-010, 006/FR-012, 006/FR-021
+#[tokio::test]
+async fn update_and_new_version_reject_another_filaments_spool() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let other_spool = seed_spool(&pool, seed_second_filament(&pool).await).await;
+    let (_, created) = send(&pool, "POST", &format!("/api/profiles?filamentId={filament_id}"), Some(full_profile_body())).await;
+    let id = created["profile"]["id"].as_i64().unwrap();
+
+    let mut body = full_profile_body();
+    body["spoolId"] = json!(other_spool);
+    for uri in [format!("/api/profiles/{id}"), format!("/api/profiles/{id}/versions")] {
+        let method = if uri.ends_with("versions") { "POST" } else { "PUT" };
+        let (status, res) = send(&pool, method, &uri, Some(body.clone())).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{uri}: {res:?}");
+        assert_eq!(res["errors"]["spoolId"], "That spool is a different filament.");
+    }
+    assert_eq!(profile_count(&pool).await, 1);
+}

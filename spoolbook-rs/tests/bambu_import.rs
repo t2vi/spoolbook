@@ -277,3 +277,26 @@ async fn importing_a_raw_preset_json_resolves_its_inherits_chain() {
     assert_eq!(body["fields"]["NozzleTempC"], "230", "uploaded file's own value wins");
     assert_eq!(body["fields"]["HotPlateTempC"], "55", "inherited from the resolved chain");
 }
+
+// spec: 006/FR-030, 006/FR-032
+#[tokio::test]
+async fn system_presets_gives_up_on_a_hung_slicer_service() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let app = axum::Router::new().fallback(|| async {
+        tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+        "{}"
+    });
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    unsafe { std::env::set_var("RESLICE_SERVICE_URL", format!("http://{addr}")) };
+    let pool = sqlx::sqlite::SqlitePoolOptions::new().max_connections(1).connect("sqlite::memory:").await.unwrap();
+    sqlx::migrate!().run(&pool).await.unwrap();
+    // Paused after the DB is up: the clock then jumps straight to the next timer, so the 30 s
+    // timeout (or, without one, the hour-late reply) arrives instantly.
+    tokio::time::pause();
+
+    let (status, body) = get_json(&pool, "/api/profiles/system-presets", None).await;
+
+    assert_eq!(status, StatusCode::BAD_GATEWAY, "{body:?}");
+}
