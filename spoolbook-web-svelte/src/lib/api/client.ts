@@ -233,9 +233,10 @@ export const resolveSystemPreset = (name: string) =>
 export interface ProfileInput {
 	name: string;
 	fields: Record<string, string>;
-	source: ProfileSource | null;
-	sourceSlicer: SlicerType | null;
-	rawSettingsJson: string | null;
+	// Left out on an edit with no import, so the stored provenance is kept (FR-012).
+	source?: ProfileSource | null;
+	sourceSlicer?: SlicerType | null;
+	rawSettingsJson?: string | null;
 	spoolId: number | null;
 }
 

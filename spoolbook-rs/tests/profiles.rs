@@ -724,3 +724,28 @@ async fn update_and_new_version_reject_another_filaments_spool() {
     }
     assert_eq!(profile_count(&pool).await, 1);
 }
+
+// The edit page relies on this to keep an imported profile's provenance (FR-041, #183).
+// spec: 006/FR-012
+#[tokio::test]
+async fn update_without_provenance_keeps_the_stored_provenance() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let id = create_profile(&pool, filament_id).await;
+    sqlx::query("UPDATE print_profiles SET source = 'SlicerImport', source_slicer = 'BambuStudio', raw_settings_json = '{}' WHERE id = ?1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let mut body = full_profile_body();
+    for key in ["source", "sourceSlicer", "rawSettingsJson"] {
+        body.as_object_mut().unwrap().remove(key);
+    }
+
+    let (status, res) = send(&pool, "PUT", &format!("/api/profiles/{id}"), Some(body)).await;
+
+    assert_eq!(status, StatusCode::OK, "{res:?}");
+    let (source, slicer, raw): (String, Option<String>, Option<String>) =
+        sqlx::query_as("SELECT source, source_slicer, raw_settings_json FROM print_profiles WHERE id = ?1").bind(id).fetch_one(&pool).await.unwrap();
+    assert_eq!((source.as_str(), slicer.as_deref(), raw.as_deref()), ("SlicerImport", Some("BambuStudio"), Some("{}")));
+}
