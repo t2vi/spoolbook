@@ -346,6 +346,23 @@ async fn link_version(
     Path(new_id): Path<i64>,
     Json(input): Json<LinkVersionInput>,
 ) -> (StatusCode, Json<serde_json::Value>) {
+    // Walk the predecessor's own history: reaching new_id (or starting at it) means a loop.
+    let would_create_cycle: bool = sqlx::query_scalar(
+        "WITH RECURSIVE ancestors(id) AS (
+             SELECT ?1
+             UNION SELECT p.previous_version_project_id FROM projects p JOIN ancestors a ON p.id = a.id
+             WHERE p.previous_version_project_id IS NOT NULL
+         )
+         SELECT EXISTS(SELECT 1 FROM ancestors WHERE id = ?2)",
+    )
+    .bind(input.previous_version_project_id)
+    .bind(new_id)
+    .fetch_one(&pool)
+    .await
+    .expect("query failed");
+    if would_create_cycle {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "would_create_cycle" })));
+    }
     if link_version_chain(&pool, new_id, input.previous_version_project_id).await {
         (StatusCode::OK, Json(serde_json::json!({ "ok": true })))
     } else {

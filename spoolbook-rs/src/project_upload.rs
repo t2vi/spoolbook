@@ -46,6 +46,11 @@ fn err_response(message: &str) -> serde_json::Value {
 // finds the existing row for that path) and means drift can never happen, since nothing but
 // this function ever writes into the storage directory. Mirrors ProjectUploadService.SaveBytesAsync.
 pub(crate) async fn save_bytes(storage_dir: &Path, pool: &SqlitePool, bytes: &[u8], display_name: &str) -> serde_json::Value {
+    // Every .3mf is a zip; anything else (an HTML login page from a URL import, a renamed STL)
+    // would otherwise be stored and then silently show no plates.
+    if zip::ZipArchive::new(std::io::Cursor::new(bytes)).is_err() {
+        return err_response("Not a .3mf file.");
+    }
     let hash = projects::hex(&Sha256::digest(bytes));
     let stored_path = storage_dir.join(format!("{hash}.3mf"));
     if !stored_path.exists() {
@@ -100,24 +105,10 @@ async fn import_url(_editor: crate::auth::Editor, State(pool): State<SqlitePool>
         return (StatusCode::BAD_REQUEST, Json(err_response("Enter a valid http(s) URL.")));
     }
 
-    let response = match reqwest::get(parsed.clone()).await {
-        Ok(r) => r,
-        Err(e) => return (StatusCode::BAD_REQUEST, Json(err_response(&format!("Fetch failed: {e}")))),
-    };
-    if !response.status().is_success() {
-        return (StatusCode::BAD_REQUEST, Json(err_response(&format!("Fetch failed: HTTP {}", response.status().as_u16()))));
-    }
-
-    let bytes = match response.bytes().await {
+    let bytes = match download(&parsed).await {
         Ok(b) => b,
-        Err(e) => return (StatusCode::BAD_REQUEST, Json(err_response(&format!("Fetch failed: {e}")))),
+        Err(e) => return (StatusCode::BAD_REQUEST, Json(err_response(&e))),
     };
-    if bytes.is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(err_response("Downloaded file was empty.")));
-    }
-    if bytes.len() > MAX_BYTES {
-        return (StatusCode::BAD_REQUEST, Json(err_response("Downloaded file is too large (over 100 MB).")));
-    }
 
     let file_name = parsed
         .path_segments()
@@ -129,4 +120,30 @@ async fn import_url(_editor: crate::auth::Editor, State(pool): State<SqlitePool>
     let body = save_bytes(&storage_dir(), &pool, &bytes, &file_name).await;
     let status = if body["ok"] == true { StatusCode::OK } else { StatusCode::BAD_REQUEST };
     (status, Json(body))
+}
+
+// pub for tests. Gives up after 2 minutes, and stops reading as soon as the body passes
+// MAX_BYTES rather than buffering an arbitrarily large download first.
+pub async fn download(url: &reqwest::Url) -> Result<Vec<u8>, String> {
+    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(120)).build().map_err(|e| e.to_string())?;
+    let mut response = client.get(url.clone()).send().await.map_err(|e| format!("Fetch failed: {e}"))?;
+    if !response.status().is_success() {
+        return Err(format!("Fetch failed: HTTP {}", response.status().as_u16()));
+    }
+
+    let too_large = || "Downloaded file is too large (over 100 MB).".to_string();
+    if response.content_length().is_some_and(|len| len > MAX_BYTES as u64) {
+        return Err(too_large());
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|e| format!("Fetch failed: {e}"))? {
+        bytes.extend_from_slice(&chunk);
+        if bytes.len() > MAX_BYTES {
+            return Err(too_large());
+        }
+    }
+    if bytes.is_empty() {
+        return Err("Downloaded file was empty.".to_string());
+    }
+    Ok(bytes)
 }

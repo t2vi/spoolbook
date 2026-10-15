@@ -94,7 +94,10 @@ pub async fn slice_via_service(patched_path: &std::path::Path) -> Result<Vec<u8>
         .map_err(|e| e.to_string())?;
     let form = reqwest::multipart::Form::new().part("project", part);
 
-    let response = reqwest::Client::new()
+    // A real Bambu Studio slice can take minutes; 10 is generous but stops a stuck run hanging
+    // the request forever.
+    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(600)).build().map_err(|e| e.to_string())?;
+    let response = client
         .post(format!("{base_url}/slice"))
         .multipart(form)
         .send()
