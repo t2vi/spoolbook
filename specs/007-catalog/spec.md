@@ -59,13 +59,14 @@ filament. Colors are discovered from filaments as they're added.
 ### Spools
 
 - **FR-030** — `POST /api/spools` (editor) `{ filamentId, lotCode, purchasedAt, openedAt,
-  emptiedAt, weightGrams, diameterMm, notes }` creates a spool; unknown filament → 400; dates
-  out of order (opened before purchased, emptied before opened) → 400. *Verify: integration*
-  — **not validated (#176)**
+  emptiedAt, weightGrams, diameterMm, notes }` creates a spool; unknown filament → 400
+  `Unknown filament.`; dates out of order → 400 `Dates are out of order — purchased, then
+  opened, then emptied.` Dates are compared by calendar day, for every pair that's present
+  (purchased ≤ opened ≤ emptied, and purchased ≤ emptied). *Verify: integration*
 - **FR-031** — `GET /api/spools` (open) lists spools oldest-created first, each with its
   filament; `GET /api/spools/{id}` returns one, 404 if missing. *Verify: integration*
-- **FR-032** — `PUT /api/spools/{id}` (editor) updates every field except the filament; 404 if
-  missing. *Verify: integration*
+- **FR-032** — `PUT /api/spools/{id}` (editor) updates every field except the filament, with
+  FR-030's date-order rule; 404 if missing. *Verify: integration*
 - **FR-033** — `DELETE /api/spools/{id}` (editor): 400 `has_profiles` if a spool-specific
   profile uses it, 400 `has_prints` if a Print does; 404 if missing. *Verify: integration*
 
@@ -81,6 +82,6 @@ filament. Colors are discovered from filaments as they're added.
 ## Notes
 
 - Retroactive: behavior read from the code at `3fdca27`.
-- **#174 (fixed):** filament delete guard; **#175 (fixed):** sync failure masking + no timeout; **#176:** spool
+- **#174 (fixed):** filament delete guard; **#175 (fixed):** sync failure masking + no timeout; **#176 (fixed):** spool
   validation; **#177:** no way to fix a color's hex (`#CCCCCC` placeholder is permanent).
 - Spool "status" (Unopened / Opened / Empty) is derived from the dates — see 002/FR-020.
