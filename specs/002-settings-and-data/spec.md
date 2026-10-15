@@ -39,6 +39,9 @@ via an export zip that is *merged* into the target rather than replacing it.
   framework's 2 MB default is too small for a real `.3mf`). *Verify: integration*
 - **FR-006** — `GET /api/version` (open) returns `{ "version": "<backend crate version>" }`.
   *Verify: integration*
+- **FR-007** — Every page's sidebar shows the version and a "Source" link to the public
+  repository (`https://github.com/t2vi/spoolbook`), signed in or not — the offer of source that
+  the AGPL-3.0 license requires of anyone running the app for others. *Verify: e2e*
 
 ### Settings
 

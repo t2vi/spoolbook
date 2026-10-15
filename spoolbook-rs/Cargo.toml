@@ -2,6 +2,7 @@
 name = "spoolbook-rs"
 version = "1.4.3"
 edition = "2024"
+license = "AGPL-3.0-or-later"
 
 [dependencies]
 argon2 = "0.5.3"

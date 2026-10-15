@@ -111,3 +111,10 @@ See the "Release checklist" in `CLAUDE.md`. `.github/workflows/docker-images.yml
 pushes the `spoolbook`/`spoolbook-slicer` images to GHCR (gated on a real slicing smoke test
 against the latest-stable BambuStudio). Release notes go in `docs/releases/`, indexed by
 `CHANGELOG.md`. `.github/workflows/tests.yml` runs the test suite on every push/PR.
+
+## License
+
+[AGPL-3.0-or-later](LICENSE). You can use, modify and redistribute Spoolbook freely; if you run
+a modified version for other people — including over a network — you must offer them its
+source under the same license. The sidebar's "Source" link points at this repository; a fork
+that others use should point it at the fork's own source.
