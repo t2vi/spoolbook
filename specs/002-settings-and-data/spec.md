@@ -91,13 +91,15 @@ via an export zip that is *merged* into the target rather than replacing it.
   and colors reuse the existing row; every other row is inserted with a fresh id; **every**
   foreign key is rewritten to the target's ids — including `print_profiles.spool_id`,
   `print_profiles.previous_version_profile_id` and `projects.previous_version_project_id`. Returns `{ ok, tables: { <table>: { inserted,
-  matched } } }`. *Verify: integration* — **two FKs not remapped, see Notes (#158)**
-- **FR-043** — Commit is all-or-nothing: if any row fails, the target DB is left exactly as it
-  was and the response is an error, not a partial import. *Verify: integration* — **not
-  implemented, see Notes (#159)**
+  matched } } }`. *Verify: integration*
+- **FR-043** — Commit is all-or-nothing: if any row can't be imported (missing id, a value of
+  an unsupported type, a constraint violation such as a reference that can't be resolved), the
+  target DB is left exactly as it was and the response is 400 `{ ok: false, error }` naming the
+  table — never a partial import or a 500. *Verify: integration*
 - **FR-044** — Each imported Project's `.3mf` is written to project storage under its original
   file name unless a file of that name already exists there, and the Project's `file_path`
-  points at the target location. *Verify: integration*
+  points at the target location. Files are written only after the import has succeeded, so a
+  failed import (FR-043) leaves none behind. *Verify: integration*
 - **FR-045** — The Settings page imports in two steps: choose file → preview counts → confirm
   commit → per-table result. *Verify: e2e*
 
@@ -106,12 +108,10 @@ via an export zip that is *merged* into the target rather than replacing it.
 - Retroactive: behavior read from the code at `3fdca27`.
 - **FR-012 (#157):** `save_settings` binds latitude/longitude unvalidated; a bad value is
   accepted and the weather fetch for every later Print just fails silently.
-- **FR-042 (#158):** commit remaps `spools.filament_id` and the four `prints` FKs but not
-  `print_profiles.spool_id` (spool-specific profiles) or `projects.previous_version_project_id`
-  (re-slice chains). With foreign keys enforced, a source id absent from the target fails the
-  insert; one that happens to exist silently links to the wrong Spool/Project.
-- **FR-043 (#159):** commit runs without a transaction and panics (`expect`/`unwrap`) on a bad
-  row, so a mid-import failure leaves everything before it inserted.
+- **#158 (fixed):** commit used to skip remapping `print_profiles.spool_id` and
+  `projects.previous_version_project_id` — failing the insert, or silently linking the wrong row.
+- **#159 (fixed):** commit used to run without a transaction and panic on a bad row, leaving a
+  partial import.
 - **Re-import (#160):** only filaments, printers and colors dedupe; importing the same bundle
   twice duplicates every Spool, Profile, Project and Print. Intended behavior undecided — no FR
   until it is.
