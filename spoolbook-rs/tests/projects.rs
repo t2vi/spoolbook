@@ -396,3 +396,20 @@ async fn delete_removes_the_stored_file_unless_another_project_uses_it() {
     assert!(shared.exists(), "file still used by another project must stay");
     std::fs::remove_file(shared).ok();
 }
+
+// spec: 005/FR-020
+#[tokio::test]
+async fn link_version_refuses_a_self_link_or_a_cycle() {
+    let pool = test_pool().await;
+    let (v1, v2) = seed_chain(&pool, "/tmp/cycle-1.3mf", "/tmp/cycle-2.3mf").await;
+
+    for (id, previous) in [(v1, v1), (v1, v2)] {
+        let (status, body) =
+            send(&pool, "POST", &format!("/api/projects/{id}/link-version"), Some(serde_json::json!({ "previousVersionProjectId": previous }))).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{id} -> {previous}: {body:?}");
+        assert_eq!(body["error"], "would_create_cycle");
+    }
+    let previous_of_v1: Option<i64> =
+        sqlx::query_scalar("SELECT previous_version_project_id FROM projects WHERE id = ?1").bind(v1).fetch_one(&pool).await.unwrap();
+    assert_eq!(previous_of_v1, None);
+}

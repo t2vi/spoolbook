@@ -30,3 +30,4 @@ curl = { version = "0.4.50", default-features = false, features = ["protocol-ftp
 [dev-dependencies]
 serde_json = "1.0.151"
 tower = { version = "0.5.3", features = ["util"] }
+tokio = { version = "1.53.1", features = ["test-util"] }
