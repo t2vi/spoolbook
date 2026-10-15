@@ -23,17 +23,17 @@ filament. Colors are discovered from filaments as they're added.
 
 ### Filaments
 
-- **FR-001** — `GET /api/filaments` (open) filters by exact `brand` and `material`, ordered by
+- **FR-001** — `GET /api/filaments` (signed in) filters by exact `brand` and `material`, ordered by
   brand then material, paged (`page` default 1, `pageSize` default 20; non-positive → default),
   returning `{ entries, total, page, pageSize, totalPages ≥ 1 }`. `GET /api/filaments/all`
-  (open) returns every filament in the same order. *Verify: integration*
+  (signed in) returns every filament in the same order. *Verify: integration*
 - **FR-010** — `POST /api/filaments` (editor) creates a filament: blank brand, material or color
   → 400 naming the field; an exact duplicate → 400 `duplicate`. *Verify: integration*
 - **FR-011** — `PUT /api/filaments/{id}` (editor) — same validation, duplicate checked against
   *other* rows (saving a row unchanged is fine); missing → 404. *Verify: integration*
 - **FR-012** — Creating or updating a filament registers its color if no color of that name
   exists, with the given hex or `#CCCCCC`; an existing color is never duplicated or changed.
-  `GET /api/filament-colors` (open) lists colors by name. *Verify: integration*
+  `GET /api/filament-colors` (signed in) lists colors by name. *Verify: integration*
 - **FR-013** — `DELETE /api/filaments/{id}` (editor): 400 `has_spools` if any spool uses it,
   400 `has_profiles` if any print profile uses it; 404 if missing. *Verify: integration*
 
@@ -63,7 +63,7 @@ filament. Colors are discovered from filaments as they're added.
   `Unknown filament.`; dates out of order → 400 `Dates are out of order — purchased, then
   opened, then emptied.` Dates are compared by calendar day, for every pair that's present
   (purchased ≤ opened ≤ emptied, and purchased ≤ emptied). *Verify: integration*
-- **FR-031** — `GET /api/spools` (open) lists spools oldest-created first, each with its
+- **FR-031** — `GET /api/spools` (signed in) lists spools oldest-created first, each with its
   filament; `GET /api/spools/{id}` returns one, 404 if missing. *Verify: integration*
 - **FR-032** — `PUT /api/spools/{id}` (editor) updates every field except the filament, with
   FR-030's date-order rule; 404 if missing. *Verify: integration*

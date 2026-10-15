@@ -44,9 +44,9 @@ a chain, and only current versions are listed.
 
 ### Reading
 
-- **FR-010** — `GET /api/projects` (open) lists current versions only, by display name.
-  `GET /api/projects/{id}` (open) returns any version, 404 if missing. *Verify: integration*
-- **FR-011** — `GET /api/projects/{id}/plates` (open) reads the file's
+- **FR-010** — `GET /api/projects` (signed in) lists current versions only, by display name.
+  `GET /api/projects/{id}` (signed in) returns any version, 404 if missing. *Verify: integration*
+- **FR-011** — `GET /api/projects/{id}/plates` (signed in) reads the file's
   `Metadata/model_settings.config` and returns each plate's id, name (blank → null) and
   thumbnail; an unreadable/non-3mf file → empty list; unknown Project → 404.
   *Verify: integration*
@@ -66,7 +66,7 @@ a chain, and only current versions are listed.
   itself, or to a predecessor that already descends from it → 400 `would_create_cycle`.
   *Verify: integration*
 - **FR-021** — `GET /api/projects/version-candidate?meshHash=&fileName=&excludeProjectId=`
-  (open) suggests an existing Project as the predecessor: same mesh hash first, else same
+  (signed in) suggests an existing Project as the predecessor: same mesh hash first, else same
   display name; `null` when nothing matches. *Verify: integration*
 
 ### Re-slicing

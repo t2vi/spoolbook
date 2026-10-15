@@ -27,19 +27,19 @@ and the ambient weather attached once a Print ends.
 
 ### Reading
 
-- **FR-001** — `GET /api/prints/{id}` (open) returns the Print with its profile version, spool,
+- **FR-001** — `GET /api/prints/{id}` (signed in) returns the Print with its profile version, spool,
   printer (id + name), project, failure modes and every auto-filled field; 404 if missing.
   *Verify: integration*
-- **FR-002** — `GET /api/prints` (open), newest `started_at` first: `?printerId=` → that
+- **FR-002** — `GET /api/prints` (signed in), newest `started_at` first: `?printerId=` → that
   printer's **5** most recent; `?projectId=` → all of that project's Prints; neither → all.
   *Verify: integration*
-- **FR-003** — `GET /api/prints/inventory` (open) filters by exact `status` and `printerId`,
+- **FR-003** — `GET /api/prints/inventory` (signed in) filters by exact `status` and `printerId`,
   pages with `page` (default 1) and `pageSize` (default 20; non-positive values fall back to the
   defaults), newest first, and returns `{ prints, total, page, pageSize, totalPages }` with
   `totalPages` ≥ 1. *Verify: integration*
-- **FR-004** — `GET /api/prints/{id}/hourly-weather` (open) returns that Print's hourly rows
+- **FR-004** — `GET /api/prints/{id}/hourly-weather` (signed in) returns that Print's hourly rows
   ordered by hour; empty array if none. *Verify: integration*
-- **FR-005** — `GET /api/prints/{id}/readings` (open) returns the stored per-minute telemetry
+- **FR-005** — `GET /api/prints/{id}/readings` (signed in) returns the stored per-minute telemetry
   snapshot (001/FR-030); empty array if none. *Verify: integration*
 
 ### Writing
@@ -68,7 +68,7 @@ and the ambient weather attached once a Print ends.
 
 ### Recommendation
 
-- **FR-020** — `GET /api/prints/recommend-profile?projectId=&currentTempC=` (open) picks, among
+- **FR-020** — `GET /api/prints/recommend-profile?projectId=&currentTempC=` (signed in) picks, among
   that project's Prints, the best by status (`Success` > `Partial` > `Failed` > `InProgress`),
   then by ambient temperature closest to `currentTempC` (Prints without ambient weather, or no
   `currentTempC` given, rank last on this key), then most recent; returns that Print's exact
@@ -76,7 +76,7 @@ and the ambient weather attached once a Print ends.
 
 ### Linking telemetry Jobs
 
-- **FR-030** — `GET /api/prints/job-match?printerId=&startedAt=` (open) returns the 001/FR-040
+- **FR-030** — `GET /api/prints/job-match?printerId=&startedAt=` (signed in) returns the 001/FR-040
   candidate Job or `null`. *Verify: integration*
 - **FR-031** — `POST /api/prints/{id}/attach-job` `{ jobId }` (editor) attaches the Job
   (001/FR-041). Missing Print or Job → 404 `not_found`; a Job already attached to a different

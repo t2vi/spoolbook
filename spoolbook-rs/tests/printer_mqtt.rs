@@ -1,3 +1,4 @@
+mod common;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use serde_json::Value;
@@ -146,8 +147,9 @@ async fn handle_message_does_not_overwrite_ams_units_with_an_empty_update() {
 // would hang the test. Pull just the first chunk instead, then drop the response (which cancels
 // the underlying stream task) — enough to prove the store's snapshot reaches the wire correctly.
 async fn send_sse(pool: &sqlx::SqlitePool, store: &spoolbook_rs::printer_mqtt::LiveStatusStore, uri: &str) -> (StatusCode, String) {
+    let cookie = common::auth_cookie_header(pool).await;
     let response = spoolbook_rs::app_with_live_status(pool.clone(), store.clone())
-        .oneshot(Request::builder().method("GET").uri(uri).body(Body::empty()).unwrap())
+        .oneshot(Request::builder().method("GET").uri(uri).header("cookie", cookie).body(Body::empty()).unwrap())
         .await
         .unwrap();
     let status = response.status();

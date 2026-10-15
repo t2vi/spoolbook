@@ -200,12 +200,49 @@ async fn a_gated_route_rejects_an_expired_session() {
 
 // Read (GET) routes stay open, matching the original shared-secret model — only mutations are
 // gated.
+// Every read route in the app — a new one must be added here (or to the open list below).
+const READ_ROUTES: &[&str] = &[
+    "/api/dashboard", "/api/export", "/api/filament-colors", "/api/filaments", "/api/filaments/1", "/api/filaments/all",
+    "/api/printers", "/api/printers/1", "/api/printers/1/live", "/api/prints", "/api/prints/1", "/api/prints/1/hourly-weather",
+    "/api/prints/1/readings", "/api/prints/inventory", "/api/prints/job-match?printerId=1&startedAt=2026-01-01T00:00:00Z",
+    "/api/prints/recommend-profile?projectId=1", "/api/profiles?filamentId=1", "/api/profiles/1", "/api/profiles/field-spec",
+    "/api/profiles/inventory", "/api/profiles/system-presets", "/api/projects", "/api/projects/1", "/api/projects/1/plates",
+    "/api/projects/version-candidate?meshHash=x&fileName=y", "/api/settings", "/api/spools", "/api/spools/1",
+    "/api/auth/google/config",
+];
+
 // spec: 008/FR-001
 #[tokio::test]
-async fn read_routes_stay_open_with_no_cookie() {
+async fn read_routes_require_a_session() {
     let pool = test_pool().await;
-    let (status, _, _) = send(&pool, "GET", "/api/filaments", None, None).await;
-    assert_eq!(status, StatusCode::OK);
+    let cookie = setup_user(&pool, "vinny", "correct-horse-battery").await;
+
+    for uri in READ_ROUTES {
+        let (status, _, body) = send(&pool, "GET", uri, None, None).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "{uri} without a session");
+        assert_eq!(body["authenticated"], false, "{uri}");
+    }
+    let (status, _, _) = send(&pool, "GET", "/api/filaments", Some(&cookie), None).await;
+    assert_eq!(status, StatusCode::OK, "a signed-in user can read");
+}
+
+// spec: 008/FR-001
+#[tokio::test]
+async fn only_the_sign_in_routes_are_open() {
+    let pool = test_pool().await;
+
+    for (method, uri) in [
+        ("GET", "/api/setup-status"),
+        ("GET", "/api/me"),
+        ("GET", "/api/version"),
+        ("POST", "/api/logout"),
+        ("GET", "/api/auth/google/status"),
+        ("GET", "/api/auth/google/login"),
+        ("GET", "/api/auth/google/callback"),
+    ] {
+        let (status, _, body) = send(&pool, method, uri, None, None).await;
+        assert_ne!(status, StatusCode::UNAUTHORIZED, "{method} {uri} must stay open: {body:?}");
+    }
 }
 
 // spec: 008/FR-020
