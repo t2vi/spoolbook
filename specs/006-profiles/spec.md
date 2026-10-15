@@ -18,7 +18,10 @@ Bambu system preset, and are what a Print records and a re-slice applies.
   `name`, `nozzle_temp_c` (the only required setting), every other setting nullable,
   provenance (`source` default `Manual`, `source_slicer`, `raw_settings_json`,
   `source_preset_path`), `version_number`, `version_name`, `is_current_version`,
-  `previous_version_profile_id`, `notes`. Each row is one *version*.
+  `previous_version_profile_id`, `notes`. Each row is one *version*. The versions linked
+  through `previous_version_profile_id` form one profile's **version set**: working variants
+  (e.g. "Winter 2026", "Fast draft") of which exactly one is **selected**
+  (`is_current_version`) — the one lists, the Print modal and recommendations use.
 - **Field spec** — the form definition: groups (tabs) → sections → fields, each with a key,
   label, unit, input kind, and current value as a string.
 
@@ -28,8 +31,12 @@ Bambu system preset, and are what a Print records and a re-slice applies.
 
 - **FR-001** — `GET /api/profiles?filamentId=` (signed in) lists that filament's current versions,
   generic profiles before spool-specific ones, then by name. *Verify: integration*
-- **FR-002** — `GET /api/profiles/inventory` (signed in) lists every current version by name, each
-  with its filament (brand, material, variant, color), and `total`; no pagination (one page).
+- **FR-002** — `GET /api/profiles/inventory` (signed in) lists every selected version, each with
+  its filament (brand, material, variant, color) and spool; filters by exact filament `brand` and
+  `material` and by `scope` = `generic` (no spool) | `spool`; sorts by `sort` = `filament`
+  (default: brand, then material, then oldest created) | `name` | `nozzleTemp` | `created` with
+  `order` = `asc` (default) | `desc`; pages with `page` / `pageSize` (defaults 1 / 20;
+  non-positive → default); returns `{ profiles, total, page, pageSize, totalPages ≥ 1 }`.
   *Verify: integration*
 - **FR-003** — `GET /api/profiles/field-spec` (signed in) returns the form definition with empty
   values; `?profileId=` returns it pre-filled with that profile's name and values (booleans as
@@ -53,7 +60,7 @@ Bambu system preset, and are what a Print records and a re-slice applies.
   doesn't carry them. Missing id → 404. *Verify: integration*
 - **FR-013** — `DELETE /api/profiles/{id}` (editor): 400 `has_prints` if any Print references
   it; 400 `has_newer_version` if a later version builds on it; 404 if missing. Deleting the
-  current version makes its previous version current again. *Verify: integration*
+  selected version selects its previous version. *Verify: integration*
 
 ### Versions
 
@@ -65,12 +72,26 @@ Bambu system preset, and are what a Print records and a re-slice applies.
   come from the request; provenance (`source`, `source_slicer`, `raw_settings_json`,
   `source_preset_path`) and notes always come from `{id}` (any provenance in the request is
   ignored: a new version is the same profile edited, not a re-import); version name cleared;
-  `version_number` + 1, `previous_version_profile_id = {id}`, current;
-  `{id}` stops being current. All or nothing. Only the current version can be branched — an
-  older one → 400 `not_current_version`; missing → 404; validation as FR-011. This is how a
-  locked version is edited. *Verify: integration*
-- **FR-022** — Lists (FR-001, FR-002) show current versions only; a Print keeps pointing at the
-  exact version it used. *Verify: integration*
+  `version_number` = the highest number in its version set + 1,
+  `previous_version_profile_id = {id}`, selected; every other version in the set is
+  unselected. All or nothing. Any version can be the starting point, selected or not; missing
+  → 404; validation as FR-011. This is how a locked version is edited. *Verify: integration*
+- **FR-022** — Lists (FR-001, FR-002) show the selected version of each set only; a Print keeps
+  pointing at the exact version it used. *Verify: integration*
+- **FR-023** — `GET /api/profiles/{id}/versions` (signed in) lists every version in `{id}`'s
+  version set, highest number first, each with id, `versionNumber`, `versionName`,
+  `nozzleTempC`, created time, `selected`, and `locked` (used by any Print); 404 if missing.
+  *Verify: integration*
+- **FR-024** — `POST /api/profiles/{id}/select` (editor) makes `{id}` the selected version of
+  its set and unselects the others, atomically; selecting the already-selected one is a no-op;
+  404 if missing. *Verify: integration*
+- **FR-025** — `PUT /api/profiles/{id}/version-name` `{ versionName }` (editor) sets (trimmed) or
+  clears (blank) a version's name. Allowed on locked versions too — it's a label, not a
+  setting. 404 if missing. *Verify: integration*
+- **FR-026** — `POST /api/profiles/{id}/duplicate` (editor) creates a new, independent profile
+  — its own version set, version 1, selected — copying every setting, the filament, spool,
+  provenance and notes of `{id}`, named "`<name>` (copy)" with no version name; returns
+  `{ ok, profile }`; 404 if missing. *Verify: integration*
 
 ### Import
 
@@ -93,8 +114,12 @@ Bambu system preset, and are what a Print records and a re-slice applies.
 
 ### Pages
 
-- **FR-040** — `/profiles` lists current profiles with their filament and delete (with the
-  `has_prints` refusal shown). *Verify: e2e*
+- **FR-040** — `/profiles` lists profiles (FR-002) with columns name, filament (with swatch,
+  007/FR-051), scope ("Generic" or the spool's lot code), nozzle temp, source and selected
+  version (number and name); filters for brand, material and scope; sortable filament / name /
+  nozzle temp / created headers; paging with a page-size choice (10 / 20 / 50); filters, sort
+  and page in the URL; delete with the `has_prints` / `has_newer_version` refusal shown.
+  *Verify: e2e*
 - **FR-041** — `/profiles/new` and `/profiles/edit/[id]` render the tabbed form from the field
   spec, pre-fill from a file import or a system preset, show per-field errors, and save. A
   Spool picker chooses generic or one of the profile's filament's spools; the edit page starts
@@ -102,9 +127,22 @@ Bambu system preset, and are what a Print records and a re-slice applies.
   edit page shows the version number and a "Save as new version" button (FR-021); a `Locked`
   refusal points the user at it. Saving from the edit page keeps the profile's provenance
   (`source`, `source_slicer`, `raw_settings_json`) unless a file or system preset was imported
-  into the form during that edit — then the import's provenance is saved. *Verify: e2e*
+  into the form during that edit — then the import's provenance is saved. The filament picker is
+  searchable (007/FR-052). Unsaved edits are guarded (002/FR-008). *Verify: e2e*
+- **FR-042** — The edit page has a Versions panel (FR-023): each version's number, name, nozzle
+  temp, created date and Selected / Locked badges; open any version in the editor; "Use this
+  version" selects it (FR-024); rename sets its version name (FR-025). *Verify: e2e*
+- **FR-043** — The edit page has "Duplicate" (FR-026), which opens the new copy in the editor.
+  *Verify: e2e*
 
 ## Notes
+
+- **Lost-features review (2026-10-16):** FR-002, 023–026 and 040–043 restore the desktop app's
+  profile list filters/sorting/scope, version picker and naming, duplicate and unsaved-changes
+  warning. Versions are now working variants you choose between (FR-024), not just history; so
+  any version can start a new one (FR-021, was current-only). Dropped on purpose: linking a
+  profile to a local Bambu preset file and "Check for updates" — a server app has no local
+  preset folder.
 
 - Retroactive: behavior read from the code at `3fdca27`.
 - **#171 (fixed):** versioning existed only in the schema. Versions now chain through

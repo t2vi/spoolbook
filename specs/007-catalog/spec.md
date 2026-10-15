@@ -15,7 +15,9 @@ filament. Colors are discovered from filaments as they're added.
 
 - **Filament** (`filaments`) — `brand`, `material`, optional `variant`, `color`; unique on all
   four (a null variant matches only another null variant).
-- **Filament color** (`filament_colors`) — unique `name`, `hex`.
+- **Filament color** (`filament_colors`) — unique `name`, `hex`: one `#RRGGBB`, or a
+  comma-separated list of them for a multi-color filament (e.g. `#1A1A1A, #D4AF37` for
+  black + gold). Filaments refer to a color by name.
 - **Spool** (`spools`) — `filament_id`, `lot_code`, `purchased_at`, `opened_at`, `emptied_at`,
   `weight_grams`, `diameter_mm`, `notes`.
 
@@ -36,6 +38,25 @@ filament. Colors are discovered from filaments as they're added.
   `GET /api/filament-colors` (signed in) lists colors by name. *Verify: integration*
 - **FR-013** — `DELETE /api/filaments/{id}` (editor): 400 `has_spools` if any spool uses it,
   400 `has_profiles` if any print profile uses it; 404 if missing. *Verify: integration*
+
+### Colors
+
+- **FR-014** — A color's hex is one or more `#RRGGBB` values (case-insensitive), separated by
+  commas; spaces around each part are ignored and empty parts are dropped. Anything else is
+  invalid. *Verify: integration*
+- **FR-015** — `POST /api/filament-colors` `{ name, hex }` (editor) creates a color; `PUT
+  /api/filament-colors/{id}` (editor) updates one. Name and hex are trimmed. Blank name → 400
+  `Name is required`; invalid hex (FR-014) → 400 `invalid_hex`; a name another color already
+  has → 400 `duplicate`; update of a missing id → 404. Renaming a color renames it on every
+  filament that uses it, in the same transaction, so their swatches keep working.
+  *Verify: integration*
+- **FR-016** — `DELETE /api/filament-colors/{id}` (editor): 400 `in_use` while any filament uses
+  that color's name; 404 if missing. *Verify: integration*
+- **FR-017** — `GET /api/filament-colors/inventory` (signed in) filters by `q` (case-insensitive
+  substring of the name), sorts by `sort` = `name` (default) | `hex` with `order` = `asc`
+  (default) | `desc`, pages with `page` / `pageSize` (defaults 1 / 20; non-positive → default),
+  and returns `{ colors, total, page, pageSize, totalPages ≥ 1 }`. `GET /api/filament-colors`
+  (FR-012) still returns the full list, for swatches and pickers. *Verify: integration*
 
 ### Catalog sync
 
@@ -69,6 +90,29 @@ filament. Colors are discovered from filaments as they're added.
   FR-030's date-order rule; 404 if missing. *Verify: integration*
 - **FR-033** — `DELETE /api/spools/{id}` (editor): 400 `has_profiles` if a spool-specific
   profile uses it, 400 `has_prints` if a Print does; 404 if missing. *Verify: integration*
+- **FR-034** — `GET /api/spools/inventory` (signed in) filters by exact filament `brand` and
+  `material`, `status` (`Unopened` = no opened date, `Opened` = opened but not emptied, `Empty`
+  = emptied) and `purchasedFrom` / `purchasedTo` (inclusive calendar days); sorts by `sort` =
+  `filament` (default: brand, then material, then oldest created) | `purchasedAt` | `openedAt` |
+  `emptiedAt` with `order` = `asc` (default) | `desc` — spools without that date always last;
+  pages with `page` / `pageSize` (defaults 1 / 20); returns `{ spools, total, page, pageSize,
+  totalPages ≥ 1 }`, each spool with its filament. *Verify: integration*
+
+### Swatches & pickers
+
+- **FR-050** — A color swatch draws its hex (FR-014): one value fills it solid; several split it
+  into equal diagonal wedges from top-left to bottom-right, hard edges, in the order listed (so
+  black + gold reads as two flat halves, not a blend). Its border turns light when the colors'
+  average luminance (0.299 R + 0.587 G + 0.114 B, over 255) is under 0.3, so near-black swatches
+  stay visible. A color with no known hex shows an empty outlined swatch. *Verify: e2e*
+- **FR-051** — A filament is shown with its color's swatch wherever it's listed or picked: the
+  filament list, spool list, profile list, print list, print detail, the Print modal's spool
+  picker, every filament picker, and the filament form (updating live as the color is typed).
+  *Verify: e2e*
+- **FR-052** — Every filament picker (spool form, profile form) is a type-to-search box: typing
+  matches brand, material, variant and color as case-insensitive substrings (all typed words
+  must match), options show the swatch, and it is fully keyboard-operable (arrows, Enter,
+  Escape). A picker never renders the whole catalog as one long list. *Verify: e2e*
 
 ### Pages
 
@@ -76,12 +120,24 @@ filament. Colors are discovered from filaments as they're added.
   (showing the added/skipped counts, or the error when it fails), and
   deletes with the refusal reason shown; `/filaments/new` and `/filaments/edit/[id]` edit the
   four fields with color autocomplete from known colors. *Verify: e2e*
-- **FR-041** — `/spools` lists spools with their filament and status; `/spools/new` and
-  `/spools/edit/[id]` pick the filament and edit the spool's fields. *Verify: e2e*
+- **FR-041** — `/spools` lists spools (FR-034) with columns brand, material, color (swatch),
+  lot code, purchased, opened, emptied and status; filters for brand, material, status and
+  purchase-date range; sortable filament / date headers; paging with a page-size choice
+  (10 / 20 / 50); filters, sort and page in the URL. `/spools/new` and `/spools/edit/[id]` pick
+  the filament (FR-052) and edit the spool's fields. *Verify: e2e*
+- **FR-042** — `/filaments/colors` (sidebar: Filaments → Colors) lists colors (FR-017) with
+  swatch, name and hex; a name filter; sortable name / hex; paging with a page-size choice;
+  add and edit in a form with name, hex (hint: comma-separate for multi-color) and a live
+  swatch preview, showing `duplicate` / `invalid_hex` errors; delete after confirmation, showing
+  the `in_use` refusal. *Verify: e2e*
 
 ## Notes
 
 - Retroactive: behavior read from the code at `3fdca27`.
 - **#174 (fixed):** filament delete guard; **#175 (fixed):** sync failure masking + no timeout; **#176 (fixed):** spool
-  validation; **#177:** no way to fix a color's hex (`#CCCCCC` placeholder is permanent).
+  validation; **#177:** no way to fix a color's hex — now FR-015/042.
+- **Lost-features review (2026-10-16):** FR-014–017, 034, 041–042 and 050–052 restore what the
+  retired desktop app had (multi-color gradient swatches, the Colors screen, swatches in lists
+  and pickers, searchable filament pickers, the spool list's columns/filters/sorting) and the
+  web UI never got.
 - Spool "status" (Unopened / Opened / Empty) is derived from the dates — see 002/FR-020.
