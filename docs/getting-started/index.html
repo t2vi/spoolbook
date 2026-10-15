@@ -45,10 +45,12 @@ variant + color).</li>
 physical roll.</li>
 <li>Go to <strong>Print workflow → Profiles</strong>, create a Print Profile for it — start from a Bambu Studio
 default preset, import a sliced <code>.3mf</code> or your own saved Bambu Studio <code>.json</code> preset, or fill
-it in by hand.</li>
+it in by hand. The <strong>Spool</strong> picker makes it generic (any roll of that filament) or specific to
+one spool.</li>
 <li>Send the print (see above) — spoolbook creates the Print record automatically and locks in the
-exact settings from the Profile version you used, so editing the Profile later (e.g. a seasonal
-temperature tweak) never rewrites what a past print recorded. <strong>Print workflow → Prints</strong> shows
+exact settings from the Profile version you used. That version is then locked: to tweak it
+later (e.g. a seasonal temperature change), open it and use <strong>Save as new version</strong>, so a past
+print always shows what it was really printed with. <strong>Print workflow → Prints</strong> shows
 the full history; each entry is read-only, and fills in automatically once the print ends — a
 photo of the finished bed, outdoor weather for the print window, and (P2S/AMS hardware that
 reports it) chamber temperature, AMS humidity, and layer progress charted over the print.</li>
