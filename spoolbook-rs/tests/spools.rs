@@ -209,3 +209,74 @@ async fn delete_removes_the_spool() {
     let (_, all) = send(&pool, "GET", "/api/spools", None).await;
     assert_eq!(all.as_array().unwrap().len(), 0);
 }
+
+fn spool_body(filament_id: i64, purchased: Option<&str>, opened: Option<&str>, emptied: Option<&str>) -> Value {
+    json!({
+        "filamentId": filament_id, "lotCode": null, "purchasedAt": purchased, "openedAt": opened, "emptiedAt": emptied,
+        "weightGrams": null, "diameterMm": null, "notes": null
+    })
+}
+
+async fn spool_count(pool: &sqlx::SqlitePool) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM spools").fetch_one(pool).await.unwrap()
+}
+
+// spec: 007/FR-030
+#[tokio::test]
+async fn create_rejects_an_unknown_filament() {
+    let pool = test_pool().await;
+
+    let (status, body) = send(&pool, "POST", "/api/spools", Some(spool_body(999, None, None, None))).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Unknown filament.");
+    assert_eq!(spool_count(&pool).await, 0);
+}
+
+// spec: 007/FR-030
+#[tokio::test]
+async fn create_rejects_dates_out_of_order() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let cases = [
+        (Some("2026-08-10"), Some("2026-08-01"), None),             // opened before purchased
+        (None, Some("2026-08-10"), Some("2026-08-01")),             // emptied before opened
+        (Some("2026-08-10"), None, Some("2026-08-01")),             // emptied before purchased
+        (Some("2026-08-10T09:00:00Z"), Some("2026-08-01"), None),   // mixed formats compare by day
+    ];
+
+    for (purchased, opened, emptied) in cases {
+        let (status, body) = send(&pool, "POST", "/api/spools", Some(spool_body(filament_id, purchased, opened, emptied))).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{purchased:?} {opened:?} {emptied:?}");
+        assert_eq!(body["error"], "Dates are out of order — purchased, then opened, then emptied.");
+    }
+    assert_eq!(spool_count(&pool).await, 0);
+}
+
+// spec: 007/FR-030
+#[tokio::test]
+async fn create_accepts_same_day_and_partial_dates() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+
+    for (purchased, opened, emptied) in [(Some("2026-08-01"), Some("2026-08-01T20:00:00Z"), Some("2026-08-01")), (None, None, Some("2026-08-01"))] {
+        let (status, body) = send(&pool, "POST", "/api/spools", Some(spool_body(filament_id, purchased, opened, emptied))).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+    }
+}
+
+// spec: 007/FR-032
+#[tokio::test]
+async fn update_rejects_dates_out_of_order() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let (_, created) = send(&pool, "POST", "/api/spools", Some(spool_body(filament_id, Some("2026-08-01"), None, None))).await;
+    let id = created["spool"]["id"].as_i64().unwrap();
+
+    let (status, body) = send(&pool, "PUT", &format!("/api/spools/{id}"), Some(spool_body(filament_id, Some("2026-08-10"), Some("2026-08-01"), None))).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Dates are out of order — purchased, then opened, then emptied.");
+    let purchased: Option<String> = sqlx::query_scalar("SELECT purchased_at FROM spools WHERE id = ?1").bind(id).fetch_one(&pool).await.unwrap();
+    assert_eq!(purchased.as_deref(), Some("2026-08-01"), "unchanged");
+}
