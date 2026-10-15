@@ -19,6 +19,7 @@ const RUNNING_STATUS_JSON: &str = r##"{
     }
 }"##;
 
+// spec: 004/FR-011
 #[test]
 fn parse_extracts_core_fields_from_running_status() {
     let result = parse(RUNNING_STATUS_JSON).unwrap();
@@ -63,6 +64,7 @@ const RUNNING_STATUS_WITH_FULL_AMS_JSON: &str = r##"{
     }
 }"##;
 
+// spec: 004/FR-011
 #[test]
 fn parse_extracts_full_ams_inventory_when_present() {
     let result = parse(RUNNING_STATUS_WITH_FULL_AMS_JSON).unwrap();
@@ -86,6 +88,7 @@ fn parse_extracts_full_ams_inventory_when_present() {
 
 // Older/original AMS units have no hygrometer, so the printer never sends humidity_raw for
 // them -- only the coarse 1-5 LED-ring index.
+// spec: 004/FR-011
 #[test]
 fn parse_falls_back_to_the_coarse_index_when_humidity_raw_is_absent() {
     let json = r##"{
@@ -104,38 +107,45 @@ fn parse_falls_back_to_the_coarse_index_when_humidity_raw_is_absent() {
     assert_eq!(unit.humidity_level, Some(3));
 }
 
+// spec: 004/FR-011
 #[test]
 fn parse_returns_empty_ams_units_when_ams_array_absent() {
     let result = parse(RUNNING_STATUS_JSON).unwrap();
     assert_eq!(result.ams_units.len(), 0);
 }
 
+// spec: 004/FR-011
 #[test]
 fn parse_leaves_chamber_temp_none_when_field_absent() {
     let result = parse(RUNNING_STATUS_JSON).unwrap();
     assert_eq!(result.reading.chamber_temp_c, None);
 }
 
+// spec: 004/FR-011
 #[test]
 fn parse_returns_none_when_no_print_key() {
     assert!(parse(r#"{ "system": { "sequence_id": "1" } }"#).is_none());
 }
 
+// spec: 004/FR-011
 #[test]
 fn parse_returns_none_when_gcode_state_missing() {
     assert!(parse(r#"{ "print": { "nozzle_temper": 210.0 } }"#).is_none());
 }
 
+// spec: 004/FR-011
 #[test]
 fn parse_returns_none_for_malformed_json() {
     assert!(parse("not json").is_none());
 }
 
+// spec: 004/FR-012
 #[test]
 fn parse_has_no_errors_when_print_error_zero_and_no_hms() {
     assert!(parse(RUNNING_STATUS_JSON).unwrap().errors.is_empty());
 }
 
+// spec: 004/FR-012
 #[test]
 fn parse_decodes_the_blocking_print_error_and_hms_warnings() {
     // print_error 134184978 == 0x07FF8012 -> "07FF-8012" (the AMS mapping failure the P2S
@@ -164,6 +174,7 @@ fn parse_decodes_the_blocking_print_error_and_hms_warnings() {
     assert!(errors[1].message.contains("camera"));
 }
 
+// spec: 004/FR-012
 #[test]
 fn parse_gives_unknown_codes_a_generic_message_not_a_bare_number() {
     let json = r##"{ "print": { "gcode_state": "PAUSE", "print_error": 305419896 } }"##;
@@ -174,6 +185,7 @@ fn parse_gives_unknown_codes_a_generic_message_not_a_bare_number() {
     assert_eq!(err.wiki_url, "https://wiki.bambulab.com/en/hms/1234-5678");
 }
 
+// spec: 004/FR-011
 #[test]
 fn is_active_state_classifies_gcode_state() {
     assert!(is_active_state("RUNNING"));

@@ -34,6 +34,7 @@ async fn send(uri: &str, body: Value) -> (StatusCode, Value) {
 // immediately (no real broker to test against, same boundary as the rest of this MQTT tier), so
 // this proves the plumbing (wire the request through, surface a non-panicking error) without
 // waiting out the full 6s timeout.
+// spec: 004/FR-005
 #[tokio::test]
 async fn test_reports_failure_when_nothing_is_listening() {
     let (status, body) = send("/api/printers/test", json!({ "ipAddress": "127.0.0.1", "accessCode": "12345678" })).await;

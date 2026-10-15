@@ -8,11 +8,13 @@ use std::io::Write;
 use std::path::PathBuf;
 use tower::ServiceExt;
 
+// spec: 005/FR-001
 #[test]
 fn storage_dir_for_lives_alongside_the_db_file_in_docker() {
     assert_eq!(storage_dir_for("/data/spoolbook-rs.db"), PathBuf::from("/data/projects"));
 }
 
+// spec: 005/FR-001
 #[test]
 fn storage_dir_for_relative_dev_db_uses_the_current_directory() {
     assert_eq!(storage_dir_for("dev.db"), PathBuf::from("projects"));
@@ -94,6 +96,7 @@ fn fake_3mf_bytes() -> Vec<u8> {
     buf
 }
 
+// spec: 005/FR-002, 005/FR-004
 #[tokio::test]
 async fn upload_saves_the_file_and_creates_a_project() {
     let pool = test_pool().await;
@@ -111,6 +114,7 @@ async fn upload_saves_the_file_and_creates_a_project() {
     assert_eq!(all.as_array().unwrap().len(), 1);
 }
 
+// spec: 005/FR-002
 #[tokio::test]
 async fn upload_the_same_bytes_twice_dedupes_to_one_project() {
     let pool = test_pool().await;
@@ -131,6 +135,7 @@ async fn upload_the_same_bytes_twice_dedupes_to_one_project() {
 // .3mf's size (embedded gcode + thumbnails). Padding fake_3mf_bytes() past that line without a
 // real DefaultBodyLimit::max() layer on the app used to fail the multipart read entirely with a
 // generic "Couldn't read the uploaded file." error, not just reject cleanly.
+// spec: 005/FR-002, 002/FR-005
 #[tokio::test]
 async fn upload_accepts_a_file_larger_than_axums_default_2mb_body_limit() {
     let pool = test_pool().await;
@@ -143,6 +148,7 @@ async fn upload_accepts_a_file_larger_than_axums_default_2mb_body_limit() {
     assert_eq!(body["ok"], true);
 }
 
+// spec: 005/FR-002
 #[tokio::test]
 async fn upload_rejects_a_request_with_no_file_field() {
     let pool = test_pool().await;
@@ -151,6 +157,7 @@ async fn upload_rejects_a_request_with_no_file_field() {
     assert_eq!(body["error"], "No file provided.");
 }
 
+// spec: 005/FR-003
 #[tokio::test]
 async fn import_url_rejects_a_non_http_url() {
     let pool = test_pool().await;
@@ -159,6 +166,7 @@ async fn import_url_rejects_a_non_http_url() {
     assert_eq!(body["error"], "Enter a valid http(s) URL.");
 }
 
+// spec: 005/FR-003
 #[tokio::test]
 async fn import_url_rejects_a_malformed_url() {
     let pool = test_pool().await;

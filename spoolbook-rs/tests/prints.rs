@@ -106,6 +106,7 @@ fn print_body(f: &Fixtures, status: &str, failure_modes: Vec<&str>) -> Value {
     })
 }
 
+// spec: 003/FR-010
 #[tokio::test]
 async fn create_persists_and_nests_profile_spool_printer() {
     let pool = test_pool().await;
@@ -126,6 +127,7 @@ async fn create_persists_and_nests_profile_spool_printer() {
     assert_eq!(p["failureModes"].as_array().unwrap().len(), 0);
 }
 
+// spec: 003/FR-010, 003/FR-011
 #[tokio::test]
 async fn create_persists_failure_modes_when_not_success() {
     let pool = test_pool().await;
@@ -140,6 +142,7 @@ async fn create_persists_failure_modes_when_not_success() {
     assert!(modes.contains(&"Stringing"));
 }
 
+// spec: 003/FR-011
 #[tokio::test]
 async fn create_rejects_failure_modes_on_a_success_status() {
     let pool = test_pool().await;
@@ -151,6 +154,7 @@ async fn create_rejects_failure_modes_on_a_success_status() {
     assert_eq!(body["error"], "failure_modes_require_failed_or_partial");
 }
 
+// spec: 003/FR-010
 #[tokio::test]
 async fn create_nests_project_when_provided() {
     let pool = test_pool().await;
@@ -167,6 +171,7 @@ async fn create_nests_project_when_provided() {
     assert_eq!(resp["print"]["projectPlaterId"], "1");
 }
 
+// spec: 003/FR-001
 #[tokio::test]
 async fn get_by_id_returns_not_found_for_missing_id() {
     let pool = test_pool().await;
@@ -174,6 +179,7 @@ async fn get_by_id_returns_not_found_for_missing_id() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
+// spec: 003/FR-001
 #[tokio::test]
 async fn get_by_id_returns_the_full_nested_print() {
     let pool = test_pool().await;
@@ -188,6 +194,7 @@ async fn get_by_id_returns_the_full_nested_print() {
     assert_eq!(body["profile"]["nozzleTempC"], 220);
 }
 
+// spec: 003/FR-002
 #[tokio::test]
 async fn list_filters_by_printer_and_caps_at_five() {
     let pool = test_pool().await;
@@ -207,6 +214,7 @@ async fn list_filters_by_printer_and_caps_at_five() {
     assert!(prints.iter().all(|p| p["printerId"] == f.printer_id), "excludes the other printer's print");
 }
 
+// spec: 003/FR-002
 #[tokio::test]
 async fn list_filters_by_project_id() {
     let pool = test_pool().await;
@@ -226,6 +234,7 @@ async fn list_filters_by_project_id() {
     assert_eq!(prints[0]["projectId"], project_id);
 }
 
+// spec: 003/FR-002
 #[tokio::test]
 async fn list_without_printer_id_returns_everything() {
     let pool = test_pool().await;
@@ -238,6 +247,7 @@ async fn list_without_printer_id_returns_everything() {
     assert_eq!(body.as_array().unwrap().len(), 1);
 }
 
+// spec: 003/FR-003
 #[tokio::test]
 async fn inventory_filters_by_status_and_paginates() {
     let pool = test_pool().await;
@@ -252,6 +262,7 @@ async fn inventory_filters_by_status_and_paginates() {
     assert_eq!(body["prints"][0]["status"], "Success");
 }
 
+// spec: 003/FR-020
 #[tokio::test]
 async fn recommend_profile_picks_success_over_failed() {
     let pool = test_pool().await;
@@ -274,6 +285,7 @@ async fn recommend_profile_picks_success_over_failed() {
     assert_eq!(body["name"], "Success Profile");
 }
 
+// spec: 003/FR-020
 #[tokio::test]
 async fn recommend_profile_returns_null_when_no_prints_reference_the_project() {
     let pool = test_pool().await;
@@ -283,6 +295,7 @@ async fn recommend_profile_returns_null_when_no_prints_reference_the_project() {
     assert_eq!(body, Value::Null);
 }
 
+// spec: 003/FR-013
 #[tokio::test]
 async fn update_persists_changes() {
     let pool = test_pool().await;
@@ -308,6 +321,7 @@ async fn update_persists_changes() {
     assert_eq!(modes, vec!["Clog"]);
 }
 
+// spec: 003/FR-013
 #[tokio::test]
 async fn update_returns_not_found_for_missing_id() {
     let pool = test_pool().await;
@@ -320,6 +334,7 @@ async fn update_returns_not_found_for_missing_id() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
+// spec: 003/FR-014
 #[tokio::test]
 async fn delete_removes_the_print() {
     let pool = test_pool().await;
@@ -335,6 +350,7 @@ async fn delete_removes_the_print() {
     assert_eq!(all.as_array().unwrap().len(), 0);
 }
 
+// spec: 003/FR-014
 #[tokio::test]
 async fn delete_returns_not_found_for_missing_id() {
     let pool = test_pool().await;
@@ -354,6 +370,7 @@ async fn seed_printer_job(pool: &sqlx::SqlitePool, printer_id: i64, external_job
     .unwrap()
 }
 
+// spec: 003/FR-030
 #[tokio::test]
 async fn job_match_returns_the_closest_unattached_job() {
     let pool = test_pool().await;
@@ -368,6 +385,7 @@ async fn job_match_returns_the_closest_unattached_job() {
     assert_eq!(body["externalJobId"], "job-close");
 }
 
+// spec: 003/FR-030
 #[tokio::test]
 async fn job_match_returns_null_when_no_unattached_jobs_exist() {
     let pool = test_pool().await;
@@ -380,6 +398,7 @@ async fn job_match_returns_null_when_no_unattached_jobs_exist() {
     assert_eq!(body, Value::Null);
 }
 
+// spec: 003/FR-031
 #[tokio::test]
 async fn attach_job_sets_the_jobs_print_id() {
     let pool = test_pool().await;
@@ -399,6 +418,7 @@ async fn attach_job_sets_the_jobs_print_id() {
     assert_eq!(attached_print_id, Some(print_id));
 }
 
+// spec: 003/FR-004
 #[tokio::test]
 async fn hourly_weather_returns_rows_ordered_by_hour() {
     let pool = test_pool().await;
@@ -421,6 +441,7 @@ async fn hourly_weather_returns_rows_ordered_by_hour() {
     assert_eq!(rows[1]["hour"], "2026-01-01T08:00");
 }
 
+// spec: 003/FR-005
 #[tokio::test]
 async fn readings_returns_the_stored_telemetry_snapshot() {
     let pool = test_pool().await;
@@ -439,6 +460,7 @@ async fn readings_returns_the_stored_telemetry_snapshot() {
     assert_eq!(rows[0]["layerNum"], 6);
 }
 
+// spec: 003/FR-005
 #[tokio::test]
 async fn readings_returns_empty_array_when_no_snapshot_exists() {
     let pool = test_pool().await;
@@ -452,6 +474,7 @@ async fn readings_returns_empty_array_when_no_snapshot_exists() {
     assert_eq!(body.as_array().unwrap().len(), 0);
 }
 
+// spec: 003/FR-004
 #[tokio::test]
 async fn hourly_weather_returns_empty_array_when_none_recorded() {
     let pool = test_pool().await;

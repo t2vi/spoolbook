@@ -22,6 +22,7 @@ async fn seed_printer(pool: &sqlx::SqlitePool, ip_address: Option<&str>, access_
         .unwrap()
 }
 
+// spec: 004/FR-040
 #[tokio::test]
 async fn camera_stream_returns_not_found_for_a_missing_printer() {
     let pool = test_pool().await;
@@ -36,6 +37,7 @@ async fn camera_stream_returns_not_found_for_a_missing_printer() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
+// spec: 004/FR-040
 #[tokio::test]
 async fn camera_stream_returns_not_found_for_a_printer_missing_connection_details() {
     let pool = test_pool().await;
@@ -61,6 +63,7 @@ async fn camera_stream_returns_not_found_for_a_printer_missing_connection_detail
 // Doesn't wait for any actual frame data (there's no real printer/ffmpeg in this environment) —
 // the response headers are already finalized by the time subscribe() returns, before any bytes
 // are streamed, so this proves the routing/header wiring without touching the unverifiable part.
+// spec: 004/FR-040
 #[tokio::test]
 async fn camera_stream_responds_with_multipart_headers_for_a_configured_printer() {
     let pool = test_pool().await;
@@ -92,6 +95,7 @@ async fn camera_stream_responds_with_multipart_headers_for_a_configured_printer(
     assert_ne!(status, CameraStreamStatus::NotStarted, "subscribing should have kicked off the pipeline");
 }
 
+// spec: 004/FR-042
 #[tokio::test]
 async fn retry_is_a_no_op_for_a_printer_with_no_broadcaster_yet() {
     let pool = test_pool().await;

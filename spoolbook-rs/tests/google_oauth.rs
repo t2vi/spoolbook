@@ -52,6 +52,7 @@ fn query_param<'a>(url: &'a str, key: &str) -> Option<&'a str> {
     })
 }
 
+// spec: 008/FR-030
 #[tokio::test]
 async fn status_reports_not_configured_by_default() {
     let pool = test_pool().await;
@@ -60,6 +61,7 @@ async fn status_reports_not_configured_by_default() {
     assert_eq!(body["configured"], false);
 }
 
+// spec: 008/FR-031
 #[tokio::test]
 async fn config_endpoint_is_gated() {
     let pool = test_pool().await;
@@ -69,6 +71,7 @@ async fn config_endpoint_is_gated() {
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 }
 
+// spec: 008/FR-030, 008/FR-031
 #[tokio::test]
 async fn saving_config_makes_status_report_configured_and_hides_the_secret_on_read() {
     let pool = test_pool().await;
@@ -96,6 +99,7 @@ async fn saving_config_makes_status_report_configured_and_hides_the_secret_on_re
     assert!(body.get("clientSecret").is_none(), "secret should never round-trip in a GET: {body:?}");
 }
 
+// spec: 008/FR-031
 #[tokio::test]
 async fn saving_config_with_a_blank_secret_keeps_the_existing_one() {
     let pool = test_pool().await;
@@ -111,6 +115,7 @@ async fn saving_config_with_a_blank_secret_keeps_the_existing_one() {
     assert_eq!(body["secretSet"], true, "blank secret on save should not clear the existing one");
 }
 
+// spec: 008/FR-032
 #[tokio::test]
 async fn login_redirect_requires_configuration() {
     let pool = test_pool().await;
@@ -172,6 +177,7 @@ async fn spawn_mock_google(sub: &str) -> (String, String) {
     (format!("http://{addr}/token"), format!("http://{addr}/userinfo"))
 }
 
+// spec: 008/FR-032, 008/FR-033, 008/FR-035
 #[tokio::test]
 async fn link_flow_attaches_google_sub_to_the_authenticated_admin_and_me_reports_it() {
     let _guard = ENV_LOCK.lock().unwrap();
@@ -192,6 +198,7 @@ async fn link_flow_attaches_google_sub_to_the_authenticated_admin_and_me_reports
     assert_eq!(body["googleLinked"], true);
 }
 
+// spec: 008/FR-033
 #[tokio::test]
 async fn sign_in_flow_succeeds_when_the_google_sub_is_already_linked() {
     let _guard = ENV_LOCK.lock().unwrap();
@@ -216,6 +223,7 @@ async fn sign_in_flow_succeeds_when_the_google_sub_is_already_linked() {
     assert_eq!(body["authenticated"], true);
 }
 
+// spec: 008/FR-033
 #[tokio::test]
 async fn sign_in_flow_rejects_an_unlinked_google_account_without_creating_a_user() {
     let _guard = ENV_LOCK.lock().unwrap();
@@ -234,6 +242,7 @@ async fn sign_in_flow_rejects_an_unlinked_google_account_without_creating_a_user
     assert_eq!(count, 1, "no second user should have been auto-provisioned");
 }
 
+// spec: 008/FR-033
 #[tokio::test]
 async fn callback_rejects_an_unknown_or_reused_state() {
     let pool = test_pool().await;
@@ -241,6 +250,7 @@ async fn callback_rejects_an_unknown_or_reused_state() {
     assert!(status.is_redirection() || status == StatusCode::BAD_REQUEST, "{status}");
 }
 
+// spec: 008/FR-034
 #[tokio::test]
 async fn unlink_clears_google_sub() {
     let _guard = ENV_LOCK.lock().unwrap();
@@ -262,6 +272,7 @@ async fn unlink_clears_google_sub() {
     assert_eq!(body["googleLinked"], false);
 }
 
+// spec: 008/FR-034
 #[tokio::test]
 async fn unlink_is_gated() {
     let pool = test_pool().await;

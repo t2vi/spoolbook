@@ -40,6 +40,7 @@ fn printer_body(name: &str) -> Value {
     json!({ "name": name, "model": "P2S", "ipAddress": "192.168.1.50", "accessCode": "12345678", "serialNumber": "ABC123" })
 }
 
+// spec: 004/FR-001
 #[tokio::test]
 async fn list_returns_empty_array_when_none_exist() {
     let pool = test_pool().await;
@@ -48,6 +49,7 @@ async fn list_returns_empty_array_when_none_exist() {
     assert_eq!(body.as_array().unwrap().len(), 0);
 }
 
+// spec: 004/FR-003
 #[tokio::test]
 async fn create_persists_and_returns_the_printer() {
     let pool = test_pool().await;
@@ -62,6 +64,7 @@ async fn create_persists_and_returns_the_printer() {
     assert_eq!(body["printer"]["serialNumber"], "ABC123");
 }
 
+// spec: 004/FR-003
 #[tokio::test]
 async fn create_rejects_blank_name() {
     let pool = test_pool().await;
@@ -70,6 +73,7 @@ async fn create_rejects_blank_name() {
     assert_eq!(body["ok"], false);
 }
 
+// spec: 004/FR-003
 #[tokio::test]
 async fn create_rejects_duplicate_name() {
     let pool = test_pool().await;
@@ -79,6 +83,7 @@ async fn create_rejects_duplicate_name() {
     assert_eq!(body["error"], "duplicate");
 }
 
+// spec: 004/FR-003
 #[tokio::test]
 async fn update_persists_changes() {
     let pool = test_pool().await;
@@ -91,6 +96,7 @@ async fn update_persists_changes() {
     assert_eq!(body["printer"]["name"], "P2S renamed");
 }
 
+// spec: 004/FR-003
 #[tokio::test]
 async fn update_rejects_duplicate_against_another_row() {
     let pool = test_pool().await;
@@ -104,6 +110,7 @@ async fn update_rejects_duplicate_against_another_row() {
     assert_eq!(body["error"], "duplicate");
 }
 
+// spec: 004/FR-003
 #[tokio::test]
 async fn update_returns_not_found_for_missing_id() {
     let pool = test_pool().await;
@@ -111,6 +118,7 @@ async fn update_returns_not_found_for_missing_id() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
+// spec: 004/FR-004
 #[tokio::test]
 async fn delete_rejects_a_printer_with_prints() {
     let pool = test_pool().await;
@@ -152,6 +160,7 @@ async fn delete_rejects_a_printer_with_prints() {
     assert_eq!(all.as_array().unwrap().len(), 1, "printer must survive the rejected delete");
 }
 
+// spec: 004/FR-004
 #[tokio::test]
 async fn delete_removes_the_printer() {
     let pool = test_pool().await;
@@ -166,6 +175,7 @@ async fn delete_removes_the_printer() {
     assert_eq!(all.as_array().unwrap().len(), 0);
 }
 
+// spec: 004/FR-004
 #[tokio::test]
 async fn delete_returns_not_found_for_missing_id() {
     let pool = test_pool().await;

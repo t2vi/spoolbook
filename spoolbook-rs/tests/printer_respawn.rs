@@ -52,6 +52,7 @@ async fn send(
     (status, json)
 }
 
+// spec: 001/FR-002
 #[tokio::test]
 async fn create_then_delete_starts_and_stops_the_telemetry_loop() {
     let pool = test_pool().await;
@@ -75,6 +76,7 @@ async fn create_then_delete_starts_and_stops_the_telemetry_loop() {
     );
 }
 
+// spec: 001/FR-001, 001/FR-002
 #[tokio::test]
 async fn create_without_connection_details_registers_no_loop() {
     let pool = test_pool().await;

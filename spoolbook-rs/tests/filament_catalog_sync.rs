@@ -43,6 +43,7 @@ const SAMPLE_CATALOG: &str = r##"[
     { "Brand": "Bambu Lab", "Material": "PLA", "Variant": "Basic", "Color": "Beige", "Hex": "#F5F5DC" }
 ]"##;
 
+// spec: 007/FR-023
 #[test]
 fn parse_catalog_reads_the_published_pascal_case_shape() {
     let entries = spoolbook_rs::filament_catalog_sync::parse_catalog(SAMPLE_CATALOG);
@@ -54,11 +55,13 @@ fn parse_catalog_reads_the_published_pascal_case_shape() {
     assert_eq!(entries[0].hex.as_deref(), Some("#FFFFFF"));
 }
 
+// spec: 007/FR-023
 #[test]
 fn parse_catalog_returns_empty_on_garbage_input() {
     assert_eq!(spoolbook_rs::filament_catalog_sync::parse_catalog("not json").len(), 0);
 }
 
+// spec: 007/FR-020
 #[tokio::test]
 async fn import_many_counts_added_and_skipped_and_registers_colors() {
     let pool = test_pool().await;
@@ -81,12 +84,14 @@ async fn import_many_counts_added_and_skipped_and_registers_colors() {
     assert_eq!(beige["hex"], "#F5F5DC");
 }
 
+// spec: 007/FR-022
 #[test]
 fn should_sync_when_never_synced() {
     let now = chrono::Utc::now();
     assert!(spoolbook_rs::filament_catalog_sync::should_sync(None, now));
 }
 
+// spec: 007/FR-022
 #[test]
 fn should_sync_when_last_sync_over_24h_ago() {
     let now = chrono::Utc::now();
@@ -94,6 +99,7 @@ fn should_sync_when_last_sync_over_24h_ago() {
     assert!(spoolbook_rs::filament_catalog_sync::should_sync(Some(&last), now));
 }
 
+// spec: 007/FR-022
 #[test]
 fn should_not_sync_when_last_sync_within_24h() {
     let now = chrono::Utc::now();
@@ -101,6 +107,7 @@ fn should_not_sync_when_last_sync_within_24h() {
     assert!(!spoolbook_rs::filament_catalog_sync::should_sync(Some(&last), now));
 }
 
+// spec: 007/FR-020
 #[tokio::test]
 async fn import_many_skips_entries_that_fail_validation() {
     let pool = test_pool().await;

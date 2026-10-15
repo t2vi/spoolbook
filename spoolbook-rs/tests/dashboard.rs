@@ -36,6 +36,7 @@ async fn send(pool: &sqlx::SqlitePool, method: &str, uri: &str, body: Option<Val
     (status, json)
 }
 
+// spec: 002/FR-020
 #[tokio::test]
 async fn returns_zeroed_metrics_and_all_four_print_statuses_when_empty() {
     let pool = test_pool().await;
@@ -60,6 +61,7 @@ async fn returns_zeroed_metrics_and_all_four_print_statuses_when_empty() {
     assert_eq!(body["profileCount"], 0);
 }
 
+// spec: 002/FR-020
 #[tokio::test]
 async fn counts_filaments_by_brand_and_material_descending() {
     let pool = test_pool().await;
@@ -74,6 +76,7 @@ async fn counts_filaments_by_brand_and_material_descending() {
     assert_eq!(body["metrics"]["filamentsByMaterial"][0], json!({ "label": "PLA", "count": 2 }));
 }
 
+// spec: 002/FR-020
 #[tokio::test]
 async fn buckets_spools_by_opened_and_emptied_state() {
     let pool = test_pool().await;
@@ -102,6 +105,7 @@ async fn buckets_spools_by_opened_and_emptied_state() {
     ]));
 }
 
+// spec: 002/FR-020
 #[tokio::test]
 async fn reports_last_filament_sync_at_and_profile_count_from_settings_and_profiles() {
     let pool = test_pool().await;

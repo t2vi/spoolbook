@@ -44,6 +44,7 @@ async fn test_pool() -> sqlx::SqlitePool {
     pool
 }
 
+// spec: 007/FR-001
 #[tokio::test]
 async fn list_all_returns_empty_array_when_no_filaments() {
     let pool = test_pool().await;
@@ -67,6 +68,7 @@ async fn list_all_returns_empty_array_when_no_filaments() {
     assert_eq!(body.as_ref(), b"[]");
 }
 
+// spec: 007/FR-010
 #[tokio::test]
 async fn create_persists_and_returns_the_entry() {
     let pool = test_pool().await;
@@ -83,6 +85,7 @@ async fn create_persists_and_returns_the_entry() {
     assert!(body["entry"]["id"].is_i64());
 }
 
+// spec: 007/FR-012
 #[tokio::test]
 async fn create_registers_a_new_color_with_its_resolved_hex() {
     let pool = test_pool().await;
@@ -96,6 +99,7 @@ async fn create_registers_a_new_color_with_its_resolved_hex() {
     assert_eq!(jade["hex"], "#FFFFFF");
 }
 
+// spec: 007/FR-012
 #[tokio::test]
 async fn create_falls_back_to_a_placeholder_hex_when_none_given() {
     let pool = test_pool().await;
@@ -108,6 +112,7 @@ async fn create_falls_back_to_a_placeholder_hex_when_none_given() {
     assert_eq!(entry["hex"], "#CCCCCC");
 }
 
+// spec: 007/FR-012
 #[tokio::test]
 async fn create_does_not_duplicate_an_already_known_color() {
     let pool = test_pool().await;
@@ -120,6 +125,7 @@ async fn create_does_not_duplicate_an_already_known_color() {
     assert_eq!(blacks[0]["hex"], "#000000", "first-registered hex wins, not overwritten by a later hex-less create");
 }
 
+// spec: 007/FR-010
 #[tokio::test]
 async fn create_rejects_exact_duplicate() {
     let pool = test_pool().await;
@@ -135,6 +141,7 @@ async fn create_rejects_exact_duplicate() {
     assert_eq!(second_body["error"], "duplicate");
 }
 
+// spec: 007/FR-011
 #[tokio::test]
 async fn update_persists_changes_and_returns_the_entry() {
     let pool = test_pool().await;
@@ -159,6 +166,7 @@ async fn update_persists_changes_and_returns_the_entry() {
     assert_eq!(body["entry"]["color"], "White");
 }
 
+// spec: 007/FR-011
 #[tokio::test]
 async fn update_returns_not_found_for_missing_id() {
     let pool = test_pool().await;
@@ -175,6 +183,7 @@ async fn update_returns_not_found_for_missing_id() {
     assert_eq!(body["ok"], false);
 }
 
+// spec: 007/FR-011
 #[tokio::test]
 async fn update_rejects_duplicate_against_a_different_row() {
     let pool = test_pool().await;
@@ -205,6 +214,7 @@ async fn update_rejects_duplicate_against_a_different_row() {
     assert_eq!(body["error"], "duplicate");
 }
 
+// spec: 007/FR-011
 #[tokio::test]
 async fn update_allows_saving_a_row_unchanged() {
     let pool = test_pool().await;
@@ -228,6 +238,7 @@ async fn update_allows_saving_a_row_unchanged() {
     assert_eq!(status, StatusCode::OK);
 }
 
+// spec: 007/FR-013
 #[tokio::test]
 async fn delete_removes_the_entry() {
     let pool = test_pool().await;
@@ -247,6 +258,7 @@ async fn delete_removes_the_entry() {
     assert_eq!(all.as_array().unwrap().len(), 0);
 }
 
+// spec: 007/FR-013
 #[tokio::test]
 async fn delete_rejects_a_filament_with_spools() {
     let pool = test_pool().await;
@@ -271,6 +283,7 @@ async fn delete_rejects_a_filament_with_spools() {
     assert_eq!(all.as_array().unwrap().len(), 1, "filament must survive the rejected delete");
 }
 
+// spec: 007/FR-013
 #[tokio::test]
 async fn delete_returns_not_found_for_missing_id() {
     let pool = test_pool().await;
@@ -281,6 +294,7 @@ async fn delete_returns_not_found_for_missing_id() {
     assert_eq!(body["ok"], false);
 }
 
+// spec: 007/FR-001
 #[tokio::test]
 async fn search_returns_pagination_metadata() {
     let pool = test_pool().await;
@@ -298,6 +312,7 @@ async fn search_returns_pagination_metadata() {
     assert_eq!(body["entries"].as_array().unwrap().len(), 3);
 }
 
+// spec: 007/FR-001
 #[tokio::test]
 async fn search_filters_by_brand() {
     let pool = test_pool().await;
@@ -310,6 +325,7 @@ async fn search_filters_by_brand() {
     assert_eq!(body["entries"][0]["brand"], "Polymaker");
 }
 
+// spec: 007/FR-001
 #[tokio::test]
 async fn search_paginates() {
     let pool = test_pool().await;

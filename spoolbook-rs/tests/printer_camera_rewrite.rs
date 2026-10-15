@@ -4,6 +4,7 @@ use spoolbook_rs::printer_camera::{rewrite_request_line, rewrite_response_host};
 // scenarios come straight from the port's own doc comments, which describe real, confirmed
 // firmware behavior (redirect Location handing back the printer's bare real IP, etc).
 
+// spec: 004/FR-045
 #[test]
 fn rewrite_request_line_replaces_the_url_only_on_the_request_line() {
     let data = b"DESCRIBE rtsp://127.0.0.1:5000 RTSP/1.0\r\nCSeq: 2\r\n\r\n";
@@ -12,6 +13,7 @@ fn rewrite_request_line_replaces_the_url_only_on_the_request_line() {
     assert_eq!(result, b"DESCRIBE rtsps://10.0.0.5:322 RTSP/1.0\r\nCSeq: 2\r\n\r\n");
 }
 
+// spec: 004/FR-045
 #[test]
 fn rewrite_request_line_leaves_headers_after_the_request_line_untouched() {
     let data = b"SETUP rtsp://127.0.0.1:5000/track1 RTSP/1.0\r\nAuthorization: Digest foo\r\n\r\n";
@@ -22,6 +24,7 @@ fn rewrite_request_line_leaves_headers_after_the_request_line_untouched() {
     assert!(text.starts_with("SETUP rtsps://10.0.0.5:322/track1 RTSP/1.0"), "{text}");
 }
 
+// spec: 004/FR-045
 #[test]
 fn rewrite_request_line_passes_through_data_with_no_request_line() {
     // Binary RTP data, or anything that isn't an RTSP control line.
@@ -29,6 +32,7 @@ fn rewrite_request_line_passes_through_data_with_no_request_line() {
     assert_eq!(rewrite_request_line(data, "rtsp://x", "rtsps://y"), data);
 }
 
+// spec: 004/FR-045
 #[test]
 fn rewrite_response_host_rewrites_host_port_in_a_redirect_location_header() {
     let data = b"RTSP/1.0 301 Moved Permanently\r\nLocation: rtsps://10.0.0.5:322/streaming/live/1\r\n\r\n";
@@ -38,6 +42,7 @@ fn rewrite_response_host_rewrites_host_port_in_a_redirect_location_header() {
     assert_eq!(text, "RTSP/1.0 301 Moved Permanently\r\nLocation: rtsp://127.0.0.1:54321/streaming/live/1\r\n\r\n");
 }
 
+// spec: 004/FR-045
 #[test]
 fn rewrite_response_host_rewrites_bare_host_without_a_port() {
     let data = b"RTSP/1.0 200 OK\r\nContent-Base: rtsps://10.0.0.5/\r\n\r\n";
@@ -47,6 +52,7 @@ fn rewrite_response_host_rewrites_bare_host_without_a_port() {
     assert_eq!(text, "RTSP/1.0 200 OK\r\nContent-Base: rtsp://127.0.0.1:54321/\r\n\r\n");
 }
 
+// spec: 004/FR-045
 #[test]
 fn rewrite_response_host_never_touches_the_body_after_the_header_blank_line() {
     // The SDP body legitimately contains the printer's real address ("o=" line) and must reach
@@ -59,6 +65,7 @@ fn rewrite_response_host_never_touches_the_body_after_the_header_blank_line() {
     assert!(text.ends_with(body), "{text}");
 }
 
+// spec: 004/FR-045
 #[test]
 fn rewrite_response_host_passes_through_non_rtsp_data_unchanged() {
     // Binary interleaved RTP data (RFC 2326 §10.12) never starts with "RTSP/1.0".

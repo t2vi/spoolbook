@@ -44,19 +44,27 @@ beyond the notes columns.
   `tests/sync.rs:491`) count as *inferred* links (🟡) until tagged.
 - **Layers — fill in per project** (delete rows that don't exist):
 
-  | Layer | Where (example) |
+  | Layer | Where |
   |---|---|
-  | unit | inline/colocated unit tests (`src/**/*.test.ts`, `#[cfg(test)]`) |
-  | integration | service-level tests against a real router/DB (`tests/`) |
-  | api | black-box HTTP tests against a running server (Hurl, Postman) |
-  | e2e | browser/UI tests against the full stack (Playwright) |
-  | live (not counted) | on-demand checks against real third-party services |
+  | unit | pure-fn tests in `spoolbook-rs/tests/*.rs` that call a module fn directly, no router/DB (parsers, patchers, extractors) |
+  | integration | `spoolbook-rs/tests/*.rs` driving an `axum::Router` (`tower::ServiceExt::oneshot`) against an in-memory SQLite (`tests/common/`) |
+  | e2e | none yet — `spoolbook-web-svelte` has no test runner |
+  | live (not counted) | `#[ignore]`d tests needing a real printer on the LAN (`tests/printer_live.rs`), run by hand |
 
 - **Surface sources — fill in per project**: the files the audit enumerates, one row per kind
   of shipped surface. Typical kinds: API route, page/screen, background job, setting, env var,
   CLI command, plugin/extension, migration, script, public library export. For each, name the
   file(s) and pattern that list them (e.g. "every `.route(` in `src/api/*.rs`"). The audit
   reads *this table*, so a missing row is an invisible blind spot. Keep it current.
+
+  | Kind | Source |
+  |---|---|
+  | API route | every `.route("…"` in `spoolbook-rs/src/*.rs` (one row per path; methods in Notes) |
+  | page | every `+page.svelte` under `spoolbook-web-svelte/src/routes/` |
+  | background job | every `tokio::spawn` of a long-lived loop or fire-and-forget task in `spoolbook-rs/src/` (`main.rs`, `printer_mqtt.rs`, `printer_camera.rs`, `printer_telemetry.rs`, `weather.rs` callers) |
+  | setting | `app_settings` columns in `spoolbook-rs/migrations/*.sql` |
+  | env var | every `env::var("…")` in `spoolbook-rs/src/` |
+  | script | `install.sh`, `scripts/*.sh` (repo tooling — Notes only, not counted toward product coverage) |
 
 ## `/spec-audit` — the scan
 
