@@ -110,10 +110,9 @@ discarded after 7 days. All of this runs in the background — no request trigge
 - Retroactive: behavior read from the code at `3fdca27`, not designed here. Where code and this
   spec disagree in future, the spec is the intent and the code gets fixed (or the FR amended on
   purpose).
-- **FR-032 gap (#154):** the running loop (`purge_stale_jobs_loop`) issues its own inline `DELETE`
-  instead of calling `purge_unattached_jobs_older_than`, which is the only function the purge
-  tests exercise. The tests prove a helper production never calls. Fix: have the loop call the
-  helper with a computed cutoff.
+- **FR-032 (#154, fixed):** the running purge loop used to issue its own inline `DELETE`, so the
+  purge tests proved a helper production never called. The loop now runs the tested
+  `purge_stale_jobs`.
 - **FR-022 (#155, fixed):** weather fetch and bed-photo capture used to be awaited inline inside
   the MQTT message handler, stalling that printer's connection. Weather/photo behavior itself is
   specced with Prints (#150).
