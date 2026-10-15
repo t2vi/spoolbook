@@ -7,8 +7,8 @@ sections of `/settings`
 
 ## Summary
 
-Spoolbook has real user accounts (single editor in practice). Reads are open to anyone on the
-LAN; every change requires a signed-in editor, as does the live camera. A fresh install runs a
+Spoolbook has real user accounts (single editor in practice). Nothing is visible without
+signing in: every read needs a session, and every change — and the live camera — an editor. A fresh install runs a
 setup wizard; an install that used the old shared admin password is migrated silently. A
 signed-in user can link a Google account and then sign in with it.
 
@@ -24,10 +24,13 @@ signed-in user can link a Google account and then sign in with it.
 
 ### Access rule
 
-- **FR-001** — Every mutating API route, and `GET /printers/{id}/camera`, requires an editor:
-  a valid, unexpired session whose user is `Admin`. Otherwise → 401 `{ authenticated: false }`.
-  Read routes need no session. Exceptions: setup (FR-010), login/logout, the Google
-  login/callback, and nothing else. *Verify: integration*
+- **FR-001** — Every `/api` route requires a signed-in user (a valid, unexpired session);
+  every mutating route, and `GET /printers/{id}/camera`, requires an editor (a signed-in
+  `Admin`). Otherwise → 401 `{ authenticated: false }`. Routes marked *(signed in)* in these
+  specs are reads that need a session. The only routes open without one are those needed to
+  get signed in or to offer the source: `GET /api/setup-status`, `POST /api/setup` (FR-010),
+  `POST /api/login`, `POST /api/logout`, `GET /api/me`, `GET /api/version`, and Google's
+  `status`, `login` and `callback` (FR-030–033). *Verify: integration*
 
 ### Setup & sign-in
 
@@ -81,6 +84,9 @@ signed-in user can link a Google account and then sign in with it.
 
 ### Pages
 
+- **FR-041** — Signed out, every page sends the browser to `/login` (or `/setup` while no account
+  exists) and shows no app data or navigation — only the sign-in or setup form, the version and
+  the Source link (002/FR-007). *Verify: e2e*
 - **FR-040** — `/setup` (shown while setup is needed) creates the first account; `/login` signs
   in with username/password, or with Google when configured, and shows Google errors from the
   query string; the Settings page edits the account (saying why a change was refused) and the
@@ -97,5 +103,6 @@ signed-in user can link a Google account and then sign in with it.
   so the last credential can't be removed.
 - **#91 / #92:** multi-user roles and invite-based Google registration are future work; today
   the `role` check exists but every user is `Admin`.
+- **v1.5.1:** reads used to be open to anyone on the LAN; now everything needs a session.
 - `POST /api/setup` is open by design until the first user exists — whoever reaches a fresh
   install first owns it.

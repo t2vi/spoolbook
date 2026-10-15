@@ -26,12 +26,12 @@ Bambu system preset, and are what a Print records and a re-slice applies.
 
 ### Reading
 
-- **FR-001** — `GET /api/profiles?filamentId=` (open) lists that filament's current versions,
+- **FR-001** — `GET /api/profiles?filamentId=` (signed in) lists that filament's current versions,
   generic profiles before spool-specific ones, then by name. *Verify: integration*
-- **FR-002** — `GET /api/profiles/inventory` (open) lists every current version by name, each
+- **FR-002** — `GET /api/profiles/inventory` (signed in) lists every current version by name, each
   with its filament (brand, material, variant, color), and `total`; no pagination (one page).
   *Verify: integration*
-- **FR-003** — `GET /api/profiles/field-spec` (open) returns the form definition with empty
+- **FR-003** — `GET /api/profiles/field-spec` (signed in) returns the form definition with empty
   values; `?profileId=` returns it pre-filled with that profile's name and values (booleans as
   `true`/`false`, blank for unset) plus its `versionNumber`, `isCurrentVersion`, `filamentId`
   and `spoolId` (null = generic); unknown id → 404. *Verify: integration*
@@ -84,7 +84,7 @@ Bambu system preset, and are what a Print records and a re-slice applies.
 - **FR-031** — Imported values map Bambu keys to profile fields: first element of array
   values, Bambu booleans → `true`/`false`, `nil`/empty treated as absent, the literal `%` in
   percentage strings stripped. *Verify: integration*
-- **FR-032** — `GET /api/profiles/system-presets` (open) lists the Bambu system filament
+- **FR-032** — `GET /api/profiles/system-presets` (signed in) lists the Bambu system filament
   preset names (sorted, unique) from slicer-service's bundled library; unreachable → 502.
   *Verify: integration*
 - **FR-033** — `POST /api/profiles/system-presets/resolve` `{ name }` (editor) returns that

@@ -9,8 +9,8 @@ prints, so print outcomes can be correlated against settings and ambient conditi
 built for one person, dealing with Melbourne's weather swings affecting print quality.
 
 Self-hosted web app: SvelteKit frontend (`spoolbook-web-svelte`) + a Rust JSON API
-(`spoolbook-rs`, axum + sqlx), local SQLite. Single user, shared-secret auth on mutating routes
-only (reads stay open), no network dependency beyond a read-only public HTTP call for the
+(`spoolbook-rs`, axum + sqlx), local SQLite. Single user; nothing is visible without signing
+in, no network dependency beyond a read-only public HTTP call for the
 filament catalog sync (see below). The original Avalonia desktop app and the .NET/EF Core backend
 it grew into are both retired.
 

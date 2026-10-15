@@ -22,7 +22,7 @@ background telemetry connection itself is spec 001.
 
 ### Configuration
 
-- **FR-001** — `GET /api/printers` (open) lists Printers ordered by name.
+- **FR-001** — `GET /api/printers` (signed in) lists Printers ordered by name.
   *Verify: integration*
 - **FR-002** — A Printer's access code is write-only: no API response ever contains it.
   Printers carry `hasAccessCode` (true when one is stored) instead. *Verify: integration*
@@ -42,7 +42,7 @@ background telemetry connection itself is spec 001.
 
 ### Live status & control
 
-- **FR-010** — `GET /api/printers/{id}/live` (open) is a server-sent-event stream emitting the
+- **FR-010** — `GET /api/printers/{id}/live` (signed in) is a server-sent-event stream emitting the
   Printer's live snapshot every 2 s; a Printer with no live connection reports
   `connected: false`. *Verify: integration*
 - **FR-011** — Status reports are parsed for `gcode_state`, `task_id`, nozzle/bed/chamber

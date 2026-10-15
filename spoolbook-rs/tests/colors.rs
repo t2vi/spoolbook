@@ -1,3 +1,4 @@
+mod common;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use sqlx::sqlite::SqlitePoolOptions;
@@ -17,12 +18,14 @@ async fn test_pool() -> sqlx::SqlitePool {
 #[tokio::test]
 async fn list_colors_returns_empty_array_when_none_seeded() {
     let pool = test_pool().await;
+    let cookie = common::auth_cookie_header(&pool).await;
     let app = spoolbook_rs::app(pool);
 
     let response = app
         .oneshot(
             Request::builder()
                 .uri("/api/filament-colors")
+                .header("cookie", &cookie)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -43,11 +46,13 @@ async fn list_colors_returns_seeded_rows_sorted_by_name() {
         .await
         .unwrap();
 
+    let cookie = common::auth_cookie_header(&pool).await;
     let app = spoolbook_rs::app(pool);
     let response = app
         .oneshot(
             Request::builder()
                 .uri("/api/filament-colors")
+                .header("cookie", &cookie)
                 .body(Body::empty())
                 .unwrap(),
         )
