@@ -35,8 +35,7 @@ filament. Colors are discovered from filaments as they're added.
   exists, with the given hex or `#CCCCCC`; an existing color is never duplicated or changed.
   `GET /api/filament-colors` (open) lists colors by name. *Verify: integration*
 - **FR-013** — `DELETE /api/filaments/{id}` (editor): 400 `has_spools` if any spool uses it,
-  400 `has_profiles` if any print profile uses it; 404 if missing. *Verify: integration* —
-  **`has_profiles` missing (#174)**
+  400 `has_profiles` if any print profile uses it; 404 if missing. *Verify: integration*
 
 ### Catalog sync
 
@@ -78,6 +77,6 @@ filament. Colors are discovered from filaments as they're added.
 ## Notes
 
 - Retroactive: behavior read from the code at `3fdca27`.
-- **#174:** filament delete guard; **#175:** sync failure masking + no timeout; **#176:** spool
+- **#174 (fixed):** filament delete guard; **#175:** sync failure masking + no timeout; **#176:** spool
   validation; **#177:** no way to fix a color's hex (`#CCCCCC` placeholder is permanent).
 - Spool "status" (Unopened / Opened / Empty) is derived from the dates — see 002/FR-020.

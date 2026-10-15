@@ -339,3 +339,22 @@ async fn search_paginates() {
     assert_eq!(body["totalPages"], 2);
     assert_eq!(body["entries"].as_array().unwrap().len(), 2);
 }
+
+// spec: 007/FR-013
+#[tokio::test]
+async fn delete_rejects_a_filament_with_profiles_but_no_spools() {
+    let pool = test_pool().await;
+    let (_, created) = post_json(
+        &pool,
+        "/api/filaments",
+        json!({ "brand": "Bambu Lab", "material": "PLA", "variant": "Basic", "color": "Black" }),
+    )
+    .await;
+    let id = created["entry"]["id"].as_i64().unwrap();
+    sqlx::query("INSERT INTO print_profiles (filament_id, name, nozzle_temp_c) VALUES (?1, 'Generic', 220)").bind(id).execute(&pool).await.unwrap();
+
+    let (status, body) = send(&pool, "DELETE", &format!("/api/filaments/{id}"), None).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "has_profiles");
+}

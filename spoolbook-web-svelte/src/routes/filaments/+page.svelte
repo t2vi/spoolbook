@@ -37,7 +37,12 @@
 		}
 		const deleteResult = await deleteFilament(id);
 		if (!deleteResult.ok) {
-			errorMessage = deleteResult.error === 'has_spools' ? "Can't delete — spools reference this filament." : (deleteResult.error ?? 'Delete failed.');
+			errorMessage =
+				deleteResult.error === 'has_spools'
+					? "Can't delete — spools reference this filament."
+					: deleteResult.error === 'has_profiles'
+						? "Can't delete — print profiles reference this filament."
+						: (deleteResult.error ?? 'Delete failed.');
 			return;
 		}
 		errorMessage = null;
