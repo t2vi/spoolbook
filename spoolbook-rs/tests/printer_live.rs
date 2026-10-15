@@ -68,6 +68,7 @@ async fn test_pool() -> sqlx::SqlitePool {
 // status object lands (pushall -> gcode_state parsed -- the "No live job data yet" symptom), and
 // confirm the loop is still connected 35s later (an oversized pushall packet used to error the
 // eventloop right after ConnAck, dropping straight back to "Not connected").
+// spec: 001/FR-003, 001/FR-004
 #[tokio::test]
 #[ignore = "needs a real printer on the LAN"]
 async fn live_connection_comes_up_and_stays_up() {
@@ -117,6 +118,7 @@ async fn live_connection_comes_up_and_stays_up() {
 // require_ssl_reuse on the data channel -- two rustls FTP stacks failed exactly there). Uploads
 // a tiny throwaway file and deletes nothing; a stray 12-byte file in the printer's root is
 // harmless and gets overwritten next run.
+// spec: 004/FR-032
 #[tokio::test]
 #[ignore = "needs a real printer on the LAN"]
 async fn ftps_upload_roundtrips() {
@@ -153,6 +155,7 @@ async fn ftps_upload_roundtrips() {
 //   SPOOLBOOK_TEST_PRINT_3MF        -- path to a real sliced .3mf with Metadata/<plate>.gcode
 //   SPOOLBOOK_TEST_PRINT_PLATE      -- plate gcode name, default "plate_1.gcode"
 //   SPOOLBOOK_TEST_ALLOW_REAL_PRINT=1
+// spec: 004/FR-032, 004/FR-033
 #[tokio::test]
 #[ignore = "sends a real print to the printer (cancelled before extrusion) -- needs SPOOLBOOK_TEST_ALLOW_REAL_PRINT=1"]
 async fn send_a_print_then_cancel_before_it_extrudes() {
@@ -183,6 +186,7 @@ async fn send_a_print_then_cancel_before_it_extrudes() {
 //   SPOOLBOOK_TEST_PROJECT_3MF   -- path to an UNSLICED project .3mf
 //   a slicer-service reachable at RESLICE_SERVICE_URL (default http://localhost:8100), e.g.
 //     docker run -d -p 8100:8100 --platform linux/amd64 ghcr.io/t2vi/spoolbook-slicer:latest
+// spec: 004/FR-032
 #[tokio::test]
 #[ignore = "slices then sends a real print (cancelled before extrusion) -- needs SPOOLBOOK_TEST_ALLOW_REAL_PRINT=1 + slicer-service"]
 async fn reslice_then_print_then_cancel() {

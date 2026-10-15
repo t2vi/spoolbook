@@ -63,6 +63,7 @@ async fn post_zip(pool: &sqlx::SqlitePool, uri: &str, zip_bytes: &[u8]) -> (Stat
     (status, json)
 }
 
+// spec: 002/FR-041
 #[tokio::test]
 async fn import_preview_reports_matched_vs_new_for_dedupeable_tables() {
     let pool = test_pool().await;
@@ -88,6 +89,7 @@ async fn import_preview_reports_matched_vs_new_for_dedupeable_tables() {
     assert_eq!(body["printers"]["new"], 1, "one matches the existing 'Pitus' by name");
 }
 
+// spec: 002/FR-041
 #[tokio::test]
 async fn import_preview_reports_every_row_as_new_for_non_dedupeable_tables() {
     let pool = test_pool().await;
@@ -105,6 +107,7 @@ async fn import_preview_reports_every_row_as_new_for_non_dedupeable_tables() {
 // (ensure_color_exists), which already dedupes by name before inserting. Found via a real test:
 // self-importing a real DB (a natural sanity check, not a supported scenario) added 1391
 // duplicate colors before this dedupe rule existed.
+// spec: 002/FR-041
 #[tokio::test]
 async fn import_preview_dedupes_filament_colors_by_name() {
     let pool = test_pool().await;
@@ -119,6 +122,7 @@ async fn import_preview_dedupes_filament_colors_by_name() {
     assert_eq!(body["filament_colors"]["new"], 1);
 }
 
+// spec: 002/FR-040
 #[tokio::test]
 async fn import_preview_rejects_a_manifest_from_a_newer_version() {
     let pool = test_pool().await;
@@ -130,6 +134,7 @@ async fn import_preview_rejects_a_manifest_from_a_newer_version() {
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
 }
 
+// spec: 002/FR-040
 #[tokio::test]
 async fn import_preview_requires_auth() {
     let pool = test_pool().await;
@@ -154,6 +159,7 @@ fn build_zip_with_file(manifest: &serde_json::Value, file_name: &str, file_bytes
     buf
 }
 
+// spec: 002/FR-042, 002/FR-044
 #[tokio::test]
 async fn import_commit_merges_the_full_chain_with_dedupe_and_fk_remap() {
     let pool = test_pool().await;
@@ -228,6 +234,7 @@ async fn import_commit_merges_the_full_chain_with_dedupe_and_fk_remap() {
     assert_eq!(hw_print_id, real_print_id);
 }
 
+// spec: 002/FR-040
 #[tokio::test]
 async fn import_commit_requires_auth() {
     let pool = test_pool().await;
@@ -249,6 +256,7 @@ async fn get_bytes(pool: &sqlx::SqlitePool, uri: &str, authed: bool) -> (StatusC
     (status, bytes.to_vec())
 }
 
+// spec: 002/FR-030
 #[tokio::test]
 async fn export_requires_auth() {
     let pool = test_pool().await;
@@ -292,6 +300,7 @@ async fn seed_one_row_per_table(pool: &sqlx::SqlitePool) {
     sqlx::query("INSERT INTO print_hourly_weather (print_id, hour, temp_c, humidity_pct) VALUES (?1, '2026-01-01T00:00', 20.0, 50.0)").bind(print_id).execute(pool).await.unwrap();
 }
 
+// spec: 002/FR-030
 #[tokio::test]
 async fn export_includes_every_mergeable_table_including_print_profiles() {
     let pool = test_pool().await;
@@ -315,6 +324,7 @@ async fn export_includes_every_mergeable_table_including_print_profiles() {
     assert_eq!(manifest["prints"][0]["status"], "Success");
 }
 
+// spec: 002/FR-031
 #[tokio::test]
 async fn export_bundles_the_projects_3mf_bytes_under_files() {
     let pool = test_pool().await;
@@ -340,6 +350,7 @@ async fn export_bundles_the_projects_3mf_bytes_under_files() {
     assert_eq!(content, b"fake 3mf bytes");
 }
 
+// spec: 002/FR-030
 #[tokio::test]
 async fn export_produces_a_zip_with_a_manifest_containing_seeded_filaments() {
     let pool = test_pool().await;
@@ -360,6 +371,7 @@ async fn export_produces_a_zip_with_a_manifest_containing_seeded_filaments() {
     assert_eq!(filaments[0]["brand"], "Bambu Lab");
 }
 
+// spec: 002/FR-030, 002/FR-042
 #[tokio::test]
 async fn row_to_json_and_insert_json_row_round_trip_a_filament() {
     let pool = test_pool().await;
@@ -387,6 +399,7 @@ async fn row_to_json_and_insert_json_row_round_trip_a_filament() {
     assert_eq!(reinserted.get::<String, _>("color"), "Black");
 }
 
+// spec: 002/FR-030, 002/FR-042
 #[tokio::test]
 async fn row_to_json_and_insert_json_row_handle_null_columns() {
     let pool = test_pool().await;
@@ -400,6 +413,7 @@ async fn row_to_json_and_insert_json_row_handle_null_columns() {
     assert_eq!(reinserted.get::<Option<String>, _>("variant"), None);
 }
 
+// spec: 002/FR-030, 002/FR-042
 #[tokio::test]
 async fn row_to_json_and_insert_json_row_round_trip_real_columns_and_fk_columns() {
     let pool = test_pool().await;

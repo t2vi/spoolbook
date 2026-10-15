@@ -81,6 +81,7 @@ async fn seed_project(pool: &sqlx::SqlitePool, file_path: &str, mesh_hash: Optio
     .unwrap()
 }
 
+// spec: 005/FR-010
 #[tokio::test]
 async fn list_returns_empty_array_when_none_exist() {
     let pool = test_pool().await;
@@ -101,6 +102,7 @@ async fn list_returns_seeded_projects() {
     assert_eq!(body[0]["filePath"], "/tmp/a.3mf");
 }
 
+// spec: 005/FR-010
 #[tokio::test]
 async fn get_one_returns_the_project() {
     let pool = test_pool().await;
@@ -113,6 +115,7 @@ async fn get_one_returns_the_project() {
     assert_eq!(body["filePath"], "/tmp/detail.3mf");
 }
 
+// spec: 005/FR-010
 #[tokio::test]
 async fn get_one_returns_not_found_for_missing_project() {
     let pool = test_pool().await;
@@ -122,6 +125,7 @@ async fn get_one_returns_not_found_for_missing_project() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
+// spec: 005/FR-011
 #[tokio::test]
 async fn plates_reads_real_zip_and_returns_plate_metadata_and_thumbnail() {
     let pool = test_pool().await;
@@ -140,6 +144,7 @@ async fn plates_reads_real_zip_and_returns_plate_metadata_and_thumbnail() {
     std::fs::remove_file(fixture_path).ok();
 }
 
+// spec: 005/FR-011
 #[tokio::test]
 async fn plates_returns_not_found_for_missing_project_id() {
     let pool = test_pool().await;
@@ -147,6 +152,7 @@ async fn plates_returns_not_found_for_missing_project_id() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
+// spec: 005/FR-021
 #[tokio::test]
 async fn version_candidate_matches_by_mesh_hash_first() {
     let pool = test_pool().await;
@@ -165,6 +171,7 @@ async fn version_candidate_matches_by_mesh_hash_first() {
     assert_eq!(body["filePath"], "/tmp/old.3mf");
 }
 
+// spec: 005/FR-021
 #[tokio::test]
 async fn version_candidate_falls_back_to_filename() {
     let pool = test_pool().await;
@@ -186,6 +193,7 @@ async fn version_candidate_falls_back_to_filename() {
     assert_eq!(body["fileName"], "match_me.3mf");
 }
 
+// spec: 005/FR-021
 #[tokio::test]
 async fn version_candidate_returns_null_when_nothing_matches() {
     let pool = test_pool().await;
@@ -194,6 +202,7 @@ async fn version_candidate_returns_null_when_nothing_matches() {
     assert_eq!(body, Value::Null);
 }
 
+// spec: 005/FR-020
 #[tokio::test]
 async fn link_version_marks_previous_superseded_and_bumps_version_number() {
     let pool = test_pool().await;
@@ -227,6 +236,7 @@ async fn link_version_marks_previous_superseded_and_bumps_version_number() {
     assert_eq!(new["previousVersionProjectId"], old_id);
 }
 
+// spec: 005/FR-020, 005/FR-010
 #[tokio::test]
 async fn link_version_hides_superseded_versions_from_list() {
     let pool = test_pool().await;
@@ -241,6 +251,7 @@ async fn link_version_hides_superseded_versions_from_list() {
     assert!(ids.contains(&new_id), "{ids:?}");
 }
 
+// spec: 005/FR-012
 #[tokio::test]
 async fn rename_updates_the_display_name() {
     let pool = test_pool().await;
@@ -255,6 +266,7 @@ async fn rename_updates_the_display_name() {
     assert_eq!(all[0]["fileName"], "Better name.3mf");
 }
 
+// spec: 005/FR-012
 #[tokio::test]
 async fn rename_rejects_a_blank_name() {
     let pool = test_pool().await;
@@ -265,6 +277,7 @@ async fn rename_rejects_a_blank_name() {
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
 }
 
+// spec: 005/FR-012
 #[tokio::test]
 async fn rename_returns_not_found_for_missing_project() {
     let pool = test_pool().await;
@@ -272,6 +285,7 @@ async fn rename_returns_not_found_for_missing_project() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
+// spec: 005/FR-013
 #[tokio::test]
 async fn delete_removes_an_unreferenced_project() {
     let pool = test_pool().await;
@@ -284,6 +298,7 @@ async fn delete_removes_an_unreferenced_project() {
     assert_eq!(all.as_array().unwrap().len(), 0);
 }
 
+// spec: 005/FR-013
 #[tokio::test]
 async fn delete_returns_not_found_for_missing_project() {
     let pool = test_pool().await;
@@ -315,6 +330,7 @@ async fn seed_print_referencing_project(pool: &sqlx::SqlitePool, project_id: i64
         .unwrap();
 }
 
+// spec: 005/FR-013
 #[tokio::test]
 async fn delete_rejects_a_project_referenced_by_a_print() {
     let pool = test_pool().await;

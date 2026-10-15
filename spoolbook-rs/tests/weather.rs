@@ -26,6 +26,7 @@ async fn spawn_mock_archive(response: serde_json::Value) -> String {
     format!("http://{addr}/v1/archive")
 }
 
+// spec: 003/FR-040, 003/FR-043
 #[tokio::test]
 async fn averages_only_the_hours_within_the_print_window() {
     let _guard = ENV_LOCK.lock().unwrap();
@@ -44,6 +45,7 @@ async fn averages_only_the_hours_within_the_print_window() {
     assert!((humidity - 52.0).abs() < 0.01, "{humidity}");
 }
 
+// spec: 003/FR-041
 #[tokio::test]
 async fn errors_when_no_hourly_reading_falls_in_the_print_window() {
     let _guard = ENV_LOCK.lock().unwrap();
@@ -60,6 +62,7 @@ async fn errors_when_no_hourly_reading_falls_in_the_print_window() {
     assert!(result.is_err());
 }
 
+// spec: 003/FR-041
 #[tokio::test]
 async fn errors_when_the_archive_endpoint_is_unreachable() {
     let _guard = ENV_LOCK.lock().unwrap();

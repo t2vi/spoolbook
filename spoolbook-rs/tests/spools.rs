@@ -45,6 +45,7 @@ async fn seed_filament(pool: &sqlx::SqlitePool) -> i64 {
     body["entry"]["id"].as_i64().unwrap()
 }
 
+// spec: 007/FR-030
 #[tokio::test]
 async fn create_persists_and_returns_the_spool_with_its_filament() {
     let pool = test_pool().await;
@@ -70,6 +71,7 @@ async fn create_persists_and_returns_the_spool_with_its_filament() {
     assert_eq!(body["spool"]["filament"]["brand"], "Bambu Lab");
 }
 
+// spec: 007/FR-031
 #[tokio::test]
 async fn list_all_includes_the_nested_filament() {
     let pool = test_pool().await;
@@ -87,6 +89,7 @@ async fn list_all_includes_the_nested_filament() {
     assert_eq!(entries[0]["filament"]["material"], "PLA");
 }
 
+// spec: 007/FR-031
 #[tokio::test]
 async fn get_by_id_returns_not_found_for_missing_id() {
     let pool = test_pool().await;
@@ -94,6 +97,7 @@ async fn get_by_id_returns_not_found_for_missing_id() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
+// spec: 007/FR-032
 #[tokio::test]
 async fn update_persists_changes() {
     let pool = test_pool().await;
@@ -132,6 +136,7 @@ async fn seed_printer(pool: &sqlx::SqlitePool) -> i64 {
     body["printer"]["id"].as_i64().unwrap()
 }
 
+// spec: 007/FR-033
 #[tokio::test]
 async fn delete_rejects_a_spool_with_profiles() {
     let pool = test_pool().await;
@@ -152,6 +157,7 @@ async fn delete_rejects_a_spool_with_profiles() {
     assert_eq!(all.as_array().unwrap().len(), 1, "spool must survive the rejected delete");
 }
 
+// spec: 007/FR-033
 #[tokio::test]
 async fn delete_rejects_a_spool_with_prints() {
     let pool = test_pool().await;
@@ -185,6 +191,7 @@ async fn delete_rejects_a_spool_with_prints() {
     assert_eq!(body["error"], "has_prints");
 }
 
+// spec: 007/FR-033
 #[tokio::test]
 async fn delete_removes_the_spool() {
     let pool = test_pool().await;

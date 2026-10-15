@@ -13,6 +13,7 @@ async fn test_pool() -> sqlx::SqlitePool {
     pool
 }
 
+// spec: 007/FR-012
 #[tokio::test]
 async fn list_colors_returns_empty_array_when_none_seeded() {
     let pool = test_pool().await;
@@ -33,6 +34,7 @@ async fn list_colors_returns_empty_array_when_none_seeded() {
     assert_eq!(body.as_ref(), b"[]");
 }
 
+// spec: 007/FR-012
 #[tokio::test]
 async fn list_colors_returns_seeded_rows_sorted_by_name() {
     let pool = test_pool().await;

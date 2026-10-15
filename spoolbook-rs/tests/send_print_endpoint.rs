@@ -74,6 +74,7 @@ async fn seed_project(pool: &sqlx::SqlitePool, file_path: &str) -> i64 {
     .unwrap()
 }
 
+// spec: 004/FR-030
 #[tokio::test]
 async fn start_print_rejects_a_printer_missing_connection_details() {
     let pool = test_pool().await;
@@ -86,6 +87,7 @@ async fn start_print_rejects_a_printer_missing_connection_details() {
     assert_eq!(body["error"], "Printer is missing connection details.");
 }
 
+// spec: 004/FR-030
 #[tokio::test]
 async fn start_print_rejects_a_missing_printer() {
     let pool = test_pool().await;
@@ -97,6 +99,7 @@ async fn start_print_rejects_a_missing_printer() {
     assert_eq!(body["error"], "Printer is missing connection details.");
 }
 
+// spec: 004/FR-030
 #[tokio::test]
 async fn start_print_returns_not_found_for_a_missing_project() {
     let pool = test_pool().await;
@@ -108,6 +111,7 @@ async fn start_print_returns_not_found_for_a_missing_project() {
     assert_eq!(body["error"], "not_found");
 }
 
+// spec: 004/FR-031
 #[tokio::test]
 async fn start_print_reports_an_error_when_the_plate_gcode_entry_is_missing() {
     let pool = test_pool().await;

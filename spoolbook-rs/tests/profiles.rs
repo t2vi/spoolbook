@@ -92,6 +92,7 @@ fn full_profile_body() -> Value {
     })
 }
 
+// spec: 006/FR-010
 #[tokio::test]
 async fn create_persists_and_round_trips_fields_across_the_whole_column_list() {
     let pool = test_pool().await;
@@ -126,6 +127,7 @@ async fn create_persists_and_round_trips_fields_across_the_whole_column_list() {
     assert_eq!(p["nozzleTempRangeHighC"], Value::Null);
 }
 
+// spec: 006/FR-011
 #[tokio::test]
 async fn create_leaves_blank_fields_as_none() {
     let pool = test_pool().await;
@@ -145,6 +147,7 @@ async fn create_leaves_blank_fields_as_none() {
     assert_eq!(p["shrinkPct"], Value::Null);
 }
 
+// spec: 006/FR-011
 #[tokio::test]
 async fn create_rejects_blank_name() {
     let pool = test_pool().await;
@@ -158,6 +161,7 @@ async fn create_rejects_blank_name() {
     assert_eq!(resp["ok"], false);
 }
 
+// spec: 006/FR-011
 #[tokio::test]
 async fn create_rejects_blank_nozzle_temp_c() {
     let pool = test_pool().await;
@@ -172,6 +176,7 @@ async fn create_rejects_blank_nozzle_temp_c() {
     assert!(resp["errors"]["NozzleTempC"].is_string(), "{resp:?}");
 }
 
+// spec: 006/FR-011
 #[tokio::test]
 async fn create_rejects_unparseable_nozzle_temp_c() {
     let pool = test_pool().await;
@@ -186,6 +191,7 @@ async fn create_rejects_unparseable_nozzle_temp_c() {
     assert!(resp["errors"]["NozzleTempC"].is_string(), "{resp:?}");
 }
 
+// spec: 006/FR-011
 #[tokio::test]
 async fn create_rejects_an_unparseable_optional_numeric_field_instead_of_defaulting() {
     let pool = test_pool().await;
@@ -200,6 +206,7 @@ async fn create_rejects_an_unparseable_optional_numeric_field_instead_of_default
     assert!(resp["errors"]["RetractionMm"].is_string(), "{resp:?}");
 }
 
+// spec: 006/FR-001
 #[tokio::test]
 async fn list_for_filament_only_returns_current_versions_sorted_generic_first() {
     let pool = test_pool().await;
@@ -222,6 +229,7 @@ async fn list_for_filament_only_returns_current_versions_sorted_generic_first() 
     assert_eq!(names, vec!["Aaa second", "Zzz spool-specific"]);
 }
 
+// spec: 006/FR-002
 #[tokio::test]
 async fn inventory_returns_total_and_profiles() {
     let pool = test_pool().await;
@@ -237,6 +245,7 @@ async fn inventory_returns_total_and_profiles() {
     assert_eq!(body["profiles"][0]["filament"]["material"], "PLA");
 }
 
+// spec: 006/FR-012
 #[tokio::test]
 async fn update_persists_changes_across_the_column_list() {
     let pool = test_pool().await;
@@ -264,6 +273,7 @@ async fn update_persists_changes_across_the_column_list() {
     assert_eq!(p["versionNumber"], 1);
 }
 
+// spec: 006/FR-011
 #[tokio::test]
 async fn update_rejects_blank_nozzle_temp_c() {
     let pool = test_pool().await;
@@ -281,6 +291,7 @@ async fn update_rejects_blank_nozzle_temp_c() {
     assert!(resp["errors"]["NozzleTempC"].is_string(), "{resp:?}");
 }
 
+// spec: 006/FR-012
 #[tokio::test]
 async fn update_returns_not_found_for_missing_id() {
     let pool = test_pool().await;
@@ -316,6 +327,7 @@ async fn attach_print(pool: &sqlx::SqlitePool, profile_id: i64, spool_id: i64, p
     assert_eq!(status, StatusCode::OK, "{body:?}");
 }
 
+// spec: 006/FR-020
 #[tokio::test]
 async fn update_rejects_a_version_used_in_a_print() {
     let pool = test_pool().await;
@@ -338,6 +350,7 @@ async fn update_rejects_a_version_used_in_a_print() {
     assert_eq!(inventory["profiles"][0]["name"], "Cold day tune", "profile must survive the rejected update unchanged");
 }
 
+// spec: 006/FR-013
 #[tokio::test]
 async fn delete_rejects_a_version_used_in_a_print() {
     let pool = test_pool().await;
@@ -357,6 +370,7 @@ async fn delete_rejects_a_version_used_in_a_print() {
     assert_eq!(inventory["total"], 1, "profile must survive the rejected delete");
 }
 
+// spec: 006/FR-003
 #[tokio::test]
 async fn field_spec_returns_blank_tabs_when_no_profile_id() {
     let pool = test_pool().await;
@@ -396,6 +410,7 @@ async fn field_spec_returns_blank_tabs_when_no_profile_id() {
     assert_eq!(long_retraction["unit"], "");
 }
 
+// spec: 006/FR-003
 #[tokio::test]
 async fn field_spec_returns_not_found_for_missing_profile_id() {
     let pool = test_pool().await;
@@ -404,6 +419,7 @@ async fn field_spec_returns_not_found_for_missing_profile_id() {
     assert_eq!(body["error"], "not_found");
 }
 
+// spec: 006/FR-003
 #[tokio::test]
 async fn field_spec_returns_the_profiles_name_and_populated_values() {
     let pool = test_pool().await;
@@ -436,6 +452,7 @@ async fn field_spec_returns_the_profiles_name_and_populated_values() {
 
 // Round-trips the exact form flow: load blank spec -> save -> reload same profile's spec (now
 // pre-filled) -> edit -> save again, all through the same create/parse/update code path.
+// spec: 006/FR-003, 006/FR-012
 #[tokio::test]
 async fn field_spec_round_trips_through_create_then_edit_then_update() {
     let pool = test_pool().await;
@@ -465,6 +482,7 @@ async fn field_spec_round_trips_through_create_then_edit_then_update() {
     assert_eq!(nozzle_temp["value"], "205");
 }
 
+// spec: 006/FR-013
 #[tokio::test]
 async fn delete_removes_the_profile() {
     let pool = test_pool().await;
@@ -479,6 +497,7 @@ async fn delete_removes_the_profile() {
     assert_eq!(body["total"], 0);
 }
 
+// spec: 006/FR-013
 #[tokio::test]
 async fn delete_returns_not_found_for_missing_id() {
     let pool = test_pool().await;

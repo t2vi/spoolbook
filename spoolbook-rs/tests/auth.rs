@@ -49,6 +49,7 @@ async fn setup_user(pool: &sqlx::SqlitePool, username: &str, password: &str) -> 
     extract_cookie_pair(&set_cookie.expect("setup should set a cookie")).to_string()
 }
 
+// spec: 008/FR-010
 #[tokio::test]
 async fn setup_status_reports_needs_setup_when_no_users_exist() {
     let pool = test_pool().await;
@@ -57,6 +58,7 @@ async fn setup_status_reports_needs_setup_when_no_users_exist() {
     assert_eq!(body["needsSetup"], true);
 }
 
+// spec: 008/FR-010
 #[tokio::test]
 async fn setup_creates_the_first_user_and_a_working_session() {
     let pool = test_pool().await;
@@ -70,6 +72,7 @@ async fn setup_creates_the_first_user_and_a_working_session() {
     assert_eq!(body["authenticated"], true);
 }
 
+// spec: 008/FR-010
 #[tokio::test]
 async fn setup_rejects_a_short_password() {
     let pool = test_pool().await;
@@ -78,6 +81,7 @@ async fn setup_rejects_a_short_password() {
     assert_eq!(body["error"], "password_too_short");
 }
 
+// spec: 008/FR-010
 #[tokio::test]
 async fn setup_is_rejected_once_a_user_already_exists() {
     let pool = test_pool().await;
@@ -88,6 +92,7 @@ async fn setup_is_rejected_once_a_user_already_exists() {
     assert_eq!(body["error"], "already_set_up");
 }
 
+// spec: 008/FR-012
 #[tokio::test]
 async fn login_fails_with_wrong_password() {
     let pool = test_pool().await;
@@ -100,6 +105,7 @@ async fn login_fails_with_wrong_password() {
     assert!(set_cookie.is_none());
 }
 
+// spec: 008/FR-012
 #[tokio::test]
 async fn login_fails_with_an_unknown_username() {
     let pool = test_pool().await;
@@ -111,6 +117,7 @@ async fn login_fails_with_an_unknown_username() {
     assert_eq!(body["ok"], false);
 }
 
+// spec: 008/FR-012, 008/FR-001
 #[tokio::test]
 async fn login_succeeds_and_sets_a_session_cookie_the_gated_routes_accept() {
     let pool = test_pool().await;
@@ -130,6 +137,7 @@ async fn login_succeeds_and_sets_a_session_cookie_the_gated_routes_accept() {
     assert_ne!(status, StatusCode::UNAUTHORIZED, "{body:?}");
 }
 
+// spec: 008/FR-014
 #[tokio::test]
 async fn me_reports_unauthenticated_with_no_cookie() {
     let pool = test_pool().await;
@@ -138,6 +146,7 @@ async fn me_reports_unauthenticated_with_no_cookie() {
     assert_eq!(body["authenticated"], false);
 }
 
+// spec: 008/FR-014
 #[tokio::test]
 async fn me_reports_unauthenticated_with_a_garbage_cookie() {
     let pool = test_pool().await;
@@ -145,6 +154,7 @@ async fn me_reports_unauthenticated_with_a_garbage_cookie() {
     assert_eq!(body["authenticated"], false);
 }
 
+// spec: 008/FR-013
 #[tokio::test]
 async fn logout_deletes_the_session_so_the_cookie_stops_working() {
     let pool = test_pool().await;
@@ -162,6 +172,7 @@ async fn logout_deletes_the_session_so_the_cookie_stops_working() {
     assert_eq!(body["authenticated"], false);
 }
 
+// spec: 008/FR-001
 #[tokio::test]
 async fn a_gated_route_rejects_a_request_with_no_cookie() {
     let pool = test_pool().await;
@@ -170,6 +181,7 @@ async fn a_gated_route_rejects_a_request_with_no_cookie() {
     assert_eq!(body["authenticated"], false);
 }
 
+// spec: 008/FR-001
 #[tokio::test]
 async fn a_gated_route_rejects_an_expired_session() {
     let pool = test_pool().await;
@@ -188,6 +200,7 @@ async fn a_gated_route_rejects_an_expired_session() {
 
 // Read (GET) routes stay open, matching the original shared-secret model — only mutations are
 // gated.
+// spec: 008/FR-001
 #[tokio::test]
 async fn read_routes_stay_open_with_no_cookie() {
     let pool = test_pool().await;
@@ -195,6 +208,7 @@ async fn read_routes_stay_open_with_no_cookie() {
     assert_eq!(status, StatusCode::OK);
 }
 
+// spec: 008/FR-020
 #[tokio::test]
 async fn account_update_changes_username_and_password() {
     let pool = test_pool().await;
@@ -219,6 +233,7 @@ async fn account_update_changes_username_and_password() {
     assert!(set_cookie.is_some());
 }
 
+// spec: 008/FR-020
 #[tokio::test]
 async fn account_update_rejects_the_wrong_current_password() {
     let pool = test_pool().await;
@@ -229,6 +244,7 @@ async fn account_update_rejects_the_wrong_current_password() {
     assert_eq!(body["error"], "wrong_current_password");
 }
 
+// spec: 008/FR-011
 #[tokio::test]
 async fn startup_migration_creates_an_admin_user_from_the_env_var_when_users_table_is_empty() {
     let _guard = ENV_LOCK.lock().unwrap();
@@ -242,6 +258,7 @@ async fn startup_migration_creates_an_admin_user_from_the_env_var_when_users_tab
     assert!(set_cookie.is_some());
 }
 
+// spec: 008/FR-011
 #[tokio::test]
 async fn startup_migration_does_nothing_when_a_user_already_exists() {
     let _guard = ENV_LOCK.lock().unwrap();
@@ -255,6 +272,7 @@ async fn startup_migration_does_nothing_when_a_user_already_exists() {
     assert_eq!(count, 1, "should not have created a second user");
 }
 
+// spec: 008/FR-011
 #[tokio::test]
 async fn startup_migration_does_nothing_when_no_env_var_is_set() {
     let _guard = ENV_LOCK.lock().unwrap();

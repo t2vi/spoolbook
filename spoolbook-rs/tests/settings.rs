@@ -36,6 +36,7 @@ async fn send(pool: &sqlx::SqlitePool, method: &str, uri: &str, body: Option<Val
     (status, json)
 }
 
+// spec: 002/FR-010
 #[tokio::test]
 async fn get_creates_the_row_lazily_and_returns_defaults() {
     let pool = test_pool().await;
@@ -51,6 +52,7 @@ async fn get_creates_the_row_lazily_and_returns_defaults() {
     );
 }
 
+// spec: 002/FR-011
 #[tokio::test]
 async fn post_persists_additional_source_urls() {
     let pool = test_pool().await;
@@ -69,6 +71,7 @@ async fn post_persists_additional_source_urls() {
     assert_eq!(get_body["additionalFilamentSourceUrls"], "https://example.com/catalog.json");
 }
 
+// spec: 002/FR-011
 #[tokio::test]
 async fn post_blanks_out_whitespace_only_input() {
     let pool = test_pool().await;
