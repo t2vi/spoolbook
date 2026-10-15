@@ -345,3 +345,54 @@ async fn delete_rejects_a_project_referenced_by_a_print() {
     let (_, all) = send(&pool, "GET", "/api/projects", None).await;
     assert_eq!(all.as_array().unwrap().len(), 1);
 }
+
+async fn seed_chain(pool: &sqlx::SqlitePool, v1_path: &str, v2_path: &str) -> (i64, i64) {
+    let v1 = seed_project(pool, v1_path, None).await;
+    let v2 = seed_project(pool, v2_path, None).await;
+    send(pool, "POST", &format!("/api/projects/{v2}/link-version"), Some(serde_json::json!({ "previousVersionProjectId": v1 }))).await;
+    (v1, v2)
+}
+
+// spec: 005/FR-013
+#[tokio::test]
+async fn delete_refuses_a_version_a_newer_one_builds_on() {
+    let pool = test_pool().await;
+    let (v1, _) = seed_chain(&pool, "/tmp/chain-a1.3mf", "/tmp/chain-a2.3mf").await;
+
+    let (status, body) = send(&pool, "DELETE", &format!("/api/projects/{v1}"), None).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    assert_eq!(body["error"], "has_newer_version");
+}
+
+// spec: 005/FR-013
+#[tokio::test]
+async fn deleting_the_current_version_makes_the_previous_one_current() {
+    let pool = test_pool().await;
+    let (v1, v2) = seed_chain(&pool, "/tmp/chain-b1.3mf", "/tmp/chain-b2.3mf").await;
+
+    let (status, body) = send(&pool, "DELETE", &format!("/api/projects/{v2}"), None).await;
+
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    let (_, all) = send(&pool, "GET", "/api/projects", None).await;
+    let ids: Vec<i64> = all.as_array().unwrap().iter().map(|p| p["id"].as_i64().unwrap()).collect();
+    assert_eq!(ids, vec![v1]);
+}
+
+// spec: 005/FR-013
+#[tokio::test]
+async fn delete_removes_the_stored_file_unless_another_project_uses_it() {
+    let pool = test_pool().await;
+    let own = write_fixture_3mf("delete-own.3mf");
+    let shared = write_fixture_3mf("delete-shared.3mf");
+    let a = seed_project(&pool, own.to_str().unwrap(), None).await;
+    let b = seed_project(&pool, shared.to_str().unwrap(), None).await;
+    seed_project(&pool, shared.to_str().unwrap(), None).await;
+
+    send(&pool, "DELETE", &format!("/api/projects/{a}"), None).await;
+    send(&pool, "DELETE", &format!("/api/projects/{b}"), None).await;
+
+    assert!(!own.exists(), "file of a deleted project should be removed");
+    assert!(shared.exists(), "file still used by another project must stay");
+    std::fs::remove_file(shared).ok();
+}

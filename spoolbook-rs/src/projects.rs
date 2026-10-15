@@ -175,10 +175,41 @@ async fn delete(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Pa
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "has_prints" })));
     }
 
-    let result = sqlx::query("DELETE FROM projects WHERE id = ?1").bind(id).execute(&pool).await.expect("delete failed");
+    let has_newer_version: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM projects WHERE previous_version_project_id = ?1)")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .expect("query failed");
+    if has_newer_version {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "has_newer_version" })));
+    }
 
-    if result.rows_affected() == 0 {
+    // Same rule as print profiles: only the tip of a chain can go, and the previous version takes
+    // over as current so the history stays listed.
+    let mut tx = pool.begin().await.expect("begin failed");
+    let deleted = sqlx::query_as::<_, (String, Option<i64>, bool)>(
+        "DELETE FROM projects WHERE id = ?1 RETURNING file_path, previous_version_project_id, is_current_version",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await
+    .expect("delete failed");
+    let Some((file_path, previous_id, was_current)) = deleted else {
         return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "ok": false, "error": "not_found" })));
+    };
+    if was_current && let Some(previous_id) = previous_id {
+        sqlx::query("UPDATE projects SET is_current_version = 1 WHERE id = ?1").bind(previous_id).execute(&mut *tx).await.expect("update failed");
+    }
+    let file_still_used: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM projects WHERE file_path = ?1)")
+        .bind(&file_path)
+        .fetch_one(&mut *tx)
+        .await
+        .expect("query failed");
+    tx.commit().await.expect("commit failed");
+
+    // After commit, so a failed delete never loses the file; a missing file is fine.
+    if !file_still_used {
+        std::fs::remove_file(&file_path).ok();
     }
 
     (StatusCode::OK, Json(serde_json::json!({ "ok": true })))
