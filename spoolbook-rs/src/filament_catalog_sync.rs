@@ -11,7 +11,21 @@ pub fn router() -> Router<SqlitePool> {
 // Mirrors FilamentCatalogParser.Parse — the published catalog's field names are PascalCase
 // (verified against the live feed), same shape every additional source is expected to serve.
 pub fn parse_catalog(json: &str) -> Vec<FilamentInput> {
-    serde_json::from_str(json).unwrap_or_default()
+    try_parse_catalog(json).unwrap_or_default()
+}
+
+// Strict form for the published catalog: a body that isn't a JSON catalog is a failed sync, not
+// an empty one (an empty list is still fine).
+pub fn try_parse_catalog(json: &str) -> Result<Vec<FilamentInput>, String> {
+    serde_json::from_str(json).map_err(|e| format!("filament catalog isn't valid JSON: {e}"))
+}
+
+async fn fetch_text(client: &reqwest::Client, url: &str) -> Result<String, String> {
+    let resp = client.get(url).send().await.map_err(|e| format!("couldn't fetch {url}: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("couldn't fetch {url}: HTTP {}", resp.status().as_u16()));
+    }
+    resp.text().await.map_err(|e| format!("couldn't read {url}: {e}"))
 }
 
 // Mirrors FilamentService.ImportManyAsync: each entry goes through the same
@@ -51,21 +65,16 @@ pub async fn run_sync(pool: &SqlitePool) -> Result<(i64, i64), String> {
         .filter(|u| !u.is_empty())
         .collect();
 
-    let mut entries = match reqwest::get(settings::CATALOG_URL).await {
-        Ok(resp) => match resp.text().await {
-            Ok(body) => parse_catalog(&body),
-            Err(e) => return Err(e.to_string()),
-        },
-        Err(e) => return Err(e.to_string()),
-    };
+    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(30)).build().map_err(|e| e.to_string())?;
+    // Any failure here returns before last_filament_sync_at is stamped, so the startup auto-sync
+    // retries next launch instead of waiting out the 24h throttle on a sync that never happened.
+    let mut entries = try_parse_catalog(&fetch_text(&client, &settings::catalog_url()).await?)?;
 
     // An additional source failing just means that one source is skipped this run — one broken
     // URL shouldn't block the sync of everything else (unlike the default source above).
     for url in additional_urls {
-        if let Ok(resp) = reqwest::get(url).await {
-            if let Ok(body) = resp.text().await {
-                entries.extend(parse_catalog(&body));
-            }
+        if let Ok(body) = fetch_text(&client, url).await {
+            entries.extend(parse_catalog(&body));
         }
     }
 

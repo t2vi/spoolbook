@@ -43,7 +43,8 @@ via an export zip that is *merged* into the target rather than replacing it.
 ### Settings
 
 - **FR-010** — `GET /api/settings` (open) returns `additionalFilamentSourceUrls`,
-  `lastFilamentSyncAt`, `catalogUrl` (the fixed published catalog URL), `latitude`,
+  `lastFilamentSyncAt`, `catalogUrl` (the published catalog URL, or its override — 007/FR-024),
+  `latitude`,
   `longitude`. The first read on a fresh DB creates the settings row with all values null.
   *Verify: integration*
 - **FR-011** — `POST /api/settings` (editor only) replaces additional source URLs, latitude and

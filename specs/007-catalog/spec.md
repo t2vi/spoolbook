@@ -44,14 +44,17 @@ filament. Colors are discovered from filaments as they're added.
   blanks ignored) and import each entry through FR-010's create path; invalid or duplicate
   entries are skipped, not fatal. Returns `{ ok, added, skipped }` and records the sync time.
   An additional source that fails is skipped. *Verify: integration*
-- **FR-021** — If the published catalog can't be fetched (network error, non-2xx, or an
-  unparseable body) the sync fails with an error and the sync time is **not** updated. Fetches
-  are time-bounded. *Verify: integration* — **non-2xx/garbage treated as success (#175)**
+- **FR-021** — If the published catalog can't be fetched (network error, non-2xx, or a body
+  that isn't a JSON catalog — an empty list is fine) the sync fails with 400 `{ ok: false,
+  error }` and the sync time is **not** updated. Every catalog fetch (published or additional)
+  gives up after 30 s. *Verify: integration*
 - **FR-022** — The startup auto-sync runs only when there has never been a sync or the last one
   was more than 24 h ago, in the background, and is silent on failure. The manual sync is never
   throttled. *Verify: unit*
 - **FR-023** — Catalog entries are read from the feed's PascalCase fields (`Brand`, `Material`,
   `Variant`, `Color`, `Hex`). *Verify: unit*
+- **FR-024** — `FILAMENT_CATALOG_URL`, when set, replaces the published catalog URL for syncing
+  and for the URL Settings shows (used by tests). *Verify: integration*
 
 ### Spools
 
@@ -68,7 +71,8 @@ filament. Colors are discovered from filaments as they're added.
 
 ### Pages
 
-- **FR-040** — `/filaments` searches by brand/material with paging, runs the catalog sync, and
+- **FR-040** — `/filaments` searches by brand/material with paging, runs the catalog sync
+  (showing the added/skipped counts, or the error when it fails), and
   deletes with the refusal reason shown; `/filaments/new` and `/filaments/edit/[id]` edit the
   four fields with color autocomplete from known colors. *Verify: e2e*
 - **FR-041** — `/spools` lists spools with their filament and status; `/spools/new` and
@@ -77,6 +81,6 @@ filament. Colors are discovered from filaments as they're added.
 ## Notes
 
 - Retroactive: behavior read from the code at `3fdca27`.
-- **#174 (fixed):** filament delete guard; **#175:** sync failure masking + no timeout; **#176:** spool
+- **#174 (fixed):** filament delete guard; **#175 (fixed):** sync failure masking + no timeout; **#176:** spool
   validation; **#177:** no way to fix a color's hex (`#CCCCCC` placeholder is permanent).
 - Spool "status" (Unopened / Opened / Empty) is derived from the dates — see 002/FR-020.

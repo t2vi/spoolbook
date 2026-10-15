@@ -56,6 +56,9 @@
 			const r = await syncFilamentCatalog();
 			syncStatusMessage = r.ok ? `Added ${r.added} new, skipped ${r.skipped} duplicates.` : `Sync failed: ${r.error}`;
 			if (r.ok) await load();
+		} catch (e) {
+			// A failed sync is a 4xx, which request() throws on.
+			syncStatusMessage = `Sync failed: ${e instanceof Error ? e.message : 'unknown error'}`;
 		} finally {
 			syncing = false;
 		}
