@@ -51,8 +51,10 @@ a chain, and only current versions are listed.
 - **FR-012** — `PUT /api/projects/{id}` `{ fileName }` (editor) renames (trimmed); blank → 400;
   missing → 404. *Verify: integration*
 - **FR-013** — `DELETE /api/projects/{id}` (editor): 400 `has_prints` when any Print
-  references it; 404 if missing; otherwise it is removed **without breaking its version chain**
-  and its stored file is removed. *Verify: integration* — **chain/file handling broken (#168)**
+  references it; 400 `has_newer_version` if a later version builds on it; 404 if missing.
+  Deleting the current version makes its previous version current again (so the history stays
+  listed). Its stored file is removed once no other Project uses the same file.
+  *Verify: integration*
 
 ### Versions
 
@@ -90,7 +92,8 @@ a chain, and only current versions are listed.
 ## Notes
 
 - Retroactive: behavior read from the code at `3fdca27`.
-- **#168:** deleting within a version chain (FR-013).
+- **#168 (fixed):** deleting a superseded version failed (500), deleting the current one hid its
+  whole history, and the stored file was never removed. Same rule as print profiles (006/FR-013).
 - **#169:** upload accepts non-.3mf bytes; link-version self/cycle; no timeouts on URL import
   and re-slice; URL import size checked only after the full download.
 - **#170:** URL import and manual version linking (FR-003, FR-020–021) have no UI.
