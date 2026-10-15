@@ -40,8 +40,10 @@ Bambu system preset, and are what a Print records and a re-slice applies.
 
 - **FR-010** — `POST /api/profiles?filamentId=` (editor) `{ name, fields, spoolId?, source?,
   sourceSlicer?, rawSettingsJson? }` creates a profile; `fields` maps field keys to strings.
-  Unknown filament, or a spool that doesn't exist or belongs to another filament → 400.
-  *Verify: integration* — **filament/spool unchecked (#173)**
+  Field-keyed 400s, nothing saved: unknown filament → `filamentId: Unknown filament.`; a spool
+  that doesn't exist → `spoolId: Unknown spool.`; a spool of another filament → `spoolId: That
+  spool is a different filament.` The spool rule also applies to update (FR-012) and new
+  versions (FR-021), against the profile's own filament. *Verify: integration*
 - **FR-011** — Validation, all reported together per field: blank name → `name: Name is
   required`; blank or non-integer `NozzleTempC` → error; any other non-blank value that doesn't
   parse as its type (whole number / number / true-false) → error naming the field. Blank
@@ -78,7 +80,7 @@ Bambu system preset, and are what a Print records and a re-slice applies.
   values winning). Returns `{ ok, suggestedName, fields, rawSettingsJson }` to pre-fill the form
   — it never saves a profile. Errors: no file → 400; a zip without the settings entry → 400
   `no_project_settings`; neither zip nor JSON → 400 `invalid_file`; system library unreachable
-  → 502. Remote calls are time-bounded. *Verify: integration* — **no timeout (#173)**
+  → 502. Every call to slicer-service gives up after 30 s (→ 502). *Verify: integration*
 - **FR-031** — Imported values map Bambu keys to profile fields: first element of array
   values, Bambu booleans → `true`/`false`, `nil`/empty treated as absent, the literal `%` in
   percentage strings stripped. *Verify: integration*
@@ -105,5 +107,6 @@ Bambu system preset, and are what a Print records and a re-slice applies.
   `previous_version_profile_id`, mirroring Projects. The old desktop app grouped versions by
   the local preset file path instead — meaningless once profiles stopped coming from local files.
 - **#172 (fixed):** update used to erase `notes` / `version_name`.
-- **#173:** filament/spool validation; no timeout on system-preset fetches.
+- **#173 (fixed):** unknown filament/spool used to 500, a profile could point at another
+  filament's spool, and system-preset fetches had no timeout.
 - `notes`, `version_name` and `source_preset_path` can't be set from the API at all today.
