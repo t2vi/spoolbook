@@ -454,7 +454,7 @@ async fn recommend_profile(State(pool): State<SqlitePool>, Query(q): Query<Recom
     Json(profile)
 }
 
-// Auto-create-on-send (docs/adr/0017's 2026-08-14 addendum) — called the moment the printer
+// Auto-create-on-send — called the moment the printer
 // send succeeds, so the Print row exists before the printer even confirms it started.
 // EndedAt/ambient weather fill in later (printer_telemetry::end_job / a future weather fetch).
 pub(crate) async fn create_in_progress(

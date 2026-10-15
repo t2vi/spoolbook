@@ -1,5 +1,5 @@
 // Port of PrinterCameraService.cs — relays a printer's RTSPS camera feed to the browser as
-// MJPEG (docs/adr/0024). One broadcaster per printer (Bambu firmware allows exactly one camera
+// MJPEG. One broadcaster per printer (Bambu firmware allows exactly one camera
 // connection at a time), shared by every viewer. RTSP-only (X1/X2/H2/P2 family) — the port-6000
 // chamber-image protocol (A1/P1) is deliberately not implemented (no printer of that family in
 // this system).

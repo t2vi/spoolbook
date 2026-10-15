@@ -41,7 +41,7 @@ async fn post_multipart(uri: &str, field_name: &str, filename: &str, content: &[
 }
 
 // A minimal but real .3mf zip carrying Metadata/project_settings.config, the same baked-preset
-// shape Bambu Studio writes at slice time (docs/adr/0018).
+// shape Bambu Studio writes at slice time.
 fn fake_3mf_with_settings(settings_json: &str) -> Vec<u8> {
     let mut buf = Vec::new();
     {

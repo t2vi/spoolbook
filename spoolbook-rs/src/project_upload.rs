@@ -94,7 +94,7 @@ struct ImportUrlRequest {
     url: String,
 }
 
-// Generic URL fetch (docs/adr/0023) — any direct link to a .3mf file, including a MakerWorld
+// Generic URL fetch — any direct link to a .3mf file, including a MakerWorld
 // download link copied manually. Auto-resolving a MakerWorld page URL itself is deferred: that
 // needs their unofficial frontend API, not a direct file link.
 async fn import_url(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Json(req): Json<ImportUrlRequest>) -> (StatusCode, Json<serde_json::Value>) {

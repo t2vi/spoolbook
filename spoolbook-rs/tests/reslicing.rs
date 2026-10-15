@@ -235,7 +235,7 @@ async fn reslice_patches_settings_and_saves_the_sliced_result() {
 
 // A real slicer's output is never byte-identical run to run, so project_upload's content-hash
 // dedup alone can never catch "re-sliced the same project again" -- reslicing.rs chains the
-// result onto the source project instead (docs/adr/0031's sibling gap, filed as issue #114).
+// result onto the source project instead (issue #114).
 // spec: 005/FR-032
 #[tokio::test]
 async fn reslice_chains_the_result_as_a_new_version_of_the_source_project() {

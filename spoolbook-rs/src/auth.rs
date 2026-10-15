@@ -2,8 +2,8 @@
 // this crate used to run on. Session tokens are opaque random values looked up server-side
 // (sessions.id), not a recomputable proof the way the old HMAC(password, "editor") cookie was —
 // that trick only worked because the shared password doubled as both credential and signing key,
-// which breaks once login means "verify against an argon2 hash in a users row." See
-// docs/adr/0027 for the full reasoning.
+// which breaks once login means "verify against an argon2 hash in a users row." A signed
+// stateless token was the alternative; server-side sessions are simpler and can be revoked.
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng as PwOsRng};
 use argon2::Argon2;
 use axum::extract::{FromRef, FromRequestParts};

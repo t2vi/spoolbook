@@ -1,4 +1,4 @@
-// Data export/import (docs/adr/0033): a zip bundle merged into the target install rather than
+// Data export/import: a zip bundle merged into the target install rather than
 // replacing it. print_profiles alone has ~140 columns -- rather than hand-writing/maintaining a
 // typed struct twice over (once to serialize, once to bind an INSERT) for every mergeable table,
 // these two functions read/write any row generically by column name, reused across every table.
@@ -333,7 +333,7 @@ fn write_project_files(bytes: &[u8], project_files: &ProjectFiles) {
 // import processes tables in this order. Export doesn't care about order but reuses the same
 // list so both sides agree on exactly what's in scope. Deliberately excludes users/sessions (the
 // target has its own login), app_settings (single-row host config, not a merge candidate), and
-// printer_jobs/printer_readings (transient MQTT scaffolding per ADR-0032 -- a Print's permanent
+// printer_jobs/printer_readings (transient MQTT scaffolding -- a Print's permanent
 // telemetry record is already covered by exporting `prints`, which carries telemetry_json).
 pub const EXPORT_TABLES: &[&str] = &[
     "filaments",

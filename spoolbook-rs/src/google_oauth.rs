@@ -1,4 +1,4 @@
-// Native Google sign-in, link-only for this release (docs/adr/0028): an already-authenticated
+// Native Google sign-in, link-only for this release: an already-authenticated
 // admin links their Google account from Settings; /login's "Sign in with Google" only succeeds
 // if that link already exists. No auto-provisioning a second user -- this app is single-user
 // until the multi-user/print-request feature (github.com/t2vi/spoolbook/issues/91) lands.
