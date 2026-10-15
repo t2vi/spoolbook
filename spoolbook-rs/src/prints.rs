@@ -544,15 +544,22 @@ async fn update(
 }
 
 async fn delete(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Path(id): Path<i64>) -> (StatusCode, Json<PrintResult>) {
+    // print_failure_modes.print_id has no ON DELETE CASCADE (hourly weather cascades, attached
+    // Jobs are SET NULL), so the tags go first — same transaction, so a failure keeps both.
+    // ponytail: explicit delete instead of a table-rebuild migration to add the cascade; this is
+    // the only place Prints are deleted.
+    let mut tx = pool.begin().await.expect("begin failed");
+    sqlx::query("DELETE FROM print_failure_modes WHERE print_id = ?1").bind(id).execute(&mut *tx).await.expect("delete failed");
     let result = sqlx::query("DELETE FROM prints WHERE id = ?1")
         .bind(id)
-        .execute(&pool)
+        .execute(&mut *tx)
         .await
         .expect("delete failed");
 
     if result.rows_affected() == 0 {
         return err(StatusCode::NOT_FOUND, "not_found");
     }
+    tx.commit().await.expect("commit failed");
 
     (StatusCode::OK, Json(PrintResult { ok: true, error: None, print: None }))
 }

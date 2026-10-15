@@ -487,3 +487,25 @@ async fn hourly_weather_returns_empty_array_when_none_recorded() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body.as_array().unwrap().len(), 0);
 }
+
+// spec: 003/FR-014
+#[tokio::test]
+async fn delete_removes_a_print_with_failure_modes_weather_and_an_attached_job() {
+    let pool = test_pool().await;
+    let f = seed_all(&pool).await;
+    let (_, created) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Failed", vec!["Stringing", "Warping"]))).await;
+    let id = created["print"]["id"].as_i64().unwrap();
+    sqlx::query("INSERT INTO print_hourly_weather (print_id, hour, temp_c, humidity_pct) VALUES (?1, '2026-08-15T10:00', 18.0, 60.0)").bind(id).execute(&pool).await.unwrap();
+    let job_id = seed_printer_job(&pool, f.printer_id, "task-1", "2026-08-15T10:00:00Z").await;
+    sqlx::query("UPDATE printer_jobs SET print_id = ?1 WHERE id = ?2").bind(id).bind(job_id).execute(&pool).await.unwrap();
+
+    let (status, body) = send(&pool, "DELETE", &format!("/api/prints/{id}"), None).await;
+
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let count = |sql: &'static str| { let pool = pool.clone(); async move { sqlx::query_scalar::<_, i64>(sql).fetch_one(&pool).await.unwrap() } };
+    assert_eq!(count("SELECT COUNT(*) FROM prints").await, 0);
+    assert_eq!(count("SELECT COUNT(*) FROM print_failure_modes").await, 0);
+    assert_eq!(count("SELECT COUNT(*) FROM print_hourly_weather").await, 0);
+    let job_print: Option<i64> = sqlx::query_scalar("SELECT print_id FROM printer_jobs WHERE id = ?1").bind(job_id).fetch_one(&pool).await.unwrap();
+    assert_eq!(job_print, None, "the Job is kept, just unlinked");
+}

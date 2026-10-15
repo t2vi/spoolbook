@@ -59,7 +59,7 @@ and the ambient weather attached once a Print ends.
   spool are fixed at creation. 404 if missing. *Verify: integration*
 - **FR-014** — `DELETE /api/prints/{id}` (editor) deletes the Print together with its failure
   modes and hourly weather; an attached telemetry Job is kept but unlinked. 404 if missing.
-  *Verify: integration* — **fails when failure modes exist (#161)**
+  *Verify: integration*
 - **FR-015** — Sending a job to a printer creates its `InProgress` Print at once (Printers spec,
   send print); telemetry finalizes it (001/FR-021).
 
