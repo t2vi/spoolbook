@@ -233,6 +233,11 @@ pub struct ProfileFieldSpecResponse {
     pub version_number: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_current_version: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filament_id: Option<i64>,
+    // Outer None: blank form (left out); Some(None): a generic profile (null).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spool_id: Option<Option<i64>>,
 }
 
 pub fn build_groups(name: String, initial_values: Option<&HashMap<&'static str, String>>) -> ProfileFieldSpecResponse {
@@ -267,7 +272,7 @@ pub fn build_groups(name: String, initial_values: Option<&HashMap<&'static str, 
         }
     }
 
-    ProfileFieldSpecResponse { name, tabs, version_number: None, is_current_version: None }
+    ProfileFieldSpecResponse { name, tabs, version_number: None, is_current_version: None, filament_id: None, spool_id: None }
 }
 
 pub(crate) fn fmt_f64(v: f64) -> String {

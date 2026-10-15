@@ -33,8 +33,8 @@ Bambu system preset, and are what a Print records and a re-slice applies.
   *Verify: integration*
 - **FR-003** — `GET /api/profiles/field-spec` (open) returns the form definition with empty
   values; `?profileId=` returns it pre-filled with that profile's name and values (booleans as
-  `true`/`false`, blank for unset) plus its `versionNumber` and `isCurrentVersion`; unknown id
-  → 404. *Verify: integration*
+  `true`/`false`, blank for unset) plus its `versionNumber`, `isCurrentVersion`, `filamentId`
+  and `spoolId` (null = generic); unknown id → 404. *Verify: integration*
 
 ### Writing
 
@@ -96,7 +96,9 @@ Bambu system preset, and are what a Print records and a re-slice applies.
 - **FR-040** — `/profiles` lists current profiles with their filament and delete (with the
   `has_prints` refusal shown). *Verify: e2e*
 - **FR-041** — `/profiles/new` and `/profiles/edit/[id]` render the tabbed form from the field
-  spec, pre-fill from a file import or a system preset, show per-field errors, and save. The
+  spec, pre-fill from a file import or a system preset, show per-field errors, and save. A
+  Spool picker chooses generic or one of the profile's filament's spools; the edit page starts
+  on the profile's current choice and saving sends it. The
   edit page shows the version number and a "Save as new version" button (FR-021); a `Locked`
   refusal points the user at it. Saving from the edit page keeps the profile's provenance
   (`source`, `source_slicer`, `raw_settings_json`) unless a file or system preset was imported
@@ -113,4 +115,6 @@ Bambu system preset, and are what a Print records and a re-slice applies.
   filament's spool, and system-preset fetches had no timeout.
 - **#183 (fixed):** the edit page always sent `source: Manual`, relabelling every imported
   profile on save.
+- **#184 (fixed):** the form had no spool choice and always sent `spoolId: null`, so saving a
+  spool-specific profile made it generic.
 - `notes`, `version_name` and `source_preset_path` can't be set from the API at all today.

@@ -17,13 +17,14 @@
 		getProfileFieldSpec,
 		importProfilePreset,
 		listAllFilaments,
+		listSpools,
 		listSystemPresets,
 		resolveSystemPreset,
 		saveProfileAsNewVersion,
 		updateProfile
 	} from '$lib/api/client';
 	import type { ProfileInput } from '$lib/api/client';
-	import type { Filament, ImportResult, ProfileFieldTab, ProfileSource, SlicerType } from '$lib/api/types';
+	import type { Filament, ImportResult, ProfileFieldTab, ProfileSource, SlicerType, Spool } from '$lib/api/types';
 	import { goto } from '$app/navigation';
 
 	let { id }: { id: number | null } = $props();
@@ -57,6 +58,22 @@
 	let errorMessage = $state<string | null>(null);
 	let versionNumber = $state<number | null>(null);
 	let isCurrentVersion = $state(true);
+	// 0 = generic (any spool of the filament); otherwise a spool-specific profile.
+	let spools = $state<Spool[]>([]);
+	let editFilamentId = $state(0);
+	let spoolId = $state(0);
+	let filamentId = $derived(id === null ? selectedFilamentId : editFilamentId);
+	let spoolOptions = $derived([
+		{ value: 0, label: 'Generic (any spool)' },
+		...spools
+			.filter((s) => s.filamentId === filamentId)
+			.map((s) => ({ value: s.id, label: `Spool #${s.id}${s.lotCode ? ` · ${s.lotCode}` : ''}${s.emptiedAt ? ' (empty)' : ''}` }))
+	]);
+
+	// A spool of a previously picked filament no longer applies.
+	$effect(() => {
+		if (spoolId !== 0 && !spoolOptions.some((o) => o.value === spoolId)) spoolId = 0;
+	});
 
 	let systemPresetOptions = $state<{ value: string; label: string }[]>([]);
 	let selectedSystemPreset = $state('');
@@ -77,7 +94,10 @@
 				}
 			}
 
+			spools = await listSpools();
 			const spec = await getProfileFieldSpec(id);
+			editFilamentId = spec.filamentId ?? 0;
+			spoolId = spec.spoolId ?? 0;
 			name = spec.name;
 			tabs = spec.tabs;
 			versionNumber = spec.versionNumber ?? null;
@@ -144,7 +164,7 @@
 		for (const tab of tabs) for (const section of tab.sections) for (const field of section.fields) fields[field.name] = field.value;
 
 		const provenance = id === null || imported ? { source, sourceSlicer, rawSettingsJson } : {};
-		const input: ProfileInput = { name, fields, ...provenance, spoolId: null };
+		const input: ProfileInput = { name, fields, ...provenance, spoolId: spoolId || null };
 
 		const result = id === null
 			? selectedFilamentId === 0
@@ -224,6 +244,10 @@
 			<div class="flex flex-col gap-1">
 				<Label for="name">Name</Label>
 				<Input id="name" bind:value={name} />
+			</div>
+			<div class="mt-4 flex flex-col gap-1">
+				<Label for="spool">Spool</Label>
+				<Picker id="spool" bind:value={spoolId} options={spoolOptions} />
 			</div>
 		</Card.Content>
 	</Card.Root>
