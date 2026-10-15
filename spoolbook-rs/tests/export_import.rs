@@ -430,3 +430,29 @@ async fn row_to_json_and_insert_json_row_round_trip_real_columns_and_fk_columns(
     assert_eq!(reinserted.get::<f64, _>("diameter_mm"), 1.75);
     assert_eq!(reinserted.get::<i64, _>("filament_id"), filament_id, "no remap applied -- insert_json_row just inserts what it's given");
 }
+
+// spec: 002/FR-042, 006/FR-021
+#[tokio::test]
+async fn import_commit_remaps_a_profile_version_chain() {
+    let pool = test_pool().await;
+    // Pre-existing rows so the target's new ids can't coincide with the source's.
+    let filament_id: i64 = sqlx::query_scalar("INSERT INTO filaments (brand, material, color) VALUES ('Elegoo', 'PLA', 'Red') RETURNING id").fetch_one(&pool).await.unwrap();
+    for _ in 0..3 {
+        sqlx::query("INSERT INTO print_profiles (filament_id, name, nozzle_temp_c) VALUES (?1, 'Existing', 210)").bind(filament_id).execute(&pool).await.unwrap();
+    }
+
+    let mut manifest = empty_manifest();
+    manifest["filaments"] = serde_json::json!([{ "id": 1, "brand": "Bambu Lab", "material": "PLA", "variant": "Basic", "color": "Black" }]);
+    manifest["print_profiles"] = serde_json::json!([
+        { "id": 1, "filament_id": 1, "name": "Standard", "nozzle_temp_c": 220, "version_number": 1, "is_current_version": 0, "previous_version_profile_id": null },
+        { "id": 2, "filament_id": 1, "name": "Standard", "nozzle_temp_c": 225, "version_number": 2, "is_current_version": 1, "previous_version_profile_id": 1 }
+    ]);
+
+    let (status, body) = post_zip(&pool, "/api/import/commit", &build_zip(&manifest)).await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+
+    let v1: i64 = sqlx::query_scalar("SELECT id FROM print_profiles WHERE name = 'Standard' AND version_number = 1").fetch_one(&pool).await.unwrap();
+    let v2_previous: Option<i64> =
+        sqlx::query_scalar("SELECT previous_version_profile_id FROM print_profiles WHERE name = 'Standard' AND version_number = 2").fetch_one(&pool).await.unwrap();
+    assert_eq!(v2_previous, Some(v1));
+}

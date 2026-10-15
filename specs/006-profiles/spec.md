@@ -17,7 +17,8 @@ Bambu system preset, and are what a Print records and a re-slice applies.
 - **Print profile** (`print_profiles`) — `filament_id`, nullable `spool_id` (null = generic),
   `name`, `nozzle_temp_c` (the only required setting), every other setting nullable,
   provenance (`source` default `Manual`, `source_slicer`, `raw_settings_json`,
-  `source_preset_path`), `version_number`, `version_name`, `is_current_version`, `notes`.
+  `source_preset_path`), `version_number`, `version_name`, `is_current_version`,
+  `previous_version_profile_id`, `notes`. Each row is one *version*.
 - **Field spec** — the form definition: groups (tabs) → sections → fields, each with a key,
   label, unit, input kind, and current value as a string.
 
@@ -32,7 +33,8 @@ Bambu system preset, and are what a Print records and a re-slice applies.
   *Verify: integration*
 - **FR-003** — `GET /api/profiles/field-spec` (open) returns the form definition with empty
   values; `?profileId=` returns it pre-filled with that profile's name and values (booleans as
-  `true`/`false`, blank for unset); unknown id → 404. *Verify: integration*
+  `true`/`false`, blank for unset) plus its `versionNumber` and `isCurrentVersion`; unknown id
+  → 404. *Verify: integration*
 
 ### Writing
 
@@ -46,19 +48,27 @@ Bambu system preset, and are what a Print records and a re-slice applies.
   values are stored as unset, never as 0. *Verify: integration*
 - **FR-012** — `PUT /api/profiles/{id}` (editor) saves the same shape; provenance fields left
   out keep their stored values, and `notes` / `version_name` are never erased by a save that
-  doesn't carry them. Missing id → 404. *Verify: integration* — **notes/version name erased
-  (#172)**
+  doesn't carry them. Missing id → 404. *Verify: integration*
 - **FR-013** — `DELETE /api/profiles/{id}` (editor): 400 `has_prints` if any Print references
-  it; 404 if missing. *Verify: integration*
+  it; 400 `has_newer_version` if a later version builds on it; 404 if missing. Deleting the
+  current version makes its previous version current again. *Verify: integration*
 
 ### Versions
 
 - **FR-020** — A profile version referenced by any Print is locked: updating it → 400 with
   `Locked`, and the stored settings never change. *Verify: integration*
-- **FR-021** — Editing a profile produces a new current version (`version_number` + 1); the
-  previous version stays as history and stops being current; lists show current versions only.
-  This is also how a locked version is edited. *Verify: integration* — **not implemented
-  (#171)**
+- **FR-021** — Editing a version no Print has used changes it in place (no new version).
+  `POST /api/profiles/{id}/versions` (editor, same body as update) saves the edits as a new
+  version instead: a copy of `{id}` with the edits applied — the setting fields, name and spool
+  come from the request; provenance (`source`, `source_slicer`, `raw_settings_json`,
+  `source_preset_path`) and notes always come from `{id}` (any provenance in the request is
+  ignored: a new version is the same profile edited, not a re-import); version name cleared;
+  `version_number` + 1, `previous_version_profile_id = {id}`, current;
+  `{id}` stops being current. All or nothing. Only the current version can be branched — an
+  older one → 400 `not_current_version`; missing → 404; validation as FR-011. This is how a
+  locked version is edited. *Verify: integration*
+- **FR-022** — Lists (FR-001, FR-002) show current versions only; a Print keeps pointing at the
+  exact version it used. *Verify: integration*
 
 ### Import
 
@@ -84,15 +94,16 @@ Bambu system preset, and are what a Print records and a re-slice applies.
 - **FR-040** — `/profiles` lists current profiles with their filament and delete (with the
   `has_prints` refusal shown). *Verify: e2e*
 - **FR-041** — `/profiles/new` and `/profiles/edit/[id]` render the tabbed form from the field
-  spec, pre-fill from a file import or a system preset, show per-field errors, and save.
-  *Verify: e2e*
+  spec, pre-fill from a file import or a system preset, show per-field errors, and save. The
+  edit page shows the version number and a "Save as new version" button (FR-021); a `Locked`
+  refusal points the user at it. *Verify: e2e*
 
 ## Notes
 
 - Retroactive: behavior read from the code at `3fdca27`.
-- **#171:** the versioning model (FR-021) exists only in the schema; the backend never creates
-  a second version. `profiles.rs`'s comment over `has_prints` ("Prints table doesn't exist yet")
-  is stale — the check is live.
-- **#172:** update erases `notes` / `version_name`.
+- **#171 (fixed):** versioning existed only in the schema. Versions now chain through
+  `previous_version_profile_id`, mirroring Projects. The old desktop app grouped versions by
+  the local preset file path instead — meaningless once profiles stopped coming from local files.
+- **#172 (fixed):** update used to erase `notes` / `version_name`.
 - **#173:** filament/spool validation; no timeout on system-preset fetches.
 - `notes`, `version_name` and `source_preset_path` can't be set from the API at all today.

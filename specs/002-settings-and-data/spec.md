@@ -72,7 +72,8 @@ via an export zip that is *merged* into the target rather than replacing it.
 - **FR-030** — `GET /api/export` (editor only) downloads `spoolbook-export.zip` whose
   `manifest.json` holds `version` (this install's version) and every row of `filaments`,
   `filament_colors`, `printers`, `spools`, `print_profiles`, `projects`, `prints`,
-  `print_failure_modes`, `print_hourly_weather` (binary columns base64). Users, sessions, app
+  `print_failure_modes`, `print_hourly_weather`, each in id order (so a version is always
+  exported after the version it builds on; binary columns base64). Users, sessions, app
   settings and raw telemetry (Jobs/Readings) are never exported. *Verify: integration*
 - **FR-031** — Each Project's `.3mf` is bundled as `files/<file name>`. A missing or unreadable
   file is skipped; the export still succeeds. *Verify: integration*
@@ -88,8 +89,8 @@ via an export zip that is *merged* into the target rather than replacing it.
   *Verify: integration*
 - **FR-042** — `POST /api/import/commit` merges, never replaces: matched filaments, printers
   and colors reuse the existing row; every other row is inserted with a fresh id; **every**
-  foreign key is rewritten to the target's ids — including `print_profiles.spool_id` and
-  `projects.previous_version_project_id`. Returns `{ ok, tables: { <table>: { inserted,
+  foreign key is rewritten to the target's ids — including `print_profiles.spool_id`,
+  `print_profiles.previous_version_profile_id` and `projects.previous_version_project_id`. Returns `{ ok, tables: { <table>: { inserted,
   matched } } }`. *Verify: integration* — **two FKs not remapped, see Notes (#158)**
 - **FR-043** — Commit is all-or-nothing: if any row fails, the target DB is left exactly as it
   was and the response is an error, not a partial import. *Verify: integration* — **not

@@ -248,6 +248,9 @@ export const createProfile = (filamentId: number, input: ProfileInput) =>
 	requestAllowingError<ProfileResult>(`/api/profiles?filamentId=${filamentId}`, json(input));
 export const updateProfile = (id: number, input: ProfileInput) =>
 	requestAllowingError<ProfileResult>(`/api/profiles/${id}`, { method: 'PUT', body: JSON.stringify(input) });
+// Saves the edits as version n+1 of profile `id` (the way to edit a version a Print has locked).
+export const saveProfileAsNewVersion = (id: number, input: ProfileInput) =>
+	requestAllowingError<ProfileResult>(`/api/profiles/${id}/versions`, json(input));
 
 export interface SpoolInput {
 	lotCode: string | null;

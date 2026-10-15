@@ -228,6 +228,11 @@ pub struct ProfileFieldTab {
 pub struct ProfileFieldSpecResponse {
     pub name: String,
     pub tabs: Vec<ProfileFieldTab>,
+    // Only for an existing profile (edit page) — None for the blank new-profile form.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version_number: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_current_version: Option<bool>,
 }
 
 pub fn build_groups(name: String, initial_values: Option<&HashMap<&'static str, String>>) -> ProfileFieldSpecResponse {
@@ -262,7 +267,7 @@ pub fn build_groups(name: String, initial_values: Option<&HashMap<&'static str, 
         }
     }
 
-    ProfileFieldSpecResponse { name, tabs }
+    ProfileFieldSpecResponse { name, tabs, version_number: None, is_current_version: None }
 }
 
 pub(crate) fn fmt_f64(v: f64) -> String {

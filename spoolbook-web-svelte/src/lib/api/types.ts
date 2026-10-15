@@ -129,6 +129,9 @@ export interface ProfileFieldTab {
 export interface ProfileFieldSpecResponse {
 	name: string;
 	tabs: ProfileFieldTab[];
+	// Present only for an existing profile (the edit page).
+	versionNumber?: number;
+	isCurrentVersion?: boolean;
 }
 
 export interface ProfileInventoryResult {
