@@ -1,7 +1,7 @@
 use spoolbook_rs::bambu_mqtt_payload_parser::ReadingInput;
 use spoolbook_rs::printer_telemetry::{
     attach_job_to_print, backfill_reading_snapshots, collapse_readings_to_snapshot, end_job, find_match_for_print,
-    purge_unattached_jobs_older_than, record_reading,
+    purge_stale_jobs, purge_unattached_jobs_older_than, record_reading,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::str::FromStr;
@@ -669,6 +669,22 @@ async fn purge_unattached_jobs_older_than_keeps_recent_unattached_jobs() {
     purge_unattached_jobs_older_than(&pool, "2026-01-05T00:00:00Z").await;
 
     assert_eq!(job_count(&pool).await, 1);
+}
+
+// spec: 001/FR-032
+#[tokio::test]
+async fn purge_stale_jobs_deletes_unattached_jobs_started_more_than_7_days_ago() {
+    use chrono::{SecondsFormat, TimeDelta, Utc};
+    let pool = test_pool().await;
+    let printer_id = seed_printer(&pool).await;
+    let days_ago = |d| (Utc::now() - TimeDelta::days(d)).to_rfc3339_opts(SecondsFormat::Millis, true);
+    record_reading(&pool, printer_id, "8-days", &reading(245.0), Some(&days_ago(8))).await;
+    record_reading(&pool, printer_id, "6-days", &reading(245.0), Some(&days_ago(6))).await;
+
+    purge_stale_jobs(&pool).await;
+
+    let left: Vec<String> = sqlx::query_scalar("SELECT external_job_id FROM printer_jobs").fetch_all(&pool).await.unwrap();
+    assert_eq!(left, vec!["6-days"]);
 }
 
 // spec: 001/FR-022

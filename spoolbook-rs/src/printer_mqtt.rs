@@ -174,10 +174,7 @@ pub async fn spawn_all(pool: SqlitePool, store: LiveStatusStore, camera_registry
 // ADR-0017's 7-day unattached-Job retention. Runs once at startup, then daily.
 async fn purge_stale_jobs_loop(pool: SqlitePool) {
     loop {
-        sqlx::query("DELETE FROM printer_jobs WHERE print_id IS NULL AND started_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-7 days')")
-            .execute(&pool)
-            .await
-            .ok();
+        printer_telemetry::purge_stale_jobs(&pool).await;
         tokio::time::sleep(Duration::from_secs(24 * 60 * 60)).await;
     }
 }

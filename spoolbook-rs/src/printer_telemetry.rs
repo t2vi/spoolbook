@@ -282,10 +282,16 @@ pub async fn attach_job_to_print(pool: &SqlitePool, job_id: i64, print_id: i64) 
 
 // Unattached Jobs (and their Readings, via ON DELETE CASCADE) older than the cutoff are
 // discarded — ADR-0017's 7-day retention window. Attached Jobs are kept regardless of age.
+// Logs rather than panics: it runs inside the long-lived purge loop, and a panic would end that
+// loop for the life of the process.
 pub async fn purge_unattached_jobs_older_than(pool: &SqlitePool, cutoff: &str) {
-    sqlx::query("DELETE FROM printer_jobs WHERE print_id IS NULL AND started_at < ?1")
-        .bind(cutoff)
-        .execute(pool)
-        .await
-        .expect("delete failed");
+    if let Err(e) = sqlx::query("DELETE FROM printer_jobs WHERE print_id IS NULL AND started_at < ?1").bind(cutoff).execute(pool).await {
+        eprintln!("stale job purge failed: {e}");
+    }
+}
+
+// What the startup/24-hourly purge loop runs: unattached Jobs started more than 7 days ago.
+pub async fn purge_stale_jobs(pool: &SqlitePool) {
+    let cutoff = (chrono::Utc::now() - chrono::TimeDelta::days(7)).to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    purge_unattached_jobs_older_than(pool, &cutoff).await;
 }
