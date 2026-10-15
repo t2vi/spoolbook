@@ -92,8 +92,9 @@ background telemetry connection itself is spec 001.
 - **FR-042** — `POST /api/printers/{id}/camera/retry` (editor) resets an `Unavailable` camera to
   `NotStarted` (no-op otherwise or when no camera exists yet). *Verify: integration*
 - **FR-043** — Changing a printer's IP or access code, or deleting it, drops its camera
-  connection so the next view uses the current details. *Verify: integration* — **not
-  implemented (#167)**
+  connection — open viewers' streams end — so the next view (or bed photo) uses the current
+  details. Saving a printer without changing either leaves the camera alone.
+  *Verify: integration*
 - **FR-044** — At the end of an attached print (001/FR-022) one still frame is captured
   (waiting at most 8 s) and stored as the Print's bed photo; no frame → left empty.
   *Verify: integration*
@@ -119,7 +120,7 @@ background telemetry connection itself is spec 001.
   retry wasn't editor-gated.
 - **#166 (fixed):** send print used to start the job before checking profile/spool, then fail to
   record the Print.
-- **#167:** stale camera connection details (FR-043).
+- **#167 (fixed):** the camera kept using a printer's old IP/access code until restart (FR-043).
 - `printers.rs:116`'s comment ("camera status is a deferred default") is stale — it reports the
   real camera state (#156).
 - The ffmpeg pipeline and FTPS upload are only provable against a real printer
