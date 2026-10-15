@@ -504,3 +504,165 @@ async fn delete_returns_not_found_for_missing_id() {
     let (status, _) = send(&pool, "DELETE", "/api/profiles/999", None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+async fn create_profile(pool: &sqlx::SqlitePool, filament_id: i64) -> i64 {
+    let (_, created) = send(pool, "POST", &format!("/api/profiles?filamentId={filament_id}"), Some(full_profile_body())).await;
+    created["profile"]["id"].as_i64().unwrap()
+}
+
+async fn is_current(pool: &sqlx::SqlitePool, id: i64) -> bool {
+    sqlx::query_scalar("SELECT is_current_version FROM print_profiles WHERE id = ?1").bind(id).fetch_one(pool).await.unwrap()
+}
+
+// spec: 006/FR-021, 006/FR-022
+#[tokio::test]
+async fn new_version_of_a_locked_profile_chains_v2_and_demotes_v1() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    let spool_id = seed_spool(&pool, filament_id).await;
+    let printer_id = seed_printer(&pool).await;
+    attach_print(&pool, v1, spool_id, printer_id).await;
+
+    let mut edited = full_profile_body();
+    edited["fields"]["NozzleTempC"] = json!("230");
+    let (status, body) = send(&pool, "POST", &format!("/api/profiles/{v1}/versions"), Some(edited)).await;
+
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let v2 = &body["profile"];
+    assert_ne!(v2["id"], v1);
+    assert_eq!(v2["versionNumber"], 2);
+    assert_eq!(v2["previousVersionProfileId"], v1);
+    assert_eq!(v2["isCurrentVersion"], true);
+    assert_eq!(v2["nozzleTempC"], 230);
+    assert!(!is_current(&pool, v1).await);
+
+    let (_, listed) = send(&pool, "GET", &format!("/api/profiles?filamentId={filament_id}"), None).await;
+    let ids: Vec<i64> = listed.as_array().unwrap().iter().map(|p| p["id"].as_i64().unwrap()).collect();
+    assert_eq!(ids, vec![v2["id"].as_i64().unwrap()]);
+    let v1_temp: i64 = sqlx::query_scalar("SELECT nozzle_temp_c FROM print_profiles WHERE id = ?1").bind(v1).fetch_one(&pool).await.unwrap();
+    assert_eq!(v1_temp, 220, "the locked version itself never changes");
+}
+
+// spec: 006/FR-021
+#[tokio::test]
+async fn new_version_keeps_the_sources_provenance_and_notes_ignoring_the_requests_and_clears_the_version_name() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    sqlx::query("UPDATE print_profiles SET source = 'BambuPreset', source_preset_path = 'Bambu PLA Basic', notes = 'dries well', version_name = 'Winter' WHERE id = ?1")
+        .bind(v1).execute(&pool).await.unwrap();
+
+    let mut edited = full_profile_body();
+    edited["source"] = json!("Manual");
+    edited["rawSettingsJson"] = json!("{}");
+    let (_, body) = send(&pool, "POST", &format!("/api/profiles/{v1}/versions"), Some(edited)).await;
+
+    let v2 = body["profile"]["id"].as_i64().unwrap();
+    let (source, preset, notes, version_name): (String, Option<String>, Option<String>, Option<String>) =
+        sqlx::query_as("SELECT source, source_preset_path, notes, version_name FROM print_profiles WHERE id = ?1").bind(v2).fetch_one(&pool).await.unwrap();
+    assert_eq!(source, "BambuPreset");
+    assert_eq!(preset.as_deref(), Some("Bambu PLA Basic"));
+    assert_eq!(notes.as_deref(), Some("dries well"));
+    assert_eq!(version_name, None);
+}
+
+// spec: 006/FR-021
+#[tokio::test]
+async fn new_version_from_a_superseded_version_is_rejected() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    send(&pool, "POST", &format!("/api/profiles/{v1}/versions"), Some(full_profile_body())).await;
+
+    let (status, body) = send(&pool, "POST", &format!("/api/profiles/{v1}/versions"), Some(full_profile_body())).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["errors"]["id"], "not_current_version");
+}
+
+// spec: 006/FR-021
+#[tokio::test]
+async fn new_version_returns_not_found_for_missing_id() {
+    let pool = test_pool().await;
+    let (status, _) = send(&pool, "POST", "/api/profiles/999/versions", Some(full_profile_body())).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+// spec: 006/FR-021, 006/FR-011
+#[tokio::test]
+async fn new_version_with_invalid_fields_changes_nothing() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    let mut bad = full_profile_body();
+    bad["fields"]["NozzleTempC"] = json!("");
+
+    let (status, _) = send(&pool, "POST", &format!("/api/profiles/{v1}/versions"), Some(bad)).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM print_profiles").fetch_one(&pool).await.unwrap();
+    assert_eq!(count, 1);
+    assert!(is_current(&pool, v1).await);
+}
+
+// spec: 006/FR-013
+#[tokio::test]
+async fn delete_rejects_a_version_that_a_newer_version_builds_on() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    send(&pool, "POST", &format!("/api/profiles/{v1}/versions"), Some(full_profile_body())).await;
+
+    let (status, body) = send(&pool, "DELETE", &format!("/api/profiles/{v1}"), None).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "has_newer_version");
+}
+
+// spec: 006/FR-013
+#[tokio::test]
+async fn deleting_the_current_version_makes_the_previous_one_current_again() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    let (_, body) = send(&pool, "POST", &format!("/api/profiles/{v1}/versions"), Some(full_profile_body())).await;
+    let v2 = body["profile"]["id"].as_i64().unwrap();
+
+    let (status, _) = send(&pool, "DELETE", &format!("/api/profiles/{v2}"), None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(is_current(&pool, v1).await);
+}
+
+// spec: 006/FR-012
+#[tokio::test]
+async fn update_keeps_notes_and_version_name() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let id = create_profile(&pool, filament_id).await;
+    sqlx::query("UPDATE print_profiles SET notes = 'dries well', version_name = 'Winter' WHERE id = ?1").bind(id).execute(&pool).await.unwrap();
+
+    send(&pool, "PUT", &format!("/api/profiles/{id}"), Some(full_profile_body())).await;
+
+    let (notes, version_name): (Option<String>, Option<String>) =
+        sqlx::query_as("SELECT notes, version_name FROM print_profiles WHERE id = ?1").bind(id).fetch_one(&pool).await.unwrap();
+    assert_eq!(notes.as_deref(), Some("dries well"));
+    assert_eq!(version_name.as_deref(), Some("Winter"));
+}
+
+// spec: 006/FR-003
+#[tokio::test]
+async fn field_spec_reports_the_version_number_and_whether_it_is_current() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    let (_, body) = send(&pool, "POST", &format!("/api/profiles/{v1}/versions"), Some(full_profile_body())).await;
+    let v2 = body["profile"]["id"].as_i64().unwrap();
+
+    let (_, spec1) = send(&pool, "GET", &format!("/api/profiles/field-spec?profileId={v1}"), None).await;
+    let (_, spec2) = send(&pool, "GET", &format!("/api/profiles/field-spec?profileId={v2}"), None).await;
+
+    assert_eq!((spec1["versionNumber"].clone(), spec1["isCurrentVersion"].clone()), (json!(1), json!(false)));
+    assert_eq!((spec2["versionNumber"].clone(), spec2["isCurrentVersion"].clone()), (json!(2), json!(true)));
+}

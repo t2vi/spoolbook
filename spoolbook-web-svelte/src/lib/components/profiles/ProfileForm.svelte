@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
@@ -18,6 +19,7 @@
 		listAllFilaments,
 		listSystemPresets,
 		resolveSystemPreset,
+		saveProfileAsNewVersion,
 		updateProfile
 	} from '$lib/api/client';
 	import type { ProfileInput } from '$lib/api/client';
@@ -50,6 +52,8 @@
 	let sourceSlicer = $state<SlicerType | null>(null);
 	let importMessage = $state<string | null>(null);
 	let errorMessage = $state<string | null>(null);
+	let versionNumber = $state<number | null>(null);
+	let isCurrentVersion = $state(true);
 
 	let systemPresetOptions = $state<{ value: string; label: string }[]>([]);
 	let selectedSystemPreset = $state('');
@@ -73,6 +77,8 @@
 			const spec = await getProfileFieldSpec(id);
 			name = spec.name;
 			tabs = spec.tabs;
+			versionNumber = spec.versionNumber ?? null;
+			isCurrentVersion = spec.isCurrentVersion ?? true;
 			activeTab = tabs[0]?.title ?? '';
 		})();
 	});
@@ -128,7 +134,7 @@
 		}
 	}
 
-	async function save(e: Event) {
+	async function save(e: Event, asNewVersion = false) {
 		e.preventDefault();
 		const fields: Record<string, string> = {};
 		for (const tab of tabs) for (const section of tab.sections) for (const field of section.fields) fields[field.name] = field.value;
@@ -139,10 +145,15 @@
 			? selectedFilamentId === 0
 				? { ok: false, errors: { Filament: 'Pick a filament.' } }
 				: await createProfile(selectedFilamentId, input)
-			: await updateProfile(id, input);
+			: asNewVersion
+				? await saveProfileAsNewVersion(id, input)
+				: await updateProfile(id, input);
 
 		if (!result.ok) {
-			errorMessage = Object.values(result.errors ?? {}).join('; ') || 'Save failed.';
+			const errors: Record<string, string> = result.errors ?? {};
+			errorMessage = errors.Locked
+				? 'This version has been used in a Print, so it can’t change. Use “Save as new version” to keep these edits as a new version.'
+				: Object.values(errors).join('; ') || 'Save failed.';
 			return;
 		}
 
@@ -150,7 +161,12 @@
 	}
 </script>
 
-<h1 class="mb-6 text-2xl font-semibold">{id === null ? 'Add profile' : 'Edit profile'}</h1>
+<h1 class="mb-6 flex items-center gap-3 text-2xl font-semibold">
+	{id === null ? 'Add profile' : 'Edit profile'}
+	{#if versionNumber !== null}
+		<Badge variant={isCurrentVersion ? 'default' : 'outline'}>v{versionNumber}{isCurrentVersion ? '' : ' (superseded)'}</Badge>
+	{/if}
+</h1>
 
 <div class="max-w-3xl space-y-6">
 	{#if id === null}
@@ -272,6 +288,9 @@
 
 	<form onsubmit={save} class="flex items-center gap-3">
 		<Button type="submit">Save</Button>
+		{#if id !== null && isCurrentVersion}
+			<Button type="button" variant="outline" onclick={(e) => save(e, true)}>Save as new version</Button>
+		{/if}
 		<a href="/profiles" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
 	</form>
 </div>

@@ -230,6 +230,8 @@ async fn commit(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, mu
     for mut row in rows_of(&manifest, "print_profiles") {
         let source_id = row["id"].as_i64().unwrap();
         remap_fk(&mut row, "filament_id", &filament_map);
+        // Exported in id order, so a version's predecessor is always already in profile_map.
+        remap_fk(&mut row, "previous_version_profile_id", &profile_map);
         row.remove("id");
         let target_id = insert_json_row(&pool, "print_profiles", &row).await;
         profile_map.insert(source_id, target_id);
@@ -357,7 +359,7 @@ pub async fn insert_json_row(pool: &SqlitePool, table: &str, row: &Map<String, V
 }
 
 async fn table_rows(pool: &SqlitePool, table: &str) -> Vec<Map<String, Value>> {
-    sqlx::query(&format!("SELECT * FROM {table}")).fetch_all(pool).await.expect("query failed").iter().map(row_to_json).collect()
+    sqlx::query(&format!("SELECT * FROM {table} ORDER BY id")).fetch_all(pool).await.expect("query failed").iter().map(row_to_json).collect()
 }
 
 async fn export(_editor: crate::auth::Editor, State(pool): State<SqlitePool>) -> Response {
