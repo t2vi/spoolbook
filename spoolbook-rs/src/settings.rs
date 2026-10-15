@@ -5,6 +5,11 @@ use sqlx::SqlitePool;
 pub const CATALOG_URL: &str =
     "https://raw.githubusercontent.com/t2vi/spoolbook-filament-sync/main/data/filament-catalog.json";
 
+// FILAMENT_CATALOG_URL overrides the published feed (tests point it at a local mock).
+pub fn catalog_url() -> String {
+    std::env::var("FILAMENT_CATALOG_URL").unwrap_or_else(|_| CATALOG_URL.to_string())
+}
+
 #[derive(sqlx::FromRow)]
 pub struct AppSettings {
     pub last_filament_sync_at: Option<String>,
@@ -18,7 +23,7 @@ pub struct AppSettings {
 struct SettingsResponse {
     additional_filament_source_urls: Option<String>,
     last_filament_sync_at: Option<String>,
-    catalog_url: &'static str,
+    catalog_url: String,
     latitude: Option<f64>,
     longitude: Option<f64>,
 }
@@ -56,7 +61,7 @@ async fn get_settings(State(pool): State<SqlitePool>) -> Json<SettingsResponse> 
     Json(SettingsResponse {
         additional_filament_source_urls: settings.additional_filament_source_urls,
         last_filament_sync_at: settings.last_filament_sync_at,
-        catalog_url: CATALOG_URL,
+        catalog_url: catalog_url(),
         latitude: settings.latitude,
         longitude: settings.longitude,
     })
