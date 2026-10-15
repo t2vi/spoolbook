@@ -80,6 +80,17 @@ pub async fn retry(registry: &CameraRegistry, printer_id: i64) {
     }
 }
 
+// Drops a printer's camera connection (its details changed, or the printer is gone): stops the
+// pipeline and ends every open viewer stream, so the next view starts fresh from the DB.
+pub async fn forget(registry: &CameraRegistry, printer_id: i64) {
+    let Some(broadcaster) = registry.lock().await.remove(&printer_id) else { return };
+    let mut state = broadcaster.state.lock().await;
+    state.subscribers.clear();
+    for token in [state.pipeline_cancel.take(), state.stop_grace_cancel.take()].into_iter().flatten() {
+        token.cancel();
+    }
+}
+
 async fn get_or_create(registry: &CameraRegistry, printer_id: i64, ip_address: String, access_code: String) -> Arc<CameraBroadcaster> {
     registry.lock().await.entry(printer_id).or_insert_with(|| CameraBroadcaster::new(ip_address, access_code)).clone()
 }

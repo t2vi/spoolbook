@@ -266,6 +266,12 @@ async fn update(
         return err(StatusCode::BAD_REQUEST, "duplicate");
     }
 
+    let old_details = sqlx::query_as::<_, (Option<String>, Option<String>)>("SELECT ip_address, access_code FROM printers WHERE id = ?1")
+        .bind(id)
+        .fetch_optional(&pool)
+        .await
+        .expect("query failed");
+
     let printer = sqlx::query_as::<_, Printer>(
         "UPDATE printers SET name = ?1, model = ?2, ip_address = ?3, access_code = COALESCE(NULLIF(TRIM(?4), ''), access_code), serial_number = ?5
          WHERE id = ?6
@@ -283,6 +289,9 @@ async fn update(
 
     match printer {
         Some(printer) => {
+            if old_details != Some((printer.ip_address.clone(), printer.access_code.clone())) {
+                crate::printer_camera::forget(&camera_registry, printer.id).await;
+            }
             // Connection details may have changed — restart the loop against the new ones (and
             // drop it entirely if they were cleared). respawn_one aborts the stale loop first.
             printer_mqtt::respawn_one(
@@ -306,6 +315,7 @@ async fn delete(
     _editor: crate::auth::Editor,
     State(pool): State<SqlitePool>,
     Extension(store): Extension<LiveStatusStore>,
+    Extension(camera_registry): Extension<CameraRegistry>,
     Extension(supervisor): Extension<ConnSupervisor>,
     Path(id): Path<i64>,
 ) -> (StatusCode, Json<PrinterResult>) {
@@ -330,6 +340,7 @@ async fn delete(
     }
 
     printer_mqtt::stop_one(&supervisor, &store, id).await;
+    crate::printer_camera::forget(&camera_registry, id).await;
 
     (StatusCode::OK, Json(PrinterResult { ok: true, error: None, printer: None }))
 }
