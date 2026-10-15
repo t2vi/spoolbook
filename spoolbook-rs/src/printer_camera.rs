@@ -577,7 +577,7 @@ async fn stream(
 // until the browser's <img> tag actually reconnects, so the real "start" trigger is
 // stream()/subscribe(), same as the very first view. The UI is expected to re-render the <img>
 // (cache-busted) right after calling this.
-async fn retry_endpoint(Extension(registry): Extension<CameraRegistry>, Path(id): Path<i64>) -> axum::Json<serde_json::Value> {
+async fn retry_endpoint(_editor: crate::auth::Editor, Extension(registry): Extension<CameraRegistry>, Path(id): Path<i64>) -> axum::Json<serde_json::Value> {
     retry(&registry, id).await;
     axum::Json(serde_json::json!({ "ok": true }))
 }

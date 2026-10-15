@@ -100,6 +100,7 @@ async fn camera_stream_responds_with_multipart_headers_for_a_configured_printer(
 async fn retry_is_a_no_op_for_a_printer_with_no_broadcaster_yet() {
     let pool = test_pool().await;
     let printer_id = seed_printer(&pool, Some("127.0.0.1"), Some("12345678")).await;
+    let cookie = common::auth_cookie_header(&pool).await;
     let app = spoolbook_rs::app(pool);
 
     let response = app
@@ -108,6 +109,7 @@ async fn retry_is_a_no_op_for_a_printer_with_no_broadcaster_yet() {
                 .method("POST")
                 .uri(format!("/api/printers/{printer_id}/camera/retry"))
                 .header("content-type", "application/json")
+                .header("cookie", cookie)
                 .body(Body::from(json!({}).to_string()))
                 .unwrap(),
         )
@@ -118,4 +120,18 @@ async fn retry_is_a_no_op_for_a_printer_with_no_broadcaster_yet() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body: Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(body["ok"], true);
+}
+
+// spec: 004/FR-042, 008/FR-001
+#[tokio::test]
+async fn retry_requires_an_editor() {
+    let pool = test_pool().await;
+    let printer_id = seed_printer(&pool, Some("127.0.0.1"), Some("12345678")).await;
+
+    let response = spoolbook_rs::app(pool)
+        .oneshot(Request::builder().method("POST").uri(format!("/api/printers/{printer_id}/camera/retry")).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }

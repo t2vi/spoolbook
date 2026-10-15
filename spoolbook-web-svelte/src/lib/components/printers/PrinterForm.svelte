@@ -15,6 +15,8 @@
 	let model = $state('');
 	let ipAddress = $state('');
 	let accessCode = $state('');
+	// Write-only: an existing printer's code is never sent to the browser; blank on save keeps it.
+	let hasStoredAccessCode = $state(false);
 	let serialNumber = $state('');
 	let errorMessage = $state<string | null>(null);
 	let testing = $state(false);
@@ -27,13 +29,13 @@
 			name = existing.name;
 			model = existing.model ?? '';
 			ipAddress = existing.ipAddress ?? '';
-			accessCode = existing.accessCode ?? '';
+			hasStoredAccessCode = existing.hasAccessCode;
 			serialNumber = existing.serialNumber ?? '';
 		});
 	});
 
 	async function testConnection() {
-		if (!ipAddress.trim() || !accessCode.trim()) {
+		if (!ipAddress.trim() || (!accessCode.trim() && !hasStoredAccessCode)) {
 			testResult = { ok: false, error: 'Enter an IP address and access code first.' };
 			return;
 		}
@@ -41,7 +43,7 @@
 		testing = true;
 		testResult = null;
 		try {
-			testResult = await testPrinterConnection(ipAddress, accessCode);
+			testResult = await testPrinterConnection(ipAddress, accessCode, id);
 		} finally {
 			testing = false;
 		}
@@ -93,7 +95,11 @@
 	</div>
 	<div class="flex flex-col gap-1">
 		<Label for="access-code">Access code</Label>
-		<Input id="access-code" bind:value={accessCode} />
+		<Input
+			id="access-code"
+			bind:value={accessCode}
+			placeholder={hasStoredAccessCode ? 'Saved — leave blank to keep' : ''}
+		/>
 	</div>
 	<div class="flex flex-col gap-1">
 		<Label for="serial">Serial number</Label>

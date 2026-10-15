@@ -6,10 +6,17 @@ use serde_json::{Value, json};
 use sqlx::sqlite::SqlitePoolOptions;
 use tower::ServiceExt;
 
-async fn send(uri: &str, body: Value) -> (StatusCode, Value) {
+async fn test_pool() -> sqlx::SqlitePool {
     let pool = SqlitePoolOptions::new().max_connections(1).connect("sqlite::memory:").await.unwrap();
     sqlx::migrate!().run(&pool).await.unwrap();
+    pool
+}
 
+async fn send(uri: &str, body: Value) -> (StatusCode, Value) {
+    send_on(test_pool().await, uri, body).await
+}
+
+async fn send_on(pool: sqlx::SqlitePool, uri: &str, body: Value) -> (StatusCode, Value) {
     let cookie = common::auth_cookie_header(&pool).await;
     let response = spoolbook_rs::app(pool)
         .oneshot(
@@ -42,4 +49,25 @@ async fn test_reports_failure_when_nothing_is_listening() {
     assert_eq!(status, StatusCode::OK, "the HTTP call itself succeeds even though the MQTT connect fails");
     assert_eq!(body["ok"], false);
     assert!(body["error"].as_str().unwrap().len() > 0);
+}
+
+// spec: 004/FR-005
+#[tokio::test]
+async fn test_requires_an_access_code_or_a_printer_with_one() {
+    let (status, body) = send("/api/printers/test", json!({ "ipAddress": "127.0.0.1" })).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Access code is required");
+}
+
+// spec: 004/FR-005
+#[tokio::test]
+async fn test_falls_back_to_the_stored_access_code_of_the_given_printer() {
+    let pool = test_pool().await;
+    let id: i64 = sqlx::query_scalar("INSERT INTO printers (name, access_code) VALUES ('P2S', '12345678') RETURNING id").fetch_one(&pool).await.unwrap();
+
+    let (status, body) = send_on(pool, "/api/printers/test", json!({ "ipAddress": "127.0.0.1", "accessCode": "", "printerId": id })).await;
+
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["ok"], false, "got as far as a real connect attempt");
 }
