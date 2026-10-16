@@ -22,9 +22,9 @@ it grew into are both retired.
 - **Spool** — a specific physical roll of a Filament. Can behave slightly differently from
   another spool of the same Filament (lot variance).
 - **Print Profile** — reusable settings for a Filament (optionally spool-specific via a nullable
-  `SpoolId`). Stays editable — it's a "current best settings" record, not history: editing one
-  in place is the expected workflow for seasonal adjustment (hot day → lower temp, later prints
-  just reuse the edited profile).
+  `SpoolId`). Versioned: its versions are working variants you pick between (e.g. "Winter 2026"
+  vs a hot-day tune) — one is selected and used by lists and pickers. A version no print has used
+  edits in place; a used one is locked, and "Save as new version" branches a new one from it.
 - **Printer** — a physical printer the user owns, identified by a unique name and optional model.
   Promoted from a free-text string on Print to a first-class entity once more than one printer
   became relevant.
@@ -38,21 +38,30 @@ it grew into are both retired.
   locked from further in-place edits, so "which settings I used" stays accurate without
   duplicating data. Records status (success/failed/partial), the Printer used, optionally a
   Project (the `.3mf` that was actually sliced), start/end time, notes, and ambient conditions —
-  currently entered manually; `ambient_temp_c`/`ambient_humidity_pct` auto-fetch from Open-Meteo
-  existed in the retired .NET backend but hasn't been ported to `spoolbook-rs` yet. Printer
+  outdoor weather is fetched automatically from Open-Meteo once a print ends; room temperature
+  near the printer is entered by hand. Prints are only ever created by sending a job from
+  spoolbook (settings come from what was actually printed, not memory); afterwards only the
+  outcome (result, failure modes, notes, room temp, clean plate) can be edited. Printer
   telemetry (Bambu Lab P2S) is live via LAN MQTT — status, AMS, camera feed.
 
 ## Features
 
 - **Filaments** — browse/search the catalog, add/edit entries, sync from the external catalog.
-- **Spools** — track individual rolls against a Filament.
+  **Colors** (Filaments → Colors) manages color names and hex codes; a multi-color filament takes
+  several hex codes (`#1A1A1A, #D4AF37`) and its swatch shows each one. Swatches appear next to
+  filaments everywhere, and filament pickers are type-to-search.
+- **Spools** — track individual rolls against a Filament; filter by brand, material, status and
+  purchase date.
 - **Profiles** — reusable print settings, generic or for one specific spool; start from a Bambu
   Studio system preset, a sliced `.3mf`, or a preset `.json` Bambu Studio saved (its `inherits`
-  chain resolved). Versioned: a version used by a print is locked, and "Save as new version"
-  keeps edits as the next version.
+  chain resolved). Versioned: pick which version is in use, name versions, branch a new one from
+  any version; a version used by a print is locked. Duplicate a profile into a new one.
 - **Prints** — created automatically when you send a job to a printer (profile + spool + printer
   + `.3mf` Project), then filled in as it runs: outcome, bed photo, outdoor weather, chamber
-  temperature, AMS humidity and layer progress.
+  temperature, AMS humidity and layer progress. Edit the outcome afterwards; filter the list by
+  brand, material, printer and status.
+- **Projects** — `.3mf` files, uploaded or fetched from a direct link; a new upload that looks
+  like the next version of an existing project offers to link them.
 - **Dashboard** — at-a-glance view across the above.
 - **Settings** — location (for outdoor weather), filament catalog source (default + user-added
   additional source URLs, merged on every sync), filament DB version/sync status, app version,

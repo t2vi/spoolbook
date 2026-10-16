@@ -269,7 +269,9 @@ async fn fetch_json(url: &str) -> Result<Value, String> {
     resp.json().await.map_err(|e| e.to_string())
 }
 
-async fn fetch_bbl_manifest() -> Result<Value, String> {
+// pub for the timeout test: it calls this directly, since going through the route would put
+// DB queries (the session check) under a paused clock.
+pub async fn fetch_bbl_manifest() -> Result<Value, String> {
     fetch_json(&format!("{}/profiles/BBL.json", slicer_base_url())).await
 }
 
