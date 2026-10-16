@@ -34,7 +34,10 @@
 		const result = await login(username, password);
 		submitting = false;
 		if (!result.ok) {
-			error = 'Wrong username or password.';
+			error =
+				result.error === 'too_many_attempts'
+					? 'Too many failed attempts. Try again in 15 minutes.'
+					: 'Wrong username or password.';
 			return;
 		}
 		goto('/');

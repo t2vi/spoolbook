@@ -213,3 +213,85 @@ async fn settings_report_the_overridden_catalog_url() {
 
     assert_eq!(body["catalogUrl"], "http://127.0.0.1:1/override.json");
 }
+
+// spec: 007/FR-025
+#[test]
+fn markup_in_material_or_variant_is_stripped_and_re_split() {
+    use spoolbook_rs::filament_catalog_sync::clean_markup;
+    assert_eq!(
+        clean_markup("<span", Some("class=\"align-middle\">PLA Matte</span>")),
+        Some(("PLA".to_string(), Some("Matte".to_string())))
+    );
+    assert_eq!(clean_markup("<b>PETG</b>", None), Some(("PETG".to_string(), None)));
+    assert_eq!(clean_markup("<span", Some("class=\"x\">PETG  HF  Pro</span>")), Some(("PETG".to_string(), Some("HF Pro".to_string()))));
+    assert_eq!(clean_markup("PLA", Some("Basic")), None, "clean names are left alone");
+}
+
+// spec: 007/FR-025
+#[tokio::test]
+async fn import_many_cleans_markup_before_creating() {
+    let pool = test_pool().await;
+    let entries = spoolbook_rs::filament_catalog_sync::parse_catalog(
+        r##"[{"Brand":"Bambu Lab","Material":"<span","Variant":"class=\"align-middle\">PLA Matte</span>","Color":"Ivory White","Hex":"#FFFFFF"}]"##,
+    );
+
+    let (added, _) = spoolbook_rs::filament_catalog_sync::import_many(&pool, &entries).await;
+
+    assert_eq!(added, 1);
+    let (material, variant): (String, Option<String>) =
+        sqlx::query_as("SELECT material, variant FROM filaments").fetch_one(&pool).await.unwrap();
+    assert_eq!((material.as_str(), variant.as_deref()), ("PLA", Some("Matte")));
+}
+
+async fn insert_filament(pool: &sqlx::SqlitePool, material: &str, variant: &str, color: &str) -> i64 {
+    sqlx::query_scalar("INSERT INTO filaments (brand, material, variant, color) VALUES ('Bambu Lab', ?1, ?2, ?3) RETURNING id")
+        .bind(material)
+        .bind(variant)
+        .bind(color)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn insert_spool_and_profile(pool: &sqlx::SqlitePool, filament_id: i64) -> (i64, i64) {
+    let spool: i64 = sqlx::query_scalar("INSERT INTO spools (filament_id) VALUES (?1) RETURNING id").bind(filament_id).fetch_one(pool).await.unwrap();
+    let profile: i64 = sqlx::query_scalar("INSERT INTO print_profiles (filament_id, spool_id, name, nozzle_temp_c) VALUES (?1, ?2, 'p', 220) RETURNING id")
+        .bind(filament_id)
+        .bind(spool)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    (spool, profile)
+}
+
+async fn filament_of(pool: &sqlx::SqlitePool, table: &str, id: i64) -> i64 {
+    sqlx::query_scalar(&format!("SELECT filament_id FROM {table} WHERE id = ?1")).bind(id).fetch_one(pool).await.unwrap()
+}
+
+// spec: 007/FR-026
+#[tokio::test]
+async fn repair_renames_broken_filaments_or_merges_them_into_an_existing_clean_one() {
+    let pool = test_pool().await;
+    let matte = insert_filament(&pool, "<span", "class=\"align-middle\">PLA Matte</span>", "Ivory White").await;
+    let (matte_spool, matte_profile) = insert_spool_and_profile(&pool, matte).await;
+    let clean_basic = insert_filament(&pool, "PLA", "Basic", "Black").await;
+    let broken_basic = insert_filament(&pool, "<span", "class=\"align-middle\">PLA Basic</span>", "Black").await;
+    let (basic_spool, basic_profile) = insert_spool_and_profile(&pool, broken_basic).await;
+
+    spoolbook_rs::filament_catalog_sync::repair_markup(&pool).await;
+
+    // No clean twin: renamed in place, so everything pointing at it keeps working.
+    let (material, variant): (String, Option<String>) =
+        sqlx::query_as("SELECT material, variant FROM filaments WHERE id = ?1").bind(matte).fetch_one(&pool).await.unwrap();
+    assert_eq!((material.as_str(), variant.as_deref()), ("PLA", Some("Matte")));
+    assert_eq!(filament_of(&pool, "spools", matte_spool).await, matte);
+    assert_eq!(filament_of(&pool, "print_profiles", matte_profile).await, matte);
+
+    // Clean twin exists: its spool and profile move there, the broken row goes.
+    assert_eq!(filament_of(&pool, "spools", basic_spool).await, clean_basic);
+    assert_eq!(filament_of(&pool, "print_profiles", basic_profile).await, clean_basic);
+    let gone: bool = sqlx::query_scalar("SELECT NOT EXISTS(SELECT 1 FROM filaments WHERE id = ?1)").bind(broken_basic).fetch_one(&pool).await.unwrap();
+    assert!(gone);
+    let markup_left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM filaments WHERE material LIKE '%<%' OR variant LIKE '%<%'").fetch_one(&pool).await.unwrap();
+    assert_eq!(markup_left, 0);
+}

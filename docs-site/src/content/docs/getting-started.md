@@ -24,8 +24,9 @@ Once it's up, it's at `http://<host-ip>:5070`.
 spoolbook is single-user. You sign in with the admin account you set during install; until then
 it shows only the sign-in page — nothing in your notebook is visible to others on your LAN.
 Optionally link a Google account under **Settings → Account** for one-click sign-in afterward —
-your password still works either way. On first launch it seeds a starter filament catalog and
-begins syncing fresh data automatically in the background (throttled to once every 24 hours).
+your password still works either way. After 5 wrong passwords in 15 minutes, sign-in for that
+username pauses for 15 minutes; changing your password signs out every other device. On first
+launch it seeds a starter filament catalog and begins syncing fresh data automatically in the background (throttled to once every 24 hours).
 
 ## Building from source instead
 
@@ -56,9 +57,10 @@ files). On the target install, pick that file and **Preview import** to see how 
 table will add before anything is written, then **Confirm import** to merge it in. Filaments,
 printers, and filament colors that already exist (matched by name/type) aren't duplicated;
 everything else is added fresh — so importing combines two installs' data rather than overwriting
-one with the other. Re-importing the same file a second time will duplicate spools/profiles/prints,
-since those don't have a natural way to detect "already imported" — the preview step exists so you
-can catch that before confirming.
+one with the other. Each export can be imported once: importing the same file again — or an
+install's own export back into itself — is refused with "already imported", so nothing gets
+duplicated by accident. (Exports made before v1.6 don't carry that marker, so check the preview
+counts before confirming one of those twice.)
 
 ## Adding your first spool
 

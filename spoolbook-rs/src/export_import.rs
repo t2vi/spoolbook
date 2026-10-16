@@ -104,6 +104,22 @@ fn remap_fk(obj: &mut Map<String, Value>, col: &str, map: &std::collections::Has
     }
 }
 
+// Why preview / commit won't take this bundle: a newer version than this install (FR-040), or
+// a bundleId this install already exported or imported (FR-046). Older exports have no id.
+async fn refusal(pool: &SqlitePool, manifest: &Value) -> Option<String> {
+    let source_version = manifest["version"].as_str().unwrap_or("0.0.0");
+    if parse_version(source_version) > parse_version(env!("CARGO_PKG_VERSION")) {
+        return Some(format!("Export was made on spoolbook {source_version}, newer than this install ({}). Update first.", env!("CARGO_PKG_VERSION")));
+    }
+    let bundle_id = manifest["bundleId"].as_str()?;
+    let known: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM data_bundles WHERE bundle_id = ?1)")
+        .bind(bundle_id)
+        .fetch_one(pool)
+        .await
+        .expect("query failed");
+    known.then(|| "already_imported".to_string())
+}
+
 pub fn router() -> Router<SqlitePool> {
     Router::new().route("/api/export", get(export)).route("/api/import/preview", post(preview)).route("/api/import/commit", post(commit))
 }
@@ -118,12 +134,8 @@ async fn preview(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, m
         Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": e }))),
     };
 
-    let source_version = manifest["version"].as_str().unwrap_or("0.0.0");
-    if parse_version(source_version) > parse_version(env!("CARGO_PKG_VERSION")) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({ "ok": false, "error": format!("Export was made on spoolbook {source_version}, newer than this install ({}). Update first.", env!("CARGO_PKG_VERSION")) })),
-        );
+    if let Some(error) = refusal(&pool, &manifest).await {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": error })));
     }
 
     let mut result = Map::new();
@@ -154,12 +166,8 @@ async fn commit(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, mu
         Ok(m) => m,
         Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": e }))),
     };
-    let source_version = manifest["version"].as_str().unwrap_or("0.0.0");
-    if parse_version(source_version) > parse_version(env!("CARGO_PKG_VERSION")) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({ "ok": false, "error": format!("Export was made on spoolbook {source_version}, newer than this install ({}). Update first.", env!("CARGO_PKG_VERSION")) })),
-        );
+    if let Some(error) = refusal(&pool, &manifest).await {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": error })));
     }
 
     // All or nothing: every row goes in one transaction, and project files are only written once
@@ -167,6 +175,9 @@ async fn commit(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, mu
     let mut tx = pool.begin().await.expect("begin failed");
     match commit_rows(&mut tx, &manifest).await {
         Ok((summary, project_files)) => {
+            if let Some(bundle_id) = manifest["bundleId"].as_str() {
+                sqlx::query("INSERT INTO data_bundles (bundle_id) VALUES (?1)").bind(bundle_id).execute(&mut *tx).await.expect("insert failed");
+            }
             tx.commit().await.expect("commit failed");
             write_project_files(&bytes, &project_files);
             (StatusCode::OK, Json(serde_json::json!({ "ok": true, "tables": summary })))
@@ -397,6 +408,10 @@ async fn table_rows(pool: &SqlitePool, table: &str) -> Vec<Map<String, Value>> {
 async fn export(_editor: crate::auth::Editor, State(pool): State<SqlitePool>) -> Response {
     let mut manifest = Map::new();
     manifest.insert("version".to_string(), Value::from(env!("CARGO_PKG_VERSION")));
+    // Recorded here too, so importing this export back into this install is refused (FR-046).
+    let bundle_id = crate::auth::generate_session_token();
+    sqlx::query("INSERT INTO data_bundles (bundle_id) VALUES (?1)").bind(&bundle_id).execute(&pool).await.expect("insert failed");
+    manifest.insert("bundleId".to_string(), Value::from(bundle_id));
     for table in EXPORT_TABLES {
         let rows = table_rows(&pool, table).await.into_iter().map(Value::Object).collect();
         manifest.insert((*table).to_string(), Value::Array(rows));

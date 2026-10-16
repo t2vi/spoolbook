@@ -113,6 +113,12 @@ via an export zip that is *merged* into the target rather than replacing it.
   failed import (FR-043) leaves none behind. *Verify: integration*
 - **FR-045** — The Settings page imports in two steps: choose file → preview counts → confirm
   commit → per-table result. *Verify: e2e*
+- **FR-046** — Every export's manifest carries a random `bundleId`, and the exporting install
+  records it. Previewing or committing a bundle this install has exported or already imported
+  → 400 `already_imported`, nothing changed, and the Settings page says the export has already
+  been imported. A successful commit records its `bundleId` in the same transaction. A
+  manifest without a `bundleId` (exports made before this) imports as before.
+  *Verify: integration*
 
 ## Notes
 
@@ -128,9 +134,10 @@ via an export zip that is *merged* into the target rather than replacing it.
   `projects.previous_version_project_id` — failing the insert, or silently linking the wrong row.
 - **#159 (fixed):** commit used to run without a transaction and panic on a bad row, leaving a
   partial import.
-- **Re-import (#160):** only filaments, printers and colors dedupe; importing the same bundle
-  twice duplicates every Spool, Profile, Project and Print. Intended behavior undecided — no FR
-  until it is.
+- **Re-import (#160, decided 2026-10-16):** a bundle is refused once imported, rather than
+  matched row by row (FR-046). Moving installs is a one-off, and an exact id beats fuzzy natural
+  keys that could merge two different spools. Exports made before FR-046 have no id, so
+  importing one twice still duplicates everything but filaments, printers and colors.
 - Exports contain printer access codes (they're columns of `printers`). Editor-only, and the
   file belongs to the editor, but treat the zip as a secret.
 - FR-001–FR-004 live in `main.rs`, which no test drives; they need an e2e/smoke layer.

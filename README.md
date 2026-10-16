@@ -100,7 +100,12 @@ cd spoolbook-rs && cargo run             # backend, port 5070, sqlite at spoolbo
 
 ```sh
 cd spoolbook-rs && cargo test
+cd spoolbook-web-svelte && npm run test:e2e   # browser tests (first time: npx playwright install chromium)
 ```
+
+The browser tests (`spoolbook-web-svelte/e2e`) build the app, start the real backend on port
+5070 against a throwaway database, and drive Chromium through each page. Stop any dev backend on
+5070 first — they refuse to run against an existing server rather than touch your dev data.
 
 `tests/printer_live.rs` holds hardware-in-the-loop tests (MQTT connect, FTPS upload, send a
 print and cancel it in the prep phase, unsliced `.3mf` → slicer-service → print). They're
