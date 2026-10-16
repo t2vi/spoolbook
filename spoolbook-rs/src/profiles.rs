@@ -417,7 +417,92 @@ pub fn router() -> Router<SqlitePool> {
         .route("/api/profiles/inventory", get(inventory))
         .route("/api/profiles/field-spec", get(field_spec))
         .route("/api/profiles/{id}", axum::routing::put(update).delete(delete))
-        .route("/api/profiles/{id}/versions", axum::routing::post(new_version))
+        .route("/api/profiles/{id}/versions", get(list_versions).post(new_version))
+        .route("/api/profiles/{id}/select", axum::routing::post(select_version))
+        .route("/api/profiles/{id}/version-name", axum::routing::put(set_version_name))
+}
+
+// A version set is every profile reachable from `{id}` through previous_version_profile_id links:
+// walk up to the root, then down through every branch (any version can start a new one, so it's a
+// tree). Binds ?1 = the profile id; yields `version_set(id)`.
+const VERSION_SET: &str = "WITH RECURSIVE
+    up(id, prev) AS (
+        SELECT id, previous_version_profile_id FROM print_profiles WHERE id = ?1
+        UNION SELECT p.id, p.previous_version_profile_id FROM print_profiles p JOIN up ON p.id = up.prev),
+    version_set(id) AS (
+        SELECT id FROM up WHERE prev IS NULL
+        UNION SELECT p.id FROM print_profiles p JOIN version_set v ON p.previous_version_profile_id = v.id)";
+
+fn not_found() -> (StatusCode, Json<serde_json::Value>) {
+    (StatusCode::NOT_FOUND, Json(serde_json::json!({ "ok": false, "error": "not_found" })))
+}
+
+async fn exists(pool: &SqlitePool, id: i64) -> bool {
+    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM print_profiles WHERE id = ?1)").bind(id).fetch_one(pool).await.expect("query failed")
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+struct VersionSummary {
+    id: i64,
+    version_number: i64,
+    version_name: Option<String>,
+    nozzle_temp_c: i64,
+    created_at: String,
+    selected: bool,
+    locked: bool,
+}
+
+async fn list_versions(State(pool): State<SqlitePool>, Path(id): Path<i64>) -> Result<Json<Vec<VersionSummary>>, (StatusCode, Json<serde_json::Value>)> {
+    if !exists(&pool, id).await {
+        return Err(not_found());
+    }
+    let versions = sqlx::query_as::<_, VersionSummary>(&format!(
+        "{VERSION_SET}
+        SELECT p.id, p.version_number, p.version_name, p.nozzle_temp_c, p.created_at, p.is_current_version AS selected,
+               EXISTS(SELECT 1 FROM prints WHERE profile_id = p.id) AS locked
+        FROM print_profiles p JOIN version_set v ON v.id = p.id
+        ORDER BY p.version_number DESC, p.id DESC"
+    ))
+    .bind(id)
+    .fetch_all(&pool)
+    .await
+    .expect("query failed");
+    Ok(Json(versions))
+}
+
+// Versions are working variants: selecting one makes it the one lists and pickers use.
+async fn select_version(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Path(id): Path<i64>) -> (StatusCode, Json<serde_json::Value>) {
+    if !exists(&pool, id).await {
+        return not_found();
+    }
+    sqlx::query(&format!("{VERSION_SET} UPDATE print_profiles SET is_current_version = (id = ?1) WHERE id IN (SELECT id FROM version_set)"))
+        .bind(id)
+        .execute(&pool)
+        .await
+        .expect("update failed");
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true })))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct VersionNameInput {
+    version_name: Option<String>,
+}
+
+// A label, not a setting, so locked versions can be named too.
+async fn set_version_name(
+    _editor: crate::auth::Editor,
+    State(pool): State<SqlitePool>,
+    Path(id): Path<i64>,
+    Json(input): Json<VersionNameInput>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let name = input.version_name.as_deref().map(str::trim).filter(|n| !n.is_empty());
+    let updated = sqlx::query("UPDATE print_profiles SET version_name = ?1 WHERE id = ?2").bind(name).bind(id).execute(&pool).await.expect("update failed");
+    if updated.rows_affected() == 0 {
+        return not_found();
+    }
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true })))
 }
 
 #[derive(Deserialize)]
@@ -997,9 +1082,9 @@ where
 }
 
 // "Save as new version": the explicit way to edit a version a Print has locked (update refuses
-// it), or to keep an unlocked one as history. Copies the source row wholesale (provenance, notes,
+// it), or to branch a new variant from any version, selected or not. Copies the source row wholesale (provenance, notes,
 // raw settings all carry over), applies the edits to the copy, and demotes the source — one
-// transaction, so a failure never leaves two current versions or a half-built one.
+// transaction, so a failure never leaves two selected versions or a half-built one.
 async fn new_version(
     _editor: crate::auth::Editor,
     State(pool): State<SqlitePool>,
@@ -1009,9 +1094,6 @@ async fn new_version(
     let Some(source) = get_by_id(&pool, id).await else {
         return (StatusCode::NOT_FOUND, Json(ProfileResult { ok: false, errors: Some(serde_json::json!({ "id": "not_found" })), profile: None }));
     };
-    if !source.is_current_version {
-        return validation_error("id", "not_current_version");
-    }
     if input.name.trim().is_empty() {
         return validation_error("name", "Name is required");
     }
@@ -1035,16 +1117,27 @@ async fn new_version(
     .fetch_one(&mut *tx)
     .await
     .expect("insert failed");
+    sqlx::query(&format!("{VERSION_SET} UPDATE print_profiles SET is_current_version = 0 WHERE id IN (SELECT id FROM version_set)"))
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .expect("update failed");
+    let next_number: i64 = sqlx::query_scalar(&format!(
+        "{VERSION_SET} SELECT MAX(version_number) + 1 FROM print_profiles WHERE id IN (SELECT id FROM version_set)"
+    ))
+    .bind(id)
+    .fetch_one(&mut *tx)
+    .await
+    .expect("query failed");
     sqlx::query(
         "UPDATE print_profiles SET version_number = ?1, previous_version_profile_id = ?2, is_current_version = 1, version_name = NULL WHERE id = ?3",
     )
-    .bind(source.version_number + 1)
+    .bind(next_number)
     .bind(id)
     .bind(new_id)
     .execute(&mut *tx)
     .await
     .expect("update failed");
-    sqlx::query("UPDATE print_profiles SET is_current_version = 0 WHERE id = ?1").bind(id).execute(&mut *tx).await.expect("update failed");
     let profile = apply_input(&mut *tx, new_id, &input, &parsed).await.expect("just inserted");
     tx.commit().await.expect("commit failed");
 
@@ -1064,18 +1157,19 @@ async fn delete(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Pa
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "has_newer_version" })));
     }
 
-    // Deleting the current version hands "current" back to the one it was built on, so the
-    // chain never ends up with no current version (and vanishes from every list).
+    // Deleting the selected version hands the selection back to the one it was built on, so the
+    // set never ends up with none selected (and vanishes from every list).
     let mut tx = pool.begin().await.expect("begin failed");
-    let previous: Option<Option<i64>> = sqlx::query_scalar("DELETE FROM print_profiles WHERE id = ?1 RETURNING previous_version_profile_id")
-        .bind(id)
-        .fetch_optional(&mut *tx)
-        .await
-        .expect("delete failed");
-    let Some(previous) = previous else {
-        return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "ok": false, "error": "not_found" })));
+    let deleted: Option<(Option<i64>, bool)> =
+        sqlx::query_as("DELETE FROM print_profiles WHERE id = ?1 RETURNING previous_version_profile_id, is_current_version")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .expect("delete failed");
+    let Some((previous, was_selected)) = deleted else {
+        return not_found();
     };
-    if let Some(previous) = previous {
+    if let (Some(previous), true) = (previous, was_selected) {
         sqlx::query("UPDATE print_profiles SET is_current_version = 1 WHERE id = ?1").bind(previous).execute(&mut *tx).await.expect("update failed");
     }
     tx.commit().await.expect("commit failed");

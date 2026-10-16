@@ -12,6 +12,7 @@
 	import Picker from '$lib/components/picker.svelte';
 	import FilamentPicker from '$lib/components/filament-picker.svelte';
 	import SearchablePicker from '$lib/components/searchable-picker.svelte';
+	import VersionsPanel from '$lib/components/profiles/VersionsPanel.svelte';
 	import {
 		createProfile,
 		getProfileFieldSpec,
@@ -189,7 +190,7 @@
 <h1 class="mb-6 flex items-center gap-3 text-2xl font-semibold">
 	{id === null ? 'Add profile' : 'Edit profile'}
 	{#if versionNumber !== null}
-		<Badge variant={isCurrentVersion ? 'default' : 'outline'}>v{versionNumber}{isCurrentVersion ? '' : ' (superseded)'}</Badge>
+		<Badge variant={isCurrentVersion ? 'default' : 'outline'}>v{versionNumber}{isCurrentVersion ? ' · selected' : ''}</Badge>
 	{/if}
 </h1>
 
@@ -317,9 +318,15 @@
 
 	<form onsubmit={save} class="flex items-center gap-3">
 		<Button type="submit">Save</Button>
-		{#if id !== null && isCurrentVersion}
+		{#if id !== null}
 			<Button type="button" variant="outline" onclick={(e) => save(e, true)}>Save as new version</Button>
 		{/if}
 		<a href="/profiles" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
 	</form>
+
+	{#if id !== null}
+		{#key id}
+			<VersionsPanel {id} onSelected={(selectedId) => (isCurrentVersion = selectedId === id)} />
+		{/key}
+	{/if}
 </div>
