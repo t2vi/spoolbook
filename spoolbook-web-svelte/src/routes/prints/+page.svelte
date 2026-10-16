@@ -1,4 +1,6 @@
 <script lang="ts">
+	import ColorSwatch from '$lib/components/color-swatch.svelte';
+	import { hexFor } from '$lib/color-hexes.svelte';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
@@ -112,7 +114,7 @@
 					{#each result.prints as p (p.id)}
 						<Table.Row>
 							<Table.Cell>{formatDate(p.startedAt)}</Table.Cell>
-							<Table.Cell>{p.spool?.filament?.brand} {p.spool?.filament?.material} — {p.spool?.filament?.color}</Table.Cell>
+							<Table.Cell><span class="flex items-center gap-2"><ColorSwatch hex={hexFor(p.spool?.filament?.color)} />{p.spool?.filament?.brand} {p.spool?.filament?.material} — {p.spool?.filament?.color}</span></Table.Cell>
 							<Table.Cell>{p.profile?.name}</Table.Cell>
 							<Table.Cell>{p.printer?.name}</Table.Cell>
 							<Table.Cell><Badge class={statusBadgeClass(p.status)}>{p.status}</Badge></Table.Cell>

@@ -306,6 +306,23 @@ export const deleteFilament = (id: number) => request<FilamentResult>(`/api/fila
 export const syncFilamentCatalog = () =>
 	request<{ ok: boolean; error?: string; added?: number; skipped?: number }>('/api/filaments/sync', { method: 'POST' });
 export const listFilamentColors = () => request<FilamentColor[]>('/api/filament-colors');
+export interface ColorInventoryResult {
+	colors: FilamentColor[];
+	total: number;
+	page: number;
+	pageSize: number;
+	totalPages: number;
+}
+export const listColorInventory = (q: string, sort: 'name' | 'hex', order: 'asc' | 'desc', page: number, pageSize: number) =>
+	request<ColorInventoryResult>(
+		`/api/filament-colors/inventory?${new URLSearchParams({ q, sort, order, page: String(page), pageSize: String(pageSize) })}`
+	);
+type ColorResult = { ok: boolean; error?: string; color?: FilamentColor };
+export const createColor = (name: string, hex: string) =>
+	requestAllowingError<ColorResult>('/api/filament-colors', { method: 'POST', body: JSON.stringify({ name, hex }) });
+export const updateColor = (id: number, name: string, hex: string) =>
+	requestAllowingError<ColorResult>(`/api/filament-colors/${id}`, { method: 'PUT', body: JSON.stringify({ name, hex }) });
+export const deleteColor = (id: number) => requestAllowingError<ColorResult>(`/api/filament-colors/${id}`, { method: 'DELETE' });
 
 // Bambu addresses AMS slots across units as unit_id * 4 + slot_id — same convention PrintModal.razor uses.
 export function amsSlotNumber(tray: { unitId: string; slotId: string }): number {

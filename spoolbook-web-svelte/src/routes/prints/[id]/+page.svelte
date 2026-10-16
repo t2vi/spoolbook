@@ -1,4 +1,6 @@
 <script lang="ts">
+	import ColorSwatch from '$lib/components/color-swatch.svelte';
+	import { hexFor } from '$lib/color-hexes.svelte';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
@@ -186,7 +188,7 @@
 					<div class="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
 						<div class="flex flex-col gap-1">
 							<span class="font-medium text-muted-foreground">Spool</span>
-							<span>{print.spool?.filament?.brand} {print.spool?.filament?.material} {print.spool?.filament?.variant ?? ''} — {print.spool?.filament?.color}{print.spool
+							<span class="flex items-center gap-2"><ColorSwatch hex={hexFor(print.spool?.filament?.color)} />{print.spool?.filament?.brand} {print.spool?.filament?.material} {print.spool?.filament?.variant ?? ''} — {print.spool?.filament?.color}{print.spool
 									?.lotCode
 									? ` (${print.spool.lotCode})`
 									: ''}</span>
