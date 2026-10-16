@@ -931,3 +931,41 @@ async fn inventory_filters_sorts_and_pages_selected_versions() {
     assert_eq!((paged["total"].as_i64(), paged["page"].as_i64(), paged["pageSize"].as_i64(), paged["totalPages"].as_i64()), (Some(3), Some(2), Some(2), Some(2)));
     assert_eq!(get("page=-1&pageSize=0").await["pageSize"], 20);
 }
+
+// spec: 006/FR-026
+#[tokio::test]
+async fn duplicate_copies_everything_into_a_new_independent_profile() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let spool_id = seed_spool(&pool, filament_id).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    let v2 = new_version_from(&pool, v1).await;
+    sqlx::query("UPDATE print_profiles SET spool_id = ?1, source = 'BambuPreset', notes = 'dries well', version_name = 'Winter' WHERE id = ?2")
+        .bind(spool_id).bind(v2).execute(&pool).await.unwrap();
+
+    let (status, body) = send(&pool, "POST", &format!("/api/profiles/{v2}/duplicate"), None).await;
+
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["ok"], true);
+    let copy = &body["profile"];
+    let copy_id = copy["id"].as_i64().unwrap();
+    assert!(copy_id != v1 && copy_id != v2);
+    assert_eq!(copy["name"], "Cold day tune (copy)");
+    assert_eq!(copy["versionNumber"], 1);
+    assert_eq!(copy["previousVersionProfileId"], Value::Null);
+    assert_eq!(copy["isCurrentVersion"], true);
+    assert_eq!(copy["versionName"], Value::Null);
+    assert_eq!(copy["filamentId"], filament_id);
+    assert_eq!(copy["spoolId"], spool_id);
+    assert_eq!(copy["source"], "BambuPreset");
+    assert_eq!(copy["notes"], "dries well");
+    assert_eq!(copy["nozzleTempC"], 220);
+    assert_eq!(copy["startGcode"], "G28 ; home");
+    assert!(is_current(&pool, v2).await, "the original stays selected in its own set");
+
+    let (_, versions) = send(&pool, "GET", &format!("/api/profiles/{copy_id}/versions"), None).await;
+    assert_eq!(versions.as_array().unwrap().len(), 1, "its own version set");
+
+    let (status, _) = send(&pool, "POST", "/api/profiles/999/duplicate", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}

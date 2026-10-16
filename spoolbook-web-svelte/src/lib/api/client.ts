@@ -280,6 +280,8 @@ export interface ProfileVersion {
 	selected: boolean;
 	locked: boolean;
 }
+// A new, independent profile copied from `id` (its own v1), named "<name> (copy)".
+export const duplicateProfile = (id: number) => requestAllowingError<ProfileResult>(`/api/profiles/${id}/duplicate`, { method: 'POST' });
 export const listProfileVersions = (id: number) => request<ProfileVersion[]>(`/api/profiles/${id}/versions`);
 export const selectProfileVersion = (id: number) => request<ApiResult>(`/api/profiles/${id}/select`, { method: 'POST' });
 export const setProfileVersionName = (id: number, versionName: string) =>

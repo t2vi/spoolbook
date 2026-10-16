@@ -15,6 +15,7 @@
 	import VersionsPanel from '$lib/components/profiles/VersionsPanel.svelte';
 	import {
 		createProfile,
+		duplicateProfile,
 		getProfileFieldSpec,
 		importProfilePreset,
 		listAllFilaments,
@@ -157,6 +158,17 @@
 		} catch (err) {
 			importMessage = `Import failed: ${err instanceof Error ? err.message : 'unknown error'}`;
 		}
+	}
+
+	// Copies the saved profile (not unsaved edits) and opens the copy (006/FR-043).
+	async function duplicate() {
+		if (id === null) return;
+		const result = await duplicateProfile(id);
+		if (!result.ok || !result.profile) {
+			errorMessage = 'Duplicate failed.';
+			return;
+		}
+		goto(`/profiles/edit/${result.profile.id}`);
 	}
 
 	async function save(e: Event, asNewVersion = false) {
@@ -320,6 +332,7 @@
 		<Button type="submit">Save</Button>
 		{#if id !== null}
 			<Button type="button" variant="outline" onclick={(e) => save(e, true)}>Save as new version</Button>
+			<Button type="button" variant="outline" onclick={duplicate}>Duplicate</Button>
 		{/if}
 		<a href="/profiles" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
 	</form>
