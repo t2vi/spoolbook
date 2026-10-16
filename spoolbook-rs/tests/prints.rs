@@ -106,71 +106,6 @@ fn print_body(f: &Fixtures, status: &str, failure_modes: Vec<&str>) -> Value {
     })
 }
 
-// spec: 003/FR-010
-#[tokio::test]
-async fn create_persists_and_nests_profile_spool_printer() {
-    let pool = test_pool().await;
-    let f = seed_all(&pool).await;
-
-    let (status, body) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
-
-    assert_eq!(status, StatusCode::OK, "{body:?}");
-    let p = &body["print"];
-    assert_eq!(p["profileId"], f.profile_id);
-    assert_eq!(p["spoolId"], f.spool_id);
-    assert_eq!(p["printerId"], f.printer_id);
-    assert_eq!(p["profile"]["name"], "Default");
-    assert_eq!(p["spool"]["filament"]["brand"], "Bambu Lab");
-    assert_eq!(p["printer"]["name"], "P2S #1");
-    assert_eq!(p["status"], "Success");
-    assert_eq!(p["notes"], "test print");
-    assert_eq!(p["failureModes"].as_array().unwrap().len(), 0);
-}
-
-// spec: 003/FR-010, 003/FR-011
-#[tokio::test]
-async fn create_persists_failure_modes_when_not_success() {
-    let pool = test_pool().await;
-    let f = seed_all(&pool).await;
-
-    let (status, body) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Failed", vec!["Warping", "Stringing"]))).await;
-
-    assert_eq!(status, StatusCode::OK, "{body:?}");
-    let modes: Vec<&str> = body["print"]["failureModes"].as_array().unwrap().iter().map(|m| m["mode"].as_str().unwrap()).collect();
-    assert_eq!(modes.len(), 2);
-    assert!(modes.contains(&"Warping"));
-    assert!(modes.contains(&"Stringing"));
-}
-
-// spec: 003/FR-011
-#[tokio::test]
-async fn create_rejects_failure_modes_on_a_success_status() {
-    let pool = test_pool().await;
-    let f = seed_all(&pool).await;
-
-    let (status, body) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec!["Warping"]))).await;
-
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body["error"], "failure_modes_require_failed_or_partial");
-}
-
-// spec: 003/FR-010
-#[tokio::test]
-async fn create_nests_project_when_provided() {
-    let pool = test_pool().await;
-    let f = seed_all(&pool).await;
-    let project_id = seed_project(&pool).await;
-    let mut body = print_body(&f, "Success", vec![]);
-    body["input"]["projectId"] = json!(project_id);
-    body["input"]["projectPlaterId"] = json!("1");
-
-    let (status, resp) = send(&pool, "POST", "/api/prints", Some(body)).await;
-
-    assert_eq!(status, StatusCode::OK, "{resp:?}");
-    assert_eq!(resp["print"]["project"]["fileName"], "x.3mf");
-    assert_eq!(resp["print"]["projectPlaterId"], "1");
-}
-
 // spec: 003/FR-001
 #[tokio::test]
 async fn get_by_id_returns_not_found_for_missing_id() {
@@ -184,7 +119,7 @@ async fn get_by_id_returns_not_found_for_missing_id() {
 async fn get_by_id_returns_the_full_nested_print() {
     let pool = test_pool().await;
     let f = seed_all(&pool).await;
-    let (_, created) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
+    let (_, created) = common::create_print(&pool, Some(print_body(&f, "Success", vec![]))).await;
     let id = created["print"]["id"].as_i64().unwrap();
 
     let (status, body) = send(&pool, "GET", &format!("/api/prints/{id}"), None).await;
@@ -200,11 +135,11 @@ async fn list_filters_by_printer_and_caps_at_five() {
     let pool = test_pool().await;
     let f = seed_all(&pool).await;
     for _ in 0..6 {
-        send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
+        common::create_print(&pool, Some(print_body(&f, "Success", vec![]))).await;
     }
     let other_printer_id = seed_printer(&pool, "P2S #2").await;
     let cross_printer = Fixtures { filament_id: f.filament_id, profile_id: f.profile_id, spool_id: f.spool_id, printer_id: other_printer_id };
-    send(&pool, "POST", "/api/prints", Some(print_body(&cross_printer, "Success", vec![]))).await;
+    common::create_print(&pool, Some(print_body(&cross_printer, "Success", vec![]))).await;
 
     let (status, body) = send(&pool, "GET", &format!("/api/prints?printerId={}", f.printer_id), None).await;
 
@@ -223,8 +158,8 @@ async fn list_filters_by_project_id() {
     let mut body = print_body(&f, "Success", vec![]);
     body["input"]["projectId"] = json!(project_id);
     body["input"]["projectPlaterId"] = json!("1");
-    send(&pool, "POST", "/api/prints", Some(body)).await;
-    send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
+    common::create_print(&pool, Some(body)).await;
+    common::create_print(&pool, Some(print_body(&f, "Success", vec![]))).await;
 
     let (status, body) = send(&pool, "GET", &format!("/api/prints?projectId={project_id}"), None).await;
 
@@ -239,7 +174,7 @@ async fn list_filters_by_project_id() {
 async fn list_without_printer_id_returns_everything() {
     let pool = test_pool().await;
     let f = seed_all(&pool).await;
-    send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
+    common::create_print(&pool, Some(print_body(&f, "Success", vec![]))).await;
 
     let (status, body) = send(&pool, "GET", "/api/prints", None).await;
 
@@ -252,8 +187,8 @@ async fn list_without_printer_id_returns_everything() {
 async fn inventory_filters_by_status_and_paginates() {
     let pool = test_pool().await;
     let f = seed_all(&pool).await;
-    send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
-    send(&pool, "POST", "/api/prints", Some(print_body(&f, "Failed", vec!["Clog"]))).await;
+    common::create_print(&pool, Some(print_body(&f, "Success", vec![]))).await;
+    common::create_print(&pool, Some(print_body(&f, "Failed", vec!["Clog"]))).await;
 
     let (status, body) = send(&pool, "GET", "/api/prints/inventory?status=Success&page=1&pageSize=20", None).await;
 
@@ -271,13 +206,13 @@ async fn recommend_profile_picks_success_over_failed() {
 
     let mut failed_body = print_body(&f, "Failed", vec!["Warping"]);
     failed_body["input"]["projectId"] = json!(project_id);
-    send(&pool, "POST", "/api/prints", Some(failed_body)).await;
+    common::create_print(&pool, Some(failed_body)).await;
 
     let success_profile_id = seed_profile(&pool, f.filament_id, "Success Profile").await;
     let success_f = Fixtures { filament_id: f.filament_id, profile_id: success_profile_id, spool_id: f.spool_id, printer_id: f.printer_id };
     let mut success_body = print_body(&success_f, "Success", vec![]);
     success_body["input"]["projectId"] = json!(project_id);
-    send(&pool, "POST", "/api/prints", Some(success_body)).await;
+    common::create_print(&pool, Some(success_body)).await;
 
     let (status, body) = send(&pool, "GET", &format!("/api/prints/recommend-profile?projectId={project_id}"), None).await;
 
@@ -295,51 +230,12 @@ async fn recommend_profile_returns_null_when_no_prints_reference_the_project() {
     assert_eq!(body, Value::Null);
 }
 
-// spec: 003/FR-013
-#[tokio::test]
-async fn update_persists_changes() {
-    let pool = test_pool().await;
-    let f = seed_all(&pool).await;
-    let (_, created) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
-    let id = created["print"]["id"].as_i64().unwrap();
-
-    let update = json!({
-        "printerId": f.printer_id,
-        "input": {
-            "startedAt": "2026-08-15T10:00:00Z", "endedAt": "2026-08-15T12:00:00Z",
-            "status": "Partial", "notes": "updated notes", "cleanBuildPlate": false,
-            "projectId": null, "projectPlaterId": null,
-            "failureModes": ["Clog"]
-        }
-    });
-    let (status, body) = send(&pool, "PUT", &format!("/api/prints/{id}"), Some(update)).await;
-
-    assert_eq!(status, StatusCode::OK, "{body:?}");
-    assert_eq!(body["print"]["status"], "Partial");
-    assert_eq!(body["print"]["notes"], "updated notes");
-    let modes: Vec<&str> = body["print"]["failureModes"].as_array().unwrap().iter().map(|m| m["mode"].as_str().unwrap()).collect();
-    assert_eq!(modes, vec!["Clog"]);
-}
-
-// spec: 003/FR-013
-#[tokio::test]
-async fn update_returns_not_found_for_missing_id() {
-    let pool = test_pool().await;
-    let f = seed_all(&pool).await;
-    let update = json!({
-        "printerId": f.printer_id,
-        "input": { "startedAt": "2026-08-15T10:00:00Z", "endedAt": "2026-08-15T12:00:00Z", "status": "Success", "notes": null, "cleanBuildPlate": null, "projectId": null, "projectPlaterId": null, "failureModes": [] }
-    });
-    let (status, _) = send(&pool, "PUT", "/api/prints/999", Some(update)).await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
-}
-
 // spec: 003/FR-014
 #[tokio::test]
 async fn delete_removes_the_print() {
     let pool = test_pool().await;
     let f = seed_all(&pool).await;
-    let (_, created) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
+    let (_, created) = common::create_print(&pool, Some(print_body(&f, "Success", vec![]))).await;
     let id = created["print"]["id"].as_i64().unwrap();
 
     let (status, body) = send(&pool, "DELETE", &format!("/api/prints/{id}"), None).await;
@@ -370,60 +266,12 @@ async fn seed_printer_job(pool: &sqlx::SqlitePool, printer_id: i64, external_job
     .unwrap()
 }
 
-// spec: 003/FR-030
-#[tokio::test]
-async fn job_match_returns_the_closest_unattached_job() {
-    let pool = test_pool().await;
-    let f = seed_all(&pool).await;
-    seed_printer_job(&pool, f.printer_id, "job-far", "2026-01-01T06:00:00Z").await;
-    seed_printer_job(&pool, f.printer_id, "job-close", "2026-01-01T08:00:00Z").await;
-
-    let (status, body) =
-        send(&pool, "GET", &format!("/api/prints/job-match?printerId={}&startedAt=2026-01-01T08:05:00Z", f.printer_id), None).await;
-
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["externalJobId"], "job-close");
-}
-
-// spec: 003/FR-030
-#[tokio::test]
-async fn job_match_returns_null_when_no_unattached_jobs_exist() {
-    let pool = test_pool().await;
-    let f = seed_all(&pool).await;
-
-    let (status, body) =
-        send(&pool, "GET", &format!("/api/prints/job-match?printerId={}&startedAt=2026-01-01T08:00:00Z", f.printer_id), None).await;
-
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, Value::Null);
-}
-
-// spec: 003/FR-031
-#[tokio::test]
-async fn attach_job_sets_the_jobs_print_id() {
-    let pool = test_pool().await;
-    let f = seed_all(&pool).await;
-    let (_, created) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
-    let print_id = created["print"]["id"].as_i64().unwrap();
-    let job_id = seed_printer_job(&pool, f.printer_id, "job-1", "2026-01-01T08:00:00Z").await;
-
-    let (status, body) =
-        send(&pool, "POST", &format!("/api/prints/{print_id}/attach-job"), Some(json!({ "jobId": job_id }))).await;
-
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["ok"], true);
-
-    let attached_print_id: Option<i64> =
-        sqlx::query_scalar("SELECT print_id FROM printer_jobs WHERE id = ?1").bind(job_id).fetch_one(&pool).await.unwrap();
-    assert_eq!(attached_print_id, Some(print_id));
-}
-
 // spec: 003/FR-004
 #[tokio::test]
 async fn hourly_weather_returns_rows_ordered_by_hour() {
     let pool = test_pool().await;
     let f = seed_all(&pool).await;
-    let (_, created) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
+    let (_, created) = common::create_print(&pool, Some(print_body(&f, "Success", vec![]))).await;
     let print_id = created["print"]["id"].as_i64().unwrap();
     sqlx::query("INSERT INTO print_hourly_weather (print_id, hour, temp_c, humidity_pct) VALUES (?1, '2026-01-01T08:00', 22.0, 52.0), (?1, '2026-01-01T07:00', 20.0, 50.0)")
         .bind(print_id)
@@ -446,7 +294,7 @@ async fn hourly_weather_returns_rows_ordered_by_hour() {
 async fn readings_returns_the_stored_telemetry_snapshot() {
     let pool = test_pool().await;
     let f = seed_all(&pool).await;
-    let (_, created) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
+    let (_, created) = common::create_print(&pool, Some(print_body(&f, "Success", vec![]))).await;
     let print_id = created["print"]["id"].as_i64().unwrap();
     let json = r#"[{"recordedAt":"2026-01-01T08:00:10Z","chamberTempC":35.0,"amsHumidityPct":38,"layerNum":6,"totalLayerNum":908,"progressPct":8}]"#;
     sqlx::query("UPDATE prints SET telemetry_json = ?1 WHERE id = ?2").bind(json).bind(print_id).execute(&pool).await.unwrap();
@@ -465,7 +313,7 @@ async fn readings_returns_the_stored_telemetry_snapshot() {
 async fn readings_returns_empty_array_when_no_snapshot_exists() {
     let pool = test_pool().await;
     let f = seed_all(&pool).await;
-    let (_, created) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
+    let (_, created) = common::create_print(&pool, Some(print_body(&f, "Success", vec![]))).await;
     let print_id = created["print"]["id"].as_i64().unwrap();
 
     let (status, body) = send(&pool, "GET", &format!("/api/prints/{print_id}/readings"), None).await;
@@ -479,7 +327,7 @@ async fn readings_returns_empty_array_when_no_snapshot_exists() {
 async fn hourly_weather_returns_empty_array_when_none_recorded() {
     let pool = test_pool().await;
     let f = seed_all(&pool).await;
-    let (_, created) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
+    let (_, created) = common::create_print(&pool, Some(print_body(&f, "Success", vec![]))).await;
     let print_id = created["print"]["id"].as_i64().unwrap();
 
     let (status, body) = send(&pool, "GET", &format!("/api/prints/{print_id}/hourly-weather"), None).await;
@@ -493,7 +341,7 @@ async fn hourly_weather_returns_empty_array_when_none_recorded() {
 async fn delete_removes_a_print_with_failure_modes_weather_and_an_attached_job() {
     let pool = test_pool().await;
     let f = seed_all(&pool).await;
-    let (_, created) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Failed", vec!["Stringing", "Warping"]))).await;
+    let (_, created) = common::create_print(&pool, Some(print_body(&f, "Failed", vec!["Stringing", "Warping"]))).await;
     let id = created["print"]["id"].as_i64().unwrap();
     sqlx::query("INSERT INTO print_hourly_weather (print_id, hour, temp_c, humidity_pct) VALUES (?1, '2026-08-15T10:00', 18.0, 60.0)").bind(id).execute(&pool).await.unwrap();
     let job_id = seed_printer_job(&pool, f.printer_id, "task-1", "2026-08-15T10:00:00Z").await;
@@ -514,113 +362,103 @@ async fn print_count(pool: &sqlx::SqlitePool) -> i64 {
     sqlx::query_scalar("SELECT COUNT(*) FROM prints").fetch_one(pool).await.unwrap()
 }
 
-// spec: 003/FR-012
+
+fn outcome(status: &str, failure_modes: Vec<&str>) -> Value {
+    json!({ "status": status, "failureModes": failure_modes, "notes": "stringy on the overhangs", "actualRoomTempC": 19.5, "cleanBuildPlate": false })
+}
+
+// spec: 003/FR-010
 #[tokio::test]
-async fn create_rejects_invalid_input_with_400_and_saves_nothing() {
+async fn prints_cannot_be_created_by_hand() {
     let pool = test_pool().await;
     let f = seed_all(&pool).await;
-    let cases: Vec<(&str, Value, &str)> = vec![
-        ("status", json!({ "input": { "status": "Great" } }), "Unknown status."),
-        ("failure mode", json!({ "input": { "status": "Failed", "failureModes": ["Spaghetti"] } }), "Unknown failure mode: Spaghetti."),
-        ("profile", json!({ "profileId": 999 }), "Unknown print profile."),
-        ("spool", json!({ "spoolId": 999 }), "Unknown spool."),
-        ("printer", json!({ "printerId": 999 }), "Unknown printer."),
-        ("project", json!({ "input": { "projectId": 999 } }), "Unknown project."),
-        ("times", json!({ "input": { "endedAt": "2026-08-15T09:00:00Z" } }), "Ended before it started."),
-    ];
 
-    for (name, patch, expected) in cases {
-        let mut body = print_body(&f, "Success", vec![]);
-        for (k, v) in patch.as_object().unwrap() {
-            if k == "input" {
-                for (ik, iv) in v.as_object().unwrap() {
-                    body["input"][ik] = iv.clone();
-                }
-            } else {
-                body[k] = v.clone();
-            }
-        }
-        let (status, res) = send(&pool, "POST", "/api/prints", Some(body)).await;
-        assert_eq!(status, StatusCode::BAD_REQUEST, "{name}: {res:?}");
-        assert_eq!(res["error"], expected, "{name}");
-    }
+    let (status, _) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
+
+    assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED);
     assert_eq!(print_count(&pool).await, 0);
 }
 
-// spec: 003/FR-012
+// spec: 003/FR-030
 #[tokio::test]
-async fn create_accepts_a_blank_ended_at() {
+async fn manual_job_matching_endpoints_are_gone() {
     let pool = test_pool().await;
     let f = seed_all(&pool).await;
-    let mut body = print_body(&f, "InProgress", vec![]);
-    body["input"]["endedAt"] = json!("");
+    let (_, created) = common::create_print(&pool, Some(print_body(&f, "Success", vec![]))).await;
+    let id = created["print"]["id"].as_i64().unwrap();
 
-    let (status, res) = send(&pool, "POST", "/api/prints", Some(body)).await;
+    // "job-match" now falls through to /api/prints/{id} and fails to parse as an id.
+    let (status, _) = send_raw(&pool, "GET", &format!("/api/prints/job-match?printerId={}&startedAt=2026-08-15T10:00:00Z", f.printer_id)).await;
+    assert!(status.is_client_error(), "{status}");
+    let (status, _) = send(&pool, "POST", &format!("/api/prints/{id}/attach-job"), Some(json!({ "jobId": 1 }))).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+// spec: 003/FR-011, 003/FR-013
+#[tokio::test]
+async fn annotating_sets_only_the_outcome_fields() {
+    let pool = test_pool().await;
+    let f = seed_all(&pool).await;
+    let (_, created) = common::create_print(&pool, Some(print_body(&f, "Success", vec![]))).await;
+    let id = created["print"]["id"].as_i64().unwrap();
+    let other_printer = seed_printer(&pool, "Other").await;
+    let mut body = outcome("Partial", vec!["Stringing", "Stringing", "Warping"]);
+    // Anything else in the request is ignored, never applied.
+    body["printerId"] = json!(other_printer);
+    body["startedAt"] = json!("2020-01-01T00:00:00Z");
+
+    let (status, res) = send(&pool, "PUT", &format!("/api/prints/{id}"), Some(body)).await;
 
     assert_eq!(status, StatusCode::OK, "{res:?}");
+    let p = &res["print"];
+    assert_eq!(p["status"], "Partial");
+    assert_eq!(p["notes"], "stringy on the overhangs");
+    assert_eq!(p["actualRoomTempC"], 19.5);
+    assert_eq!(p["cleanBuildPlate"], false);
+    let modes: Vec<&str> = p["failureModes"].as_array().unwrap().iter().map(|m| m["mode"].as_str().unwrap()).collect();
+    assert_eq!(modes.len(), 2, "de-duplicated: {modes:?}");
+    assert_eq!(p["printerId"], f.printer_id, "printer unchanged");
+    assert_eq!(p["startedAt"], "2026-08-15T10:00:00Z", "times unchanged");
+    assert_eq!(p["profileId"], f.profile_id);
 }
 
-// spec: 003/FR-012
+// spec: 003/FR-011, 003/FR-012, 003/FR-013
 #[tokio::test]
-async fn update_rejects_invalid_input_with_400_and_changes_nothing() {
+async fn annotating_rejects_bad_outcomes_and_unfinished_prints() {
     let pool = test_pool().await;
     let f = seed_all(&pool).await;
-    let (_, created) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
-    let id = created["print"]["id"].as_i64().unwrap();
-    let cases: Vec<(&str, i64, Value, &str)> = vec![
-        ("status", f.printer_id, json!({ "status": "Great" }), "Unknown status."),
-        ("failure mode", f.printer_id, json!({ "status": "Failed", "failureModes": ["Spaghetti"] }), "Unknown failure mode: Spaghetti."),
-        ("printer", 999, json!({}), "Unknown printer."),
-        ("project", f.printer_id, json!({ "projectId": 999 }), "Unknown project."),
-        ("times", f.printer_id, json!({ "endedAt": "2026-08-15T09:00:00Z" }), "Ended before it started."),
-    ];
+    let (_, done) = common::create_print(&pool, Some(print_body(&f, "Failed", vec!["Clog"]))).await;
+    let done = done["print"]["id"].as_i64().unwrap();
+    let mut running = print_body(&f, "InProgress", vec![]);
+    running["input"]["endedAt"] = json!("");
+    let (_, running) = common::create_print(&pool, Some(running)).await;
+    let running = running["print"]["id"].as_i64().unwrap();
 
-    for (name, printer_id, patch, expected) in cases {
-        let mut input = print_body(&f, "Success", vec![])["input"].clone();
-        for (k, v) in patch.as_object().unwrap() {
-            input[k] = v.clone();
-        }
-        input["notes"] = json!("changed");
-        let (status, res) = send(&pool, "PUT", &format!("/api/prints/{id}"), Some(json!({ "printerId": printer_id, "input": input }))).await;
-        assert_eq!(status, StatusCode::BAD_REQUEST, "{name}: {res:?}");
-        assert_eq!(res["error"], expected, "{name}");
+    for (id, body, expected) in [
+        (done, outcome("InProgress", vec![]), "Unknown status."),
+        (done, outcome("Great", vec![]), "Unknown status."),
+        (done, outcome("Failed", vec!["Spaghetti"]), "Unknown failure mode: Spaghetti."),
+        (done, outcome("Success", vec!["Warping"]), "failure_modes_require_failed_or_partial"),
+        (running, outcome("Failed", vec![]), "still_in_progress"),
+    ] {
+        let (status, res) = send(&pool, "PUT", &format!("/api/prints/{id}"), Some(body)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{expected}: {res:?}");
+        assert_eq!(res["error"], expected);
     }
-    let notes: String = sqlx::query_scalar("SELECT notes FROM prints WHERE id = ?1").bind(id).fetch_one(&pool).await.unwrap();
-    assert_eq!(notes, "test print");
+    let (status, _) = send(&pool, "PUT", "/api/prints/999", Some(outcome("Failed", vec![]))).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let (_, unchanged) = send(&pool, "GET", &format!("/api/prints/{done}"), None).await;
+    assert_eq!(unchanged["status"], "Failed");
+    assert_eq!(unchanged["notes"], "test print");
 }
 
-// spec: 003/FR-031
-#[tokio::test]
-async fn attach_job_returns_404_for_a_missing_print_or_job() {
-    let pool = test_pool().await;
-    let f = seed_all(&pool).await;
-    let (_, created) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
-    let print_id = created["print"]["id"].as_i64().unwrap();
-    let job_id = seed_printer_job(&pool, f.printer_id, "job-1", "2026-01-01T08:00:00Z").await;
-
-    let (status, _) = send(&pool, "POST", "/api/prints/999/attach-job", Some(json!({ "jobId": job_id }))).await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
-    let (status, _) = send(&pool, "POST", &format!("/api/prints/{print_id}/attach-job"), Some(json!({ "jobId": 999 }))).await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
-}
-
-// spec: 003/FR-031
-#[tokio::test]
-async fn attach_job_refuses_a_job_attached_to_another_print() {
-    let pool = test_pool().await;
-    let f = seed_all(&pool).await;
-    let (_, a) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
-    let (_, b) = send(&pool, "POST", "/api/prints", Some(print_body(&f, "Success", vec![]))).await;
-    let (a, b) = (a["print"]["id"].as_i64().unwrap(), b["print"]["id"].as_i64().unwrap());
-    let job_id = seed_printer_job(&pool, f.printer_id, "job-1", "2026-01-01T08:00:00Z").await;
-    send(&pool, "POST", &format!("/api/prints/{a}/attach-job"), Some(json!({ "jobId": job_id }))).await;
-
-    let (status, res) = send(&pool, "POST", &format!("/api/prints/{b}/attach-job"), Some(json!({ "jobId": job_id }))).await;
-    assert_eq!(status, StatusCode::CONFLICT, "{res:?}");
-    assert_eq!(res["error"], "already_attached");
-    let (status, _) = send(&pool, "POST", &format!("/api/prints/{a}/attach-job"), Some(json!({ "jobId": job_id }))).await;
-    assert_eq!(status, StatusCode::OK, "re-attaching to the same Print is fine");
-
-    let attached: Option<i64> = sqlx::query_scalar("SELECT print_id FROM printer_jobs WHERE id = ?1").bind(job_id).fetch_one(&pool).await.unwrap();
-    assert_eq!(attached, Some(a));
+// Status only — for responses that may not be JSON.
+async fn send_raw(pool: &sqlx::SqlitePool, method: &str, uri: &str) -> (StatusCode, Vec<u8>) {
+    let response = spoolbook_rs::app(pool.clone())
+        .oneshot(Request::builder().method(method).uri(uri).header("cookie", common::auth_cookie_header(pool).await).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let status = response.status();
+    (status, axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap().to_vec())
 }

@@ -3,12 +3,19 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Chart from '$lib/components/ui/chart/index.js';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
+	import Picker from '$lib/components/picker.svelte';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { LineChart } from 'layerchart';
 	import { scaleTime } from 'd3-scale';
-	import { getPrint, getProjectPlates, getHourlyWeather, getPrintReadings } from '$lib/api/client';
+	import { annotatePrint, getPrint, getProjectPlates, getHourlyWeather, getPrintReadings } from '$lib/api/client';
+	import type { PrintOutcome } from '$lib/api/client';
 	import type { FailureMode, HourlyWeatherReading, Print, PrintReading, ProjectPlate } from '$lib/api/types';
 	import { page } from '$app/state';
 	import { formatDateTime } from '$lib/utils.js';
@@ -49,6 +56,56 @@
 	let readingsChartData = $derived(printReadings.map((r) => ({ ...r, recordedAt: new Date(r.recordedAt) })));
 	let lastReading = $derived(printReadings.length > 0 ? printReadings[printReadings.length - 1] : null);
 	let chartTab = $state('weather');
+
+	// Outcome annotation (003/FR-052): the only editable part of a Print, once it's finished.
+	const OUTCOMES: { value: PrintOutcome['status']; label: string }[] = [
+		{ value: 'Success', label: 'Success' },
+		{ value: 'Partial', label: 'Partial' },
+		{ value: 'Failed', label: 'Failed' }
+	];
+	let editing = $state(false);
+	let draft = $state<PrintOutcome>({ status: 'Success', failureModes: [], notes: null, actualRoomTempC: null, cleanBuildPlate: null });
+	let roomTempText = $state('');
+	let outcomeError = $state<string | null>(null);
+
+	function startEditing() {
+		if (!print || print.status === 'InProgress') return;
+		draft = {
+			status: print.status,
+			failureModes: print.failureModes.map((f) => f.mode),
+			notes: print.notes,
+			actualRoomTempC: print.actualRoomTempC,
+			cleanBuildPlate: print.cleanBuildPlate
+		};
+		roomTempText = print.actualRoomTempC?.toString() ?? '';
+		outcomeError = null;
+		editing = true;
+	}
+
+	function toggleMode(mode: FailureMode, on: boolean) {
+		draft.failureModes = on ? [...draft.failureModes, mode] : draft.failureModes.filter((m) => m !== mode);
+	}
+
+	async function saveOutcome() {
+		const roomTemp = roomTempText.trim() === '' ? null : Number(roomTempText);
+		if (roomTemp !== null && Number.isNaN(roomTemp)) {
+			outcomeError = 'Room temperature must be a number.';
+			return;
+		}
+		const result = await annotatePrint(id, {
+			...draft,
+			// Failure modes only belong to Failed / Partial (003/FR-011).
+			failureModes: draft.status === 'Success' ? [] : draft.failureModes,
+			notes: draft.notes?.trim() ? draft.notes : null,
+			actualRoomTempC: roomTemp
+		});
+		if (!result.ok || !result.print) {
+			outcomeError = result.error === 'still_in_progress' ? 'This print is still running.' : (result.error ?? 'Save failed.');
+			return;
+		}
+		print = result.print;
+		editing = false;
+	}
 
 	function statusBadgeClass(status: Print['status']) {
 		switch (status) {
@@ -95,7 +152,12 @@
 		<Card.Root>
 			<Card.Header>
 				<Card.Title class="text-2xl">Print details</Card.Title>
-				<Card.Action><Badge class={statusBadgeClass(print.status)}>{print.status}</Badge></Card.Action>
+				<Card.Action class="flex items-center gap-2">
+					<Badge class={statusBadgeClass(print.status)}>{print.status}</Badge>
+					{#if print.status !== 'InProgress'}
+						<Button size="sm" variant="outline" onclick={startEditing}>Edit outcome</Button>
+					{/if}
+				</Card.Action>
 			</Card.Header>
 
 			<Card.Content class="space-y-6">
@@ -150,6 +212,10 @@
 							<span>{print.endedAt ? formatDateTime(print.endedAt) : '—'}</span>
 						</div>
 						<div class="flex flex-col gap-1">
+							<span class="font-medium text-muted-foreground">Room temp</span>
+							<span>{print.actualRoomTempC !== null ? `${print.actualRoomTempC}°C` : '—'}</span>
+						</div>
+						<div class="flex flex-col gap-1">
 							<span class="font-medium text-muted-foreground">AMS humidity</span>
 							<span>{print.amsHumidityPct !== null ? `${print.amsHumidityPct}%` : '—'}</span>
 						</div>
@@ -159,7 +225,7 @@
 						</div>
 						{#if print.ambientTempC !== null || print.ambientHumidityPct !== null}
 							<div class="col-span-2 flex flex-col gap-1">
-								<span class="font-medium text-muted-foreground">Room temp (auto-fetched)</span>
+								<span class="font-medium text-muted-foreground">Outdoor weather (auto-fetched)</span>
 								<span
 									>{print.ambientTempC !== null ? `${print.ambientTempC.toFixed(1)}°C` : '—'} / {print.ambientHumidityPct !== null
 										? `${print.ambientHumidityPct.toFixed(0)}% humidity`
@@ -273,3 +339,52 @@
 		</Card.Root>
 	{/if}
 </div>
+
+{#if editing}
+	<Dialog.Root open={true} onOpenChange={(open) => !open && (editing = false)}>
+		<Dialog.Content class="max-w-md">
+			<Dialog.Header>
+				<Dialog.Title>Edit outcome</Dialog.Title>
+			</Dialog.Header>
+			<div class="space-y-4">
+				<div class="flex flex-col gap-1">
+					<Label for="outcome-status">Result</Label>
+					<Picker id="outcome-status" bind:value={draft.status} options={OUTCOMES} />
+				</div>
+				{#if draft.status !== 'Success'}
+					<div class="flex flex-col gap-2">
+						<Label>Failure modes</Label>
+						<div class="grid grid-cols-2 gap-2">
+							{#each Object.entries(FAILURE_MODE_LABELS) as [mode, label] (mode)}
+								<label class="flex items-center gap-2 text-sm">
+									<Checkbox
+										checked={draft.failureModes.includes(mode as FailureMode)}
+										onCheckedChange={(on) => toggleMode(mode as FailureMode, on === true)}
+									/>
+									{label}
+								</label>
+							{/each}
+						</div>
+					</div>
+				{/if}
+				<div class="flex flex-col gap-1">
+					<Label for="outcome-room-temp">Room temp (°C)</Label>
+					<Input id="outcome-room-temp" inputmode="decimal" placeholder="e.g. 19.5" bind:value={roomTempText} />
+				</div>
+				<label class="flex items-center gap-2 text-sm">
+					<Checkbox checked={draft.cleanBuildPlate === true} onCheckedChange={(on) => (draft.cleanBuildPlate = on === true)} />
+					Clean build plate
+				</label>
+				<div class="flex flex-col gap-1">
+					<Label for="outcome-notes">Notes</Label>
+					<Textarea id="outcome-notes" rows={4} value={draft.notes ?? ''} oninput={(e) => (draft.notes = e.currentTarget.value)} />
+				</div>
+				{#if outcomeError}<p class="text-sm text-destructive">{outcomeError}</p>{/if}
+			</div>
+			<Dialog.Footer>
+				<Button variant="ghost" onclick={() => (editing = false)}>Cancel</Button>
+				<Button onclick={saveOutcome}>Save</Button>
+			</Dialog.Footer>
+		</Dialog.Content>
+	</Dialog.Root>
+{/if}

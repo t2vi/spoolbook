@@ -204,6 +204,16 @@ export const searchPrints = (status: PrintStatus | '', printerId: number | null,
 	return request<PrintInventoryResult>(`/api/prints/inventory?${params}`);
 };
 export const getPrint = (id: number) => request<Print>(`/api/prints/${id}`);
+// The only edit a Print allows: its outcome, once finished (003/FR-013).
+export interface PrintOutcome {
+	status: 'Success' | 'Failed' | 'Partial';
+	failureModes: FailureMode[];
+	notes: string | null;
+	actualRoomTempC: number | null;
+	cleanBuildPlate: boolean | null;
+}
+export const annotatePrint = (id: number, outcome: PrintOutcome) =>
+	requestAllowingError<{ ok: boolean; error?: string; print?: Print }>(`/api/prints/${id}`, { method: 'PUT', body: JSON.stringify(outcome) });
 export const deletePrint = (id: number) => request<ApiResult>(`/api/prints/${id}`, { method: 'DELETE' });
 export const getHourlyWeather = (id: number) => request<HourlyWeatherReading[]>(`/api/prints/${id}/hourly-weather`);
 export const getPrintReadings = (id: number) => request<PrintReading[]>(`/api/prints/${id}/readings`);
