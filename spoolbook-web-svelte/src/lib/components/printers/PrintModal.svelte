@@ -71,6 +71,12 @@
 	let resliceError = $state<string | null>(null);
 	let resliceSucceeded = $state(false);
 
+	// Plate stepping (004/FR-050): ‹ / › move through a multi-plate project, "n / N" shows where.
+	let plateIndex = $derived(plates.findIndex((p) => p.platerId === selectedPlaterId));
+	function stepPlate(delta: number) {
+		const next = plates[plateIndex + delta];
+		if (next) selectedPlaterId = next.platerId;
+	}
 	let selectedPlate = $derived(plates.find((p) => p.platerId === selectedPlaterId) ?? null);
 	let selectedAmsSlot = $derived.by(() => {
 		const tray = amsTrays.find((t) => t.key === selectedAmsTrayKey);
@@ -248,11 +254,28 @@
 						bind:value={selectedPlaterId}
 						options={plates.map((plate) => ({ value: plate.platerId, label: plate.platerName ?? `Plate ${plate.platerId}` }))}
 					/>
-					<div class="mt-1 flex h-40 items-center justify-center overflow-hidden rounded-md bg-slate-900">
+					<div class="relative mt-1 flex h-40 items-center justify-center overflow-hidden rounded-md bg-slate-900">
 						{#if selectedPlate?.thumbnailBytes}
 							<img src="data:image/png;base64,{selectedPlate.thumbnailBytes}" class="h-full w-full object-contain" alt="Plate preview" />
 						{:else}
 							<span class="text-sm text-slate-400">No plate preview</span>
+						{/if}
+						{#if plates.length > 1}
+							<button
+								type="button"
+								aria-label="Previous plate"
+								disabled={plateIndex <= 0}
+								onclick={() => stepPlate(-1)}
+								class="absolute top-1/2 left-1 -translate-y-1/2 rounded-full bg-black/50 px-2.5 py-1 text-lg text-white hover:bg-black/70 disabled:opacity-30"
+							>‹</button>
+							<button
+								type="button"
+								aria-label="Next plate"
+								disabled={plateIndex >= plates.length - 1}
+								onclick={() => stepPlate(1)}
+								class="absolute top-1/2 right-1 -translate-y-1/2 rounded-full bg-black/50 px-2.5 py-1 text-lg text-white hover:bg-black/70 disabled:opacity-30"
+							>›</button>
+							<span class="absolute bottom-1 left-1/2 -translate-x-1/2 rounded bg-black/50 px-2 text-xs text-white">{plateIndex + 1} / {plates.length}</span>
 						{/if}
 					</div>
 				{/if}
