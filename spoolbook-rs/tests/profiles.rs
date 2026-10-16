@@ -567,18 +567,110 @@ async fn new_version_keeps_the_sources_provenance_and_notes_ignoring_the_request
     assert_eq!(version_name, None);
 }
 
+async fn new_version_from(pool: &sqlx::SqlitePool, id: i64) -> i64 {
+    let (_, body) = send(pool, "POST", &format!("/api/profiles/{id}/versions"), Some(full_profile_body())).await;
+    body["profile"]["id"].as_i64().unwrap()
+}
+
 // spec: 006/FR-021
 #[tokio::test]
-async fn new_version_from_a_superseded_version_is_rejected() {
+async fn new_version_from_any_version_numbers_after_the_highest_and_selects_only_it() {
     let pool = test_pool().await;
     let filament_id = seed_filament(&pool).await;
     let v1 = create_profile(&pool, filament_id).await;
-    send(&pool, "POST", &format!("/api/profiles/{v1}/versions"), Some(full_profile_body())).await;
+    let v2 = new_version_from(&pool, v1).await;
 
     let (status, body) = send(&pool, "POST", &format!("/api/profiles/{v1}/versions"), Some(full_profile_body())).await;
 
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body["errors"]["id"], "not_current_version");
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["profile"]["versionNumber"], 3);
+    assert_eq!(body["profile"]["previousVersionProfileId"], v1);
+    assert_eq!(body["profile"]["isCurrentVersion"], true);
+    assert!(!is_current(&pool, v1).await);
+    assert!(!is_current(&pool, v2).await);
+}
+
+// spec: 006/FR-023
+#[tokio::test]
+async fn versions_lists_the_whole_set_highest_first() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    let spool_id = seed_spool(&pool, filament_id).await;
+    let printer_id = seed_printer(&pool).await;
+    attach_print(&pool, v1, spool_id, printer_id).await;
+    let v2 = new_version_from(&pool, v1).await;
+    let v3 = new_version_from(&pool, v1).await;
+    let other = create_profile(&pool, filament_id).await;
+    sqlx::query("UPDATE print_profiles SET version_name = 'Winter' WHERE id = ?1").bind(v2).execute(&pool).await.unwrap();
+
+    for from in [v1, v2, v3] {
+        let (status, body) = send(&pool, "GET", &format!("/api/profiles/{from}/versions"), None).await;
+        assert_eq!(status, StatusCode::OK);
+        let ids: Vec<i64> = body.as_array().unwrap().iter().map(|v| v["id"].as_i64().unwrap()).collect();
+        assert_eq!(ids, vec![v3, v2, v1], "same set from v{from}, never {other}");
+    }
+    let (_, body) = send(&pool, "GET", &format!("/api/profiles/{v2}/versions"), None).await;
+    let [newest, middle, oldest] = body.as_array().unwrap().as_slice() else { panic!("{body}") };
+    assert_eq!(newest["versionNumber"], 3);
+    assert_eq!(newest["selected"], true);
+    assert_eq!(newest["locked"], false);
+    assert_eq!(middle["versionName"], "Winter");
+    assert_eq!(middle["nozzleTempC"], 220);
+    assert_eq!(oldest["selected"], false);
+    assert_eq!(oldest["locked"], true);
+    assert!(oldest["createdAt"].is_string());
+
+    let (status, _) = send(&pool, "GET", "/api/profiles/999/versions", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+// spec: 006/FR-024, 006/FR-022
+#[tokio::test]
+async fn select_makes_one_version_the_selected_one() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    let v2 = new_version_from(&pool, v1).await;
+
+    let (status, _) = send(&pool, "POST", &format!("/api/profiles/{v1}/select"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(is_current(&pool, v1).await);
+    assert!(!is_current(&pool, v2).await);
+    let (_, listed) = send(&pool, "GET", &format!("/api/profiles?filamentId={filament_id}"), None).await;
+    let ids: Vec<i64> = listed.as_array().unwrap().iter().map(|p| p["id"].as_i64().unwrap()).collect();
+    assert_eq!(ids, vec![v1]);
+
+    let (status, _) = send(&pool, "POST", &format!("/api/profiles/{v1}/select"), None).await;
+    assert_eq!(status, StatusCode::OK, "selecting the selected one is a no-op");
+    assert!(is_current(&pool, v1).await);
+
+    let (status, _) = send(&pool, "POST", "/api/profiles/999/select", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+// spec: 006/FR-025
+#[tokio::test]
+async fn version_name_is_set_trimmed_or_cleared_even_when_locked() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    let spool_id = seed_spool(&pool, filament_id).await;
+    let printer_id = seed_printer(&pool).await;
+    attach_print(&pool, v1, spool_id, printer_id).await;
+    let name = |pool: sqlx::SqlitePool| async move {
+        sqlx::query_scalar::<_, Option<String>>("SELECT version_name FROM print_profiles WHERE id = ?1").bind(v1).fetch_one(&pool).await.unwrap()
+    };
+
+    let (status, _) = send(&pool, "PUT", &format!("/api/profiles/{v1}/version-name"), Some(json!({ "versionName": "  Winter 2026 " }))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(name(pool.clone()).await.as_deref(), Some("Winter 2026"));
+
+    send(&pool, "PUT", &format!("/api/profiles/{v1}/version-name"), Some(json!({ "versionName": "  " }))).await;
+    assert_eq!(name(pool.clone()).await, None);
+
+    let (status, _) = send(&pool, "PUT", "/api/profiles/999/version-name", Some(json!({ "versionName": "x" }))).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 // spec: 006/FR-021
@@ -770,4 +862,20 @@ async fn field_spec_reports_the_profiles_filament_and_spool() {
     assert!(generic_spec.as_object().unwrap().contains_key("spoolId"));
     assert_eq!(specific_spec["filamentId"], filament_id);
     assert_eq!(specific_spec["spoolId"], spool_id);
+}
+
+// spec: 006/FR-013
+#[tokio::test]
+async fn deleting_an_unselected_version_leaves_the_selection_alone() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    let v2 = new_version_from(&pool, v1).await;
+    let v3 = new_version_from(&pool, v1).await;
+
+    let (status, _) = send(&pool, "DELETE", &format!("/api/profiles/{v2}"), None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(!is_current(&pool, v1).await);
+    assert!(is_current(&pool, v3).await);
 }
