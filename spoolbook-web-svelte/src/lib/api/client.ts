@@ -44,9 +44,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 const json = (body: unknown): RequestInit => ({ method: 'POST', body: JSON.stringify(body) });
 
-// ProfileResult is the one Result type with field-level Errors (a dictionary, not a single
-// Error string) — the caller needs the parsed body even on a 400 to show them, so this variant
-// doesn't throw on !ok the way request() does.
+// For calls whose 400 body the page has to show: field-level errors (ProfileResult) or a refusal
+// code (a delete's has_prints / in_use / …). Doesn't throw on !ok the way request() does.
 async function requestAllowingError<T>(path: string, init: RequestInit): Promise<T> {
 	const res = await fetch(path, {
 		credentials: 'include',
@@ -138,7 +137,7 @@ export const getPrinter = async (id: number) => (await listPrinters()).find((p) 
 export const createPrinter = (input: PrinterInput) => request<PrinterResult>('/api/printers', json(input));
 export const updatePrinter = (id: number, input: PrinterInput) =>
 	request<PrinterResult>(`/api/printers/${id}`, { method: 'PUT', body: JSON.stringify(input) });
-export const deletePrinter = (id: number) => request<PrinterControlResult>(`/api/printers/${id}`, { method: 'DELETE' });
+export const deletePrinter = (id: number) => requestAllowingError<PrinterControlResult>(`/api/printers/${id}`, { method: 'DELETE' });
 // Blank accessCode + printerId -> the backend tests with that printer's stored code.
 export const testPrinterConnection = (ipAddress: string, accessCode: string, printerId: number | null) =>
 	request<PrinterControlResult>('/api/printers/test', json({ ipAddress, accessCode, printerId }));
@@ -192,7 +191,7 @@ export const linkProjectVersion = (projectId: number, previousVersionProjectId: 
 
 export const renameProject = (projectId: number, fileName: string) =>
 	request<ProjectResult>(`/api/projects/${projectId}`, { method: 'PUT', body: JSON.stringify({ fileName }) });
-export const deleteProject = (projectId: number) => request<{ ok: boolean; error?: string }>(`/api/projects/${projectId}`, { method: 'DELETE' });
+export const deleteProject = (projectId: number) => requestAllowingError<{ ok: boolean; error?: string }>(`/api/projects/${projectId}`, { method: 'DELETE' });
 
 export const resliceProject = (projectId: number, profileId: number) =>
 	request<ReslicingResult>(`/api/projects/${projectId}/reslice`, json({ profileId }));
@@ -312,7 +311,7 @@ export const createSpool = (filamentId: number, input: SpoolInput) =>
 	request<SpoolResult>('/api/spools', json({ filamentId, ...input }));
 export const updateSpool = (id: number, input: SpoolInput) =>
 	request<SpoolResult>(`/api/spools/${id}`, { method: 'PUT', body: JSON.stringify(input) });
-export const deleteSpool = (id: number) => request<SpoolResult>(`/api/spools/${id}`, { method: 'DELETE' });
+export const deleteSpool = (id: number) => requestAllowingError<SpoolResult>(`/api/spools/${id}`, { method: 'DELETE' });
 
 export interface FilamentInput {
 	brand: string;
@@ -333,7 +332,7 @@ export const listAllFilaments = () => request<Filament[]>('/api/filaments/all');
 export const createFilament = (input: FilamentInput) => request<FilamentResult>('/api/filaments', json(input));
 export const updateFilament = (id: number, input: FilamentInput) =>
 	request<FilamentResult>(`/api/filaments/${id}`, { method: 'PUT', body: JSON.stringify(input) });
-export const deleteFilament = (id: number) => request<FilamentResult>(`/api/filaments/${id}`, { method: 'DELETE' });
+export const deleteFilament = (id: number) => requestAllowingError<FilamentResult>(`/api/filaments/${id}`, { method: 'DELETE' });
 export const syncFilamentCatalog = () =>
 	request<{ ok: boolean; error?: string; added?: number; skipped?: number }>('/api/filaments/sync', { method: 'POST' });
 export const listFilamentColors = () => request<FilamentColor[]>('/api/filament-colors');

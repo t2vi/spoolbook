@@ -48,7 +48,7 @@ beyond the notes columns.
   |---|---|
   | unit | pure-fn tests in `spoolbook-rs/tests/*.rs` that call a module fn directly, no router/DB (parsers, patchers, extractors) |
   | integration | `spoolbook-rs/tests/*.rs` driving an `axum::Router` (`tower::ServiceExt::oneshot`) against an in-memory SQLite (`tests/common/`) |
-  | e2e | none yet — `spoolbook-web-svelte` has no test runner |
+  | e2e | Playwright in `spoolbook-web-svelte/e2e/*.e2e.ts` (`npm run test:e2e`): builds the app, boots the real `spoolbook-rs` against a throwaway DB, drives Chromium; tags are `// spec: NNN/FR-…` |
   | live (not counted) | `#[ignore]`d tests needing a real printer on the LAN (`tests/printer_live.rs`), run by hand |
 
 - **Surface sources — fill in per project**: the files the audit enumerates, one row per kind
