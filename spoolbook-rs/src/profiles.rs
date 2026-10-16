@@ -19,6 +19,11 @@ pub struct PrintProfile {
     // leaves this None and serde's default omits it, same as source_preset_path/version_name.
     #[sqlx(skip)]
     pub filament: Option<crate::filaments::Filament>,
+    // Likewise only from inventory(): the spool of a spool-specific profile (its lot code is the
+    // list's Scope column).
+    #[sqlx(skip)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spool: Option<crate::spools::Spool>,
     pub spool_id: Option<i64>,
     pub name: String,
     pub print_speed_mm_s: Option<i64>,
@@ -561,20 +566,59 @@ async fn list_for_filament(
     Json(profiles)
 }
 
-async fn inventory(State(pool): State<SqlitePool>) -> Json<ProfileInventoryResult> {
-    let total = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM print_profiles WHERE is_current_version = 1")
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct InventoryQuery {
+    brand: Option<String>,
+    material: Option<String>,
+    scope: Option<String>,
+    sort: Option<String>,
+    order: Option<String>,
+    page: Option<i64>,
+    page_size: Option<i64>,
+}
+
+// The profile list's filtered, sorted, paged view of every selected version (006/FR-002).
+async fn inventory(State(pool): State<SqlitePool>, Query(q): Query<InventoryQuery>) -> Json<ProfileInventoryResult> {
+    let page = q.page.filter(|p| *p > 0).unwrap_or(1);
+    let page_size = q.page_size.filter(|p| *p > 0).unwrap_or(20);
+    let direction = if q.order.as_deref() == Some("desc") { "DESC" } else { "ASC" };
+    // Whitelisted, never interpolated from the request as-is.
+    let order_by = match q.sort.as_deref() {
+        Some("name") => format!("name {direction}, id"),
+        Some("nozzleTemp") => format!("nozzle_temp_c {direction}, name"),
+        Some("created") => format!("created_at {direction}, id {direction}"),
+        _ => format!("f_brand {direction}, f_material {direction}, created_at, id"),
+    };
+    let scope = match q.scope.as_deref() {
+        Some("generic") => "spool_id IS NULL",
+        Some("spool") => "spool_id IS NOT NULL",
+        _ => "1",
+    };
+    let blank_is_none = |v: Option<String>| v.filter(|v| !v.trim().is_empty());
+    let (brand, material) = (blank_is_none(q.brand), blank_is_none(q.material));
+    // Wrapped so COLUMNS (unqualified) doesn't clash with the filament's own id.
+    let filter = format!(
+        "FROM (SELECT pp.*, f.brand AS f_brand, f.material AS f_material FROM print_profiles pp JOIN filaments f ON f.id = pp.filament_id)
+         WHERE is_current_version = 1 AND (?1 IS NULL OR f_brand = ?1) AND (?2 IS NULL OR f_material = ?2) AND {scope}"
+    );
+
+    let total: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) {filter}"))
+        .bind(&brand)
+        .bind(&material)
         .fetch_one(&pool)
         .await
         .expect("query failed");
-
-    let sql = format!("SELECT {COLUMNS} FROM print_profiles WHERE is_current_version = 1 ORDER BY name");
-    let mut profiles = sqlx::query_as::<_, PrintProfile>(&sql)
+    let mut profiles = sqlx::query_as::<_, PrintProfile>(&format!("SELECT {COLUMNS} {filter} ORDER BY {order_by} LIMIT ?3 OFFSET ?4"))
+        .bind(&brand)
+        .bind(&material)
+        .bind(page_size)
+        .bind((page - 1) * page_size)
         .fetch_all(&pool)
         .await
         .expect("query failed");
 
-    // Per-row lookup rather than a join or an IN-clause batch: matches the "small personal
-    // catalog" scale this endpoint already assumes (see the pagination note below).
+    // Per-row lookups: one page of a personal catalog.
     for profile in &mut profiles {
         profile.filament = sqlx::query_as::<_, crate::filaments::Filament>(
             "SELECT id, brand, material, variant, color FROM filaments WHERE id = ?1",
@@ -583,12 +627,13 @@ async fn inventory(State(pool): State<SqlitePool>) -> Json<ProfileInventoryResul
         .fetch_optional(&pool)
         .await
         .expect("query failed");
+        if let Some(spool_id) = profile.spool_id {
+            profile.spool = crate::spools::fetch_by_id(&pool, spool_id).await;
+        }
     }
 
-    // No pagination on this endpoint yet (matches .NET's ProfileInventoryService — small
-    // personal catalog, page/pageSize are reported but not yet enforced).
-    let page_size = total.max(1);
-    Json(ProfileInventoryResult { profiles, total, page: 1, page_size, total_pages: 1 })
+    let total_pages = ((total + page_size - 1) / page_size).max(1);
+    Json(ProfileInventoryResult { profiles, total, page, page_size, total_pages })
 }
 
 fn validation_error(field: &str, message: &str) -> (StatusCode, Json<ProfileResult>) {

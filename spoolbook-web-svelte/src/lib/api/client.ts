@@ -227,10 +227,12 @@ export interface SpoolInventoryResult {
 export const listSpoolInventory = (query: URLSearchParams) => request<SpoolInventoryResult>(`/api/spools/inventory?${query}`);
 export const listProfilesForFilament = (filamentId: number) =>
 	request<PrintProfile[]>(`/api/profiles?filamentId=${filamentId}`);
-export const searchProfiles = () => request<ProfileInventoryResult>('/api/profiles/inventory');
+// `query` is the /profiles page's own URL query (brand, material, scope, sort, order, page,
+// pageSize), passed through as-is.
+export const listProfileInventory = (query: URLSearchParams) => request<ProfileInventoryResult>(`/api/profiles/inventory?${query}`);
 export const getProfileFieldSpec = (profileId: number | null) =>
 	request<ProfileFieldSpecResponse>(`/api/profiles/field-spec${profileId === null ? '' : `?profileId=${profileId}`}`);
-export const deleteProfile = (id: number) => request<ApiResult>(`/api/profiles/${id}`, { method: 'DELETE' });
+export const deleteProfile = (id: number) => requestAllowingError<ApiResult>(`/api/profiles/${id}`, { method: 'DELETE' });
 
 // Accepts a sliced .3mf or a raw Bambu Studio preset export (.json) -- format is auto-detected
 // server-side (github.com/t2vi/spoolbook/issues/99).
