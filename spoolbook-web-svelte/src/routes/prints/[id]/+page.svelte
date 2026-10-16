@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { unsavedGuard } from '$lib/unsaved.svelte';
 	import ColorSwatch from '$lib/components/color-swatch.svelte';
 	import { hexFor } from '$lib/color-hexes.svelte';
 	import { Badge } from '$lib/components/ui/badge/index.js';
@@ -69,6 +70,14 @@
 	let draft = $state<PrintOutcome>({ status: 'Success', failureModes: [], notes: null, actualRoomTempC: null, cleanBuildPlate: null });
 	let roomTempText = $state('');
 	let outcomeError = $state<string | null>(null);
+	// Guarded only while the dialog is open (002/FR-008); every way of closing it marks it clean.
+	const unsaved = unsavedGuard({ outcome: () => (editing ? [draft, roomTempText] : null) });
+	unsaved.markClean();
+
+	function closeEditor() {
+		editing = false;
+		unsaved.markClean();
+	}
 
 	function startEditing() {
 		if (!print || print.status === 'InProgress') return;
@@ -82,6 +91,7 @@
 		roomTempText = print.actualRoomTempC?.toString() ?? '';
 		outcomeError = null;
 		editing = true;
+		unsaved.markClean();
 	}
 
 	function toggleMode(mode: FailureMode, on: boolean) {
@@ -106,7 +116,7 @@
 			return;
 		}
 		print = result.print;
-		editing = false;
+		closeEditor();
 	}
 
 	function statusBadgeClass(status: Print['status']) {
@@ -343,7 +353,7 @@
 </div>
 
 {#if editing}
-	<Dialog.Root open={true} onOpenChange={(open) => !open && (editing = false)}>
+	<Dialog.Root open={true} onOpenChange={(open) => !open && closeEditor()}>
 		<Dialog.Content class="max-w-md">
 			<Dialog.Header>
 				<Dialog.Title>Edit outcome</Dialog.Title>
@@ -384,7 +394,7 @@
 				{#if outcomeError}<p class="text-sm text-destructive">{outcomeError}</p>{/if}
 			</div>
 			<Dialog.Footer>
-				<Button variant="ghost" onclick={() => (editing = false)}>Cancel</Button>
+				<Button variant="ghost" onclick={closeEditor}>Cancel</Button>
 				<Button onclick={saveOutcome}>Save</Button>
 			</Dialog.Footer>
 		</Dialog.Content>

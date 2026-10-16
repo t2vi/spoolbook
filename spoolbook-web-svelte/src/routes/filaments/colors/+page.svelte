@@ -10,6 +10,7 @@
 	import ColorSwatch from '$lib/components/color-swatch.svelte';
 	import Picker from '$lib/components/picker.svelte';
 	import { refreshColorHexes } from '$lib/color-hexes.svelte';
+	import { unsavedGuard } from '$lib/unsaved.svelte';
 	import { createColor, deleteColor, listColorInventory, updateColor } from '$lib/api/client';
 	import type { ColorInventoryResult } from '$lib/api/client';
 	import type { FilamentColor } from '$lib/api/types';
@@ -42,10 +43,19 @@
 	// Add / edit
 	let editing = $state<{ id: number | null; name: string; hex: string } | null>(null);
 	let formError = $state<string | null>(null);
+	// Guarded only while the dialog is open (002/FR-008); every way of closing it marks it clean.
+	const unsaved = unsavedGuard({ color: () => editing });
+	unsaved.markClean();
+
+	function closeEditor() {
+		editing = null;
+		unsaved.markClean();
+	}
 
 	function openEditor(color: FilamentColor | null) {
 		editing = color ? { id: color.id, name: color.name, hex: color.hex } : { id: null, name: '', hex: '#' };
 		formError = null;
+		unsaved.markClean();
 	}
 
 	async function save() {
@@ -60,7 +70,7 @@
 						: (r.error ?? 'Save failed.');
 			return;
 		}
-		editing = null;
+		closeEditor();
 		refreshColorHexes();
 		await load();
 	}
@@ -188,7 +198,7 @@
 </div>
 
 {#if editing}
-	<Dialog.Root open={true} onOpenChange={(open) => !open && (editing = null)}>
+	<Dialog.Root open={true} onOpenChange={(open) => !open && closeEditor()}>
 		<Dialog.Content class="max-w-md">
 			<Dialog.Header>
 				<Dialog.Title>{editing.id === null ? 'Add color' : 'Edit color'}</Dialog.Title>
@@ -209,7 +219,7 @@
 				{#if formError}<p class="text-sm text-destructive">{formError}</p>{/if}
 			</div>
 			<Dialog.Footer>
-				<Button variant="ghost" onclick={() => (editing = null)}>Cancel</Button>
+				<Button variant="ghost" onclick={closeEditor}>Cancel</Button>
 				<Button onclick={save}>Save</Button>
 			</Dialog.Footer>
 		</Dialog.Content>
