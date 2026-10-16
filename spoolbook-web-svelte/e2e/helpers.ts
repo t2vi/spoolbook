@@ -75,3 +75,14 @@ export function attachProject(printId: number, projectId: number) {
 		db.close();
 	}
 }
+
+// Makes this install forget it produced/imported a bundle, so its own export imports like one
+// from another install (002/FR-046).
+export function forgetBundles() {
+	const db = new DatabaseSync(DB_PATH);
+	try {
+		db.exec('DELETE FROM data_bundles');
+	} finally {
+		db.close();
+	}
+}
