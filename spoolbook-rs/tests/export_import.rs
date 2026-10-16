@@ -537,3 +537,63 @@ async fn an_import_row_without_an_id_is_a_400_not_a_crash() {
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
     assert_eq!(body["ok"], false);
 }
+
+async fn filament_count(pool: &sqlx::SqlitePool) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM filaments").fetch_one(pool).await.unwrap()
+}
+
+fn manifest_with_one_filament(bundle_id: Option<&str>) -> serde_json::Value {
+    let mut m = empty_manifest();
+    m["filaments"] = serde_json::json!([{ "id": 1, "brand": "Bambu Lab", "material": "PLA", "variant": "Basic", "color": "Black" }]);
+    if let Some(id) = bundle_id {
+        m["bundleId"] = serde_json::json!(id);
+    }
+    m
+}
+
+// spec: 002/FR-046
+#[tokio::test]
+async fn a_bundle_is_refused_once_imported() {
+    let pool = test_pool().await;
+    let zip = build_zip(&manifest_with_one_filament(Some("bundle-1")));
+
+    let (status, body) = post_zip(&pool, "/api/import/commit", &zip).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(filament_count(&pool).await, 1);
+
+    for uri in ["/api/import/preview", "/api/import/commit"] {
+        let (status, body) = post_zip(&pool, uri, &zip).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{uri}: {body}");
+        assert_eq!(body["error"], "already_imported");
+    }
+    assert_eq!(filament_count(&pool).await, 1, "nothing changed");
+
+    let (status, _) = post_zip(&pool, "/api/import/commit", &build_zip(&manifest_with_one_filament(Some("bundle-2")))).await;
+    assert_eq!(status, StatusCode::OK, "a different bundle still imports");
+}
+
+// spec: 002/FR-046
+#[tokio::test]
+async fn an_install_refuses_its_own_export() {
+    let pool = test_pool().await;
+    sqlx::query("INSERT INTO filaments (brand, material, variant, color) VALUES ('Bambu Lab', 'PLA', 'Basic', 'Black')").execute(&pool).await.unwrap();
+
+    let (status, bytes) = get_bytes(&pool, "/api/export", true).await;
+    assert_eq!(status, StatusCode::OK);
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(&bytes)).unwrap();
+    let manifest: serde_json::Value = serde_json::from_reader(archive.by_name("manifest.json").unwrap()).unwrap();
+    assert!(manifest["bundleId"].as_str().is_some_and(|id| id.len() >= 16), "{manifest}");
+
+    let (status, body) = post_zip(&pool, "/api/import/preview", &bytes).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "already_imported");
+}
+
+// spec: 002/FR-046
+#[tokio::test]
+async fn an_export_without_a_bundle_id_imports_as_before() {
+    let pool = test_pool().await;
+    let zip = build_zip(&manifest_with_one_filament(None));
+    assert_eq!(post_zip(&pool, "/api/import/commit", &zip).await.0, StatusCode::OK);
+    assert_eq!(post_zip(&pool, "/api/import/commit", &zip).await.0, StatusCode::OK, "no id, nothing to refuse");
+}

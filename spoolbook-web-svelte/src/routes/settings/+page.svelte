@@ -48,6 +48,7 @@
 	let importResult = $state<ImportCommitResult | null>(null);
 	let importError = $state<string | null>(null);
 	let importBusy = $state(false);
+	let importInput = $state<HTMLInputElement | null>(null);
 
 	// Three forms, each saved on its own (002/FR-008).
 	const unsaved = unsavedGuard({
@@ -57,6 +58,12 @@
 	});
 	unsaved.markClean('account');
 
+	// The API's refusal codes, in words (002/FR-046); anything else is already a sentence.
+	const importErrorText = (e: unknown, fallback: string) => {
+		const message = e instanceof Error ? e.message : fallback;
+		return message === 'already_imported' ? 'This export has already been imported here (or was made by this install).' : message;
+	};
+
 	async function runPreviewImport() {
 		if (!importFile) return;
 		importError = null;
@@ -65,7 +72,7 @@
 		try {
 			importPreview = await previewImport(importFile);
 		} catch (e) {
-			importError = e instanceof Error ? e.message : 'Preview failed.';
+			importError = importErrorText(e, 'Preview failed.');
 		} finally {
 			importBusy = false;
 		}
@@ -79,8 +86,10 @@
 			importResult = await commitImport(importFile);
 			importPreview = null;
 			importFile = null;
+			// Otherwise choosing the same file again fires no change and nothing happens.
+			if (importInput) importInput.value = '';
 		} catch (e) {
-			importError = e instanceof Error ? e.message : 'Import failed.';
+			importError = importErrorText(e, 'Import failed.');
 		} finally {
 			importBusy = false;
 		}
@@ -242,6 +251,7 @@
 						</p>
 						<input
 							id="import-file"
+							bind:this={importInput}
 							type="file"
 							accept=".zip"
 							onchange={(e) => {
