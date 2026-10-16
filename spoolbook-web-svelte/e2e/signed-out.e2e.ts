@@ -25,3 +25,14 @@ test('signing in with username and password lands on the app', async ({ page }) 
 	await page.getByRole('button', { name: 'Sign in' }).click();
 	await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible();
 });
+
+// spec: 008/FR-016
+test('after 5 failed sign-ins the sign-in page says to try again later', async ({ page }) => {
+	const username = `locked-${Date.now()}`;
+	for (let i = 0; i < 5; i++) await page.request.post('/api/login', { data: { username, password: 'wrong' } });
+	await page.goto('/login');
+	await page.getByPlaceholder('Username').fill(username);
+	await page.getByPlaceholder('Password').fill('wrong');
+	await page.getByRole('button', { name: 'Sign in' }).click();
+	await expect(page.getByText('Too many failed attempts. Try again in 15 minutes.')).toBeVisible();
+});

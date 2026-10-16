@@ -378,3 +378,86 @@ async fn account_update_accepts_the_users_own_current_username() {
 
     assert_eq!(status, StatusCode::OK, "{body:?}");
 }
+
+async fn session_count(pool: &sqlx::SqlitePool) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM sessions").fetch_one(pool).await.unwrap()
+}
+
+async fn login(pool: &sqlx::SqlitePool, username: &str, password: &str) -> (StatusCode, Option<String>, Value) {
+    send(pool, "POST", "/api/login", None, Some(json!({ "username": username, "password": password }))).await
+}
+
+async fn signed_in(pool: &sqlx::SqlitePool, cookie: &str) -> bool {
+    send(pool, "GET", "/api/me", Some(cookie), None).await.2["authenticated"] == true
+}
+
+// spec: 008/FR-015
+#[tokio::test]
+async fn creating_a_session_deletes_expired_ones() {
+    let pool = test_pool().await;
+    setup_user(&pool, "admin", "correct-horse").await;
+    let user_id: i64 = sqlx::query_scalar("SELECT id FROM users").fetch_one(&pool).await.unwrap();
+    let past = (chrono::Utc::now() - chrono::Duration::days(1)).to_rfc3339();
+    sqlx::query("INSERT INTO sessions (id, user_id, expires_at) VALUES ('stale-1', ?1, ?2), ('stale-2', ?1, ?2)").bind(user_id).bind(&past).execute(&pool).await.unwrap();
+    assert_eq!(session_count(&pool).await, 3);
+
+    let (status, _, _) = login(&pool, "admin", "correct-horse").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(session_count(&pool).await, 2, "both expired rows gone; the setup session and the new one stay");
+}
+
+// spec: 008/FR-016
+#[tokio::test]
+async fn sign_in_is_throttled_after_five_failures_and_a_success_clears_it() {
+    let pool = test_pool().await;
+    setup_user(&pool, "admin", "correct-horse").await;
+
+    for _ in 0..4 {
+        assert_eq!(login(&pool, "admin", "wrong").await.0, StatusCode::UNAUTHORIZED);
+    }
+    assert_eq!(login(&pool, "admin", "correct-horse").await.0, StatusCode::OK, "4 failures don't lock");
+    for _ in 0..5 {
+        assert_eq!(login(&pool, "admin", "wrong").await.0, StatusCode::UNAUTHORIZED, "the success cleared the earlier 4");
+    }
+
+    let (status, set_cookie, body) = login(&pool, "admin", "correct-horse").await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(body["error"], "too_many_attempts");
+    assert!(set_cookie.is_none(), "no session while throttled");
+
+    // Once the failures are 15 minutes old, the right password works again.
+    sqlx::query("UPDATE login_attempts SET attempted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-16 minutes')").execute(&pool).await.unwrap();
+    assert_eq!(login(&pool, "admin", "correct-horse").await.0, StatusCode::OK);
+    let left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM login_attempts").fetch_one(&pool).await.unwrap();
+    assert_eq!(left, 0);
+}
+
+// spec: 008/FR-016
+#[tokio::test]
+async fn unknown_usernames_are_throttled_too() {
+    let pool = test_pool().await;
+    setup_user(&pool, "admin", "correct-horse").await;
+    for _ in 0..5 {
+        assert_eq!(login(&pool, "ghost", "x").await.0, StatusCode::UNAUTHORIZED);
+    }
+    assert_eq!(login(&pool, "ghost", "x").await.0, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(login(&pool, "admin", "correct-horse").await.0, StatusCode::OK, "other usernames are unaffected");
+}
+
+// spec: 008/FR-022
+#[tokio::test]
+async fn changing_the_password_ends_every_other_session() {
+    let pool = test_pool().await;
+    let here = setup_user(&pool, "admin", "correct-horse").await;
+    let elsewhere = extract_cookie_pair(&login(&pool, "admin", "correct-horse").await.1.unwrap()).to_string();
+
+    let (status, _, _) = send(&pool, "PUT", "/api/account", Some(&here), Some(json!({ "currentPassword": "correct-horse", "newUsername": "boss" }))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(signed_in(&pool, &elsewhere).await, "a username change ends nothing");
+
+    let (status, _, _) = send(&pool, "PUT", "/api/account", Some(&here), Some(json!({ "currentPassword": "correct-horse", "newPassword": "battery-staple" }))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(signed_in(&pool, &here).await, "the session that changed it stays");
+    assert!(!signed_in(&pool, &elsewhere).await, "every other session ends");
+}

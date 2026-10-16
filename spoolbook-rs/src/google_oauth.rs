@@ -116,6 +116,12 @@ struct PendingOAuth {
 
 const STATE_TTL: Duration = Duration::from_secs(300);
 
+// Abandoned sign-ins never reach the callback that would remove them, so expired states are
+// dropped each time a new sign-in starts (008/FR-036).
+fn prune_expired(states: &mut HashMap<String, PendingOAuth>, now: Instant) {
+    states.retain(|_, p| now.duration_since(p.created_at) < STATE_TTL);
+}
+
 fn oauth_states() -> &'static Mutex<HashMap<String, PendingOAuth>> {
     static STATES: OnceLock<Mutex<HashMap<String, PendingOAuth>>> = OnceLock::new();
     STATES.get_or_init(|| Mutex::new(HashMap::new()))
@@ -127,7 +133,10 @@ async fn login(State(pool): State<SqlitePool>, headers: HeaderMap) -> Response {
     };
     let linking_user_id = current_user_id(&pool, &headers).await;
     let state = generate_session_token();
-    oauth_states().lock().unwrap().insert(state.clone(), PendingOAuth { linking_user_id, created_at: Instant::now() });
+    let mut states = oauth_states().lock().unwrap();
+    prune_expired(&mut states, Instant::now());
+    states.insert(state.clone(), PendingOAuth { linking_user_id, created_at: Instant::now() });
+    drop(states);
     Redirect::to(&build_authorize_url(&config, &state)).into_response()
 }
 
@@ -232,4 +241,21 @@ async fn callback(Query(q): Query<CallbackQuery>, State(pool): State<SqlitePool>
 async fn unlink(editor: Editor, State(pool): State<SqlitePool>) -> Response {
     sqlx::query("UPDATE users SET google_sub = NULL WHERE id = ?1").bind(editor.user_id).execute(&pool).await.expect("update failed");
     (StatusCode::OK, Json(json!({ "ok": true }))).into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // spec: 008/FR-036
+    #[test]
+    fn prune_drops_only_expired_states() {
+        let now = Instant::now();
+        let at = |secs: u64| PendingOAuth { linking_user_id: None, created_at: now.checked_sub(Duration::from_secs(secs)).unwrap() };
+        let mut states = HashMap::from([("fresh".to_string(), at(10)), ("stale".to_string(), at(301)), ("old".to_string(), at(3600))]);
+
+        prune_expired(&mut states, now);
+
+        assert_eq!(states.keys().collect::<Vec<_>>(), vec!["fresh"]);
+    }
 }

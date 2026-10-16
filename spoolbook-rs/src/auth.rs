@@ -50,6 +50,8 @@ pub(crate) fn set_cookie_header(value: &str) -> HeaderMap {
 }
 
 pub(crate) async fn create_session(pool: &SqlitePool, user_id: i64) -> String {
+    // Expired sessions are only ever rejected on use, so clear them out here (008/FR-015).
+    sqlx::query("DELETE FROM sessions WHERE expires_at < ?1").bind(Utc::now().to_rfc3339()).execute(pool).await.expect("delete failed");
     let token = generate_session_token();
     let expires_at = (Utc::now() + Duration::days(SESSION_TTL_DAYS)).to_rfc3339();
     sqlx::query("INSERT INTO sessions (id, user_id, expires_at) VALUES (?1, ?2, ?3)")
@@ -192,20 +194,41 @@ struct LoginRequest {
     password: String,
 }
 
+// Sign-in throttle (008/FR-016): 5 failures for a username within 15 minutes locks it until the
+// oldest is 15 minutes old. Keyed by the username typed, known or not, so it reveals nothing.
+const MAX_FAILED_LOGINS: i64 = 5;
+const LOGIN_WINDOW: &str = "-15 minutes";
+
 async fn login(axum::extract::State(pool): axum::extract::State<SqlitePool>, Json(req): Json<LoginRequest>) -> Response {
+    let recent_failures: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM login_attempts WHERE username = ?1 AND attempted_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?2)",
+    )
+    .bind(&req.username)
+    .bind(LOGIN_WINDOW)
+    .fetch_one(&pool)
+    .await
+    .expect("query failed");
+    if recent_failures >= MAX_FAILED_LOGINS {
+        return (StatusCode::TOO_MANY_REQUESTS, Json(json!({ "ok": false, "error": "too_many_attempts" }))).into_response();
+    }
+
     let row = sqlx::query_as::<_, (i64, String)>("SELECT id, password_hash FROM users WHERE username = ?1")
         .bind(&req.username)
         .fetch_optional(&pool)
         .await
         .expect("query failed");
 
-    let Some((user_id, hash)) = row else {
+    let Some(user_id) = row.filter(|(_, hash)| verify_password(&req.password, hash)).map(|(id, _)| id) else {
+        sqlx::query("DELETE FROM login_attempts WHERE attempted_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?1)")
+            .bind(LOGIN_WINDOW)
+            .execute(&pool)
+            .await
+            .expect("delete failed");
+        sqlx::query("INSERT INTO login_attempts (username) VALUES (?1)").bind(&req.username).execute(&pool).await.expect("insert failed");
         return (StatusCode::UNAUTHORIZED, Json(json!({ "ok": false }))).into_response();
     };
-    if !verify_password(&req.password, &hash) {
-        return (StatusCode::UNAUTHORIZED, Json(json!({ "ok": false }))).into_response();
-    }
 
+    sqlx::query("DELETE FROM login_attempts WHERE username = ?1").bind(&req.username).execute(&pool).await.expect("delete failed");
     let token = create_session(&pool, user_id).await;
     (set_cookie_header(&token), Json(json!({ "ok": true }))).into_response()
 }
@@ -236,7 +259,12 @@ struct UpdateAccountRequest {
     new_password: Option<String>,
 }
 
-async fn update_account(editor: Editor, axum::extract::State(pool): axum::extract::State<SqlitePool>, Json(req): Json<UpdateAccountRequest>) -> Response {
+async fn update_account(
+    editor: Editor,
+    axum::extract::State(pool): axum::extract::State<SqlitePool>,
+    headers: HeaderMap,
+    Json(req): Json<UpdateAccountRequest>,
+) -> Response {
     let current_hash: String = sqlx::query_scalar("SELECT password_hash FROM users WHERE id = ?1")
         .bind(editor.user_id)
         .fetch_one(&pool)
@@ -273,6 +301,13 @@ async fn update_account(editor: Editor, axum::extract::State(pool): axum::extrac
     if let Some(password) = new_password {
         let hash = hash_password(password);
         sqlx::query("UPDATE users SET password_hash = ?1 WHERE id = ?2").bind(hash).bind(editor.user_id).execute(&mut *tx).await.expect("update failed");
+        // A new password ends every other session, so a stolen cookie stops working (008/FR-022).
+        sqlx::query("DELETE FROM sessions WHERE user_id = ?1 AND id IS NOT ?2")
+            .bind(editor.user_id)
+            .bind(get_cookie(&headers, COOKIE_NAME))
+            .execute(&mut *tx)
+            .await
+            .expect("delete failed");
     }
     tx.commit().await.expect("commit failed");
 
