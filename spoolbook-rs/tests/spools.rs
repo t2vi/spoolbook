@@ -175,7 +175,7 @@ async fn delete_rejects_a_spool_with_prints() {
     .await
     .unwrap();
     let printer_id = seed_printer(&pool).await;
-    send(&pool, "POST", "/api/prints", Some(json!({
+    common::create_print(&pool, Some(json!({
         "profileId": profile_id, "spoolId": id, "printerId": printer_id,
         "input": {
             "startedAt": "2026-08-15T10:00:00Z", "endedAt": "2026-08-15T12:00:00Z",
@@ -279,4 +279,67 @@ async fn update_rejects_dates_out_of_order() {
     assert_eq!(body["error"], "Dates are out of order — purchased, then opened, then emptied.");
     let purchased: Option<String> = sqlx::query_scalar("SELECT purchased_at FROM spools WHERE id = ?1").bind(id).fetch_one(&pool).await.unwrap();
     assert_eq!(purchased.as_deref(), Some("2026-08-01"), "unchanged");
+}
+
+async fn add_filament(pool: &sqlx::SqlitePool, brand: &str, material: &str) -> i64 {
+    let (_, body) = send(pool, "POST", "/api/filaments", Some(json!({ "brand": brand, "material": material, "variant": null, "color": "Red" }))).await;
+    body["entry"]["id"].as_i64().unwrap()
+}
+
+async fn add_spool(pool: &sqlx::SqlitePool, filament_id: i64, lot: &str, purchased: Option<&str>, opened: Option<&str>, emptied: Option<&str>) {
+    let mut body = spool_body(filament_id, purchased, opened, emptied);
+    body["lotCode"] = json!(lot);
+    let (status, _) = send(pool, "POST", "/api/spools", Some(body)).await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+fn lots(body: &Value) -> Vec<&str> {
+    body["spools"].as_array().unwrap().iter().map(|s| s["lotCode"].as_str().unwrap()).collect()
+}
+
+// spec: 007/FR-034
+#[tokio::test]
+async fn inventory_filters_sorts_and_pages() {
+    let pool = test_pool().await;
+    let pla = add_filament(&pool, "Polymaker", "PLA").await;
+    let petg = add_filament(&pool, "Bambu Lab", "PETG").await;
+    add_spool(&pool, pla, "unopened", Some("2026-03-10"), None, None).await;
+    add_spool(&pool, pla, "opened", Some("2026-01-05T09:00:00Z"), Some("2026-02-01"), None).await;
+    add_spool(&pool, petg, "empty", Some("2026-02-20"), Some("2026-02-21"), Some("2026-04-01")).await;
+    add_spool(&pool, petg, "undated", None, None, None).await;
+
+    let get = |query: &'static str| {
+        let pool = pool.clone();
+        async move {
+            let (status, body) = send(&pool, "GET", &format!("/api/spools/inventory?{query}"), None).await;
+            assert_eq!(status, StatusCode::OK, "{query}: {body}");
+            body
+        }
+    };
+
+    // Default: by filament (brand, material), then oldest created.
+    let all = get("").await;
+    assert_eq!(lots(&all), ["empty", "undated", "unopened", "opened"]);
+    assert_eq!((all["total"].as_i64(), all["page"].as_i64(), all["pageSize"].as_i64(), all["totalPages"].as_i64()), (Some(4), Some(1), Some(20), Some(1)));
+    assert_eq!(all["spools"][0]["filament"]["brand"], "Bambu Lab");
+
+    assert_eq!(lots(&get("brand=Polymaker").await), ["unopened", "opened"]);
+    assert_eq!(lots(&get("material=PETG").await), ["empty", "undated"]);
+    assert_eq!(lots(&get("brand=Polymaker&material=PETG").await), Vec::<&str>::new());
+    assert_eq!(lots(&get("status=Unopened").await), ["undated", "unopened"]);
+    assert_eq!(lots(&get("status=Opened").await), ["opened"]);
+    assert_eq!(lots(&get("status=Empty").await), ["empty"]);
+    // Inclusive calendar days; a timestamp on the boundary day counts.
+    assert_eq!(lots(&get("purchasedFrom=2026-01-05&purchasedTo=2026-02-20").await), ["empty", "opened"]);
+
+    // Date sorts: spools without that date always last, either direction.
+    assert_eq!(lots(&get("sort=purchasedAt").await), ["opened", "empty", "unopened", "undated"]);
+    assert_eq!(lots(&get("sort=purchasedAt&order=desc").await), ["unopened", "empty", "opened", "undated"]);
+    assert_eq!(lots(&get("sort=openedAt&order=desc").await), ["empty", "opened", "unopened", "undated"]);
+    assert_eq!(lots(&get("sort=emptiedAt").await)[0], "empty");
+
+    let paged = get("sort=purchasedAt&page=2&pageSize=3").await;
+    assert_eq!(lots(&paged), ["undated"]);
+    assert_eq!((paged["total"].as_i64(), paged["totalPages"].as_i64()), (Some(4), Some(2)));
+    assert_eq!(get("page=0&pageSize=-1").await["pageSize"], 20);
 }

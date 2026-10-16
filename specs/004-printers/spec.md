@@ -22,7 +22,7 @@ background telemetry connection itself is spec 001.
 
 ### Configuration
 
-- **FR-001** — `GET /api/printers` (open) lists Printers ordered by name.
+- **FR-001** — `GET /api/printers` (signed in) lists Printers ordered by name.
   *Verify: integration*
 - **FR-002** — A Printer's access code is write-only: no API response ever contains it.
   Printers carry `hasAccessCode` (true when one is stored) instead. *Verify: integration*
@@ -42,7 +42,7 @@ background telemetry connection itself is spec 001.
 
 ### Live status & control
 
-- **FR-010** — `GET /api/printers/{id}/live` (open) is a server-sent-event stream emitting the
+- **FR-010** — `GET /api/printers/{id}/live` (signed in) is a server-sent-event stream emitting the
   Printer's live snapshot every 2 s; a Printer with no live connection reports
   `connected: false`. *Verify: integration*
 - **FR-011** — Status reports are parsed for `gcode_state`, `task_id`, nozzle/bed/chamber
@@ -107,8 +107,10 @@ background telemetry connection itself is spec 001.
 
 - **FR-050** — `/printers` shows a card per printer: connection + print state, decoded errors,
   AMS trays, live camera (with retry / pop-out), pause/resume/stop, its 5 most recent Prints,
-  and a Print modal (upload or pick a project plate, spool, profile with a recommended
-  default, AMS tray, optional re-slice) that sends the print. *Verify: e2e*
+  and a Print modal (upload, paste a `.3mf` URL (005/FR-003) or pick a project; plate; spool;
+  profile with a recommended default; AMS tray; optional re-slice) that sends the print. The
+  plate preview steps through a multi-plate project with ‹ / › and shows "n / N"; the spool and
+  profile pickers show filament swatches (007/FR-051). *Verify: e2e*
 - **FR-051** — `/printers/new` and `/printers/edit/[id]` edit name, model (dropdown), IP,
   access code, serial, with a Test Connection button; delete is offered from the card.
   *Verify: e2e*

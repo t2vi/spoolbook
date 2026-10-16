@@ -107,6 +107,35 @@ where
     }
 }
 
+// The only /api routes reachable without a session: what's needed to sign in (or set up the
+// first account), and the version for the login page's Source link.
+const OPEN_ROUTES: &[&str] = &[
+    "/api/setup-status",
+    "/api/setup",
+    "/api/login",
+    "/api/logout",
+    "/api/me",
+    "/api/version",
+    "/api/auth/google/status",
+    "/api/auth/google/login",
+    "/api/auth/google/callback",
+];
+
+// Applied to the whole app (lib.rs): nothing under /api is visible without signing in. One gate
+// every route passes through, so a new read route can't be left open by forgetting an extractor.
+// Mutations still need an Editor on top of this.
+pub async fn require_session(
+    axum::extract::State(pool): axum::extract::State<SqlitePool>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    let path = request.uri().path();
+    if path.starts_with("/api/") && !OPEN_ROUTES.contains(&path) && current_user_id(&pool, request.headers()).await.is_none() {
+        return AuthError.into_response();
+    }
+    next.run(request).await
+}
+
 pub fn router() -> Router<SqlitePool> {
     Router::new()
         .route("/api/setup-status", get(setup_status))

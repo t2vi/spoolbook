@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ColorSwatch from '$lib/components/color-swatch.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -6,6 +7,7 @@
 	import type { FilamentInput } from '$lib/api/client';
 	import type { FilamentColor } from '$lib/api/types';
 	import { goto } from '$app/navigation';
+	import { unsavedGuard } from '$lib/unsaved.svelte';
 
 	let { id }: { id: number | null } = $props();
 
@@ -16,12 +18,14 @@
 	let colors = $state<FilamentColor[]>([]);
 	let errorMessage = $state<string | null>(null);
 
+	const unsaved = unsavedGuard({ form: () => [brand, material, variant, color] });
+
 	let swatchHex = $derived(colors.find((c) => c.name === color)?.hex ?? null);
 
 	$effect(() => {
 		listFilamentColors().then((c) => (colors = c));
 
-		if (id === null) return;
+		if (id === null) return unsaved.markClean();
 		listAllFilaments().then((all) => {
 			const existing = all.find((f) => f.id === id);
 			if (!existing) return;
@@ -29,6 +33,7 @@
 			material = existing.material;
 			variant = existing.variant ?? '';
 			color = existing.color;
+			unsaved.markClean();
 		});
 	});
 
@@ -41,6 +46,7 @@
 				errorMessage = result.error === 'duplicate' ? 'This filament already exists.' : (result.error ?? 'Save failed.');
 				return;
 			}
+			unsaved.markClean();
 			goto('/filaments');
 		} catch (e) {
 			errorMessage = e instanceof Error ? e.message : 'Save failed.';
@@ -72,9 +78,7 @@
 					<option value={c.name}></option>
 				{/each}
 			</datalist>
-			{#if swatchHex}
-				<span class="inline-block h-5 w-5 shrink-0 rounded border" style:background={swatchHex}></span>
-			{/if}
+			<ColorSwatch hex={swatchHex} class="size-5" />
 		</div>
 	</div>
 
@@ -82,6 +86,6 @@
 
 	<div class="flex items-center gap-3 pt-2">
 		<Button type="submit">Save</Button>
-		<a href="/filaments" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
+		<a href="/filaments" onclick={() => unsaved.markClean()} class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
 	</div>
 </form>

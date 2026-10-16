@@ -19,6 +19,7 @@
 		updateAccount
 	} from '$lib/api/client';
 	import type { ImportCommitResult, ImportPreview } from '$lib/api/types';
+	import { unsavedGuard } from '$lib/unsaved.svelte';
 
 	let additionalUrls = $state('');
 	let catalogUrl = $state('');
@@ -47,6 +48,14 @@
 	let importResult = $state<ImportCommitResult | null>(null);
 	let importError = $state<string | null>(null);
 	let importBusy = $state(false);
+
+	// Three forms, each saved on its own (002/FR-008).
+	const unsaved = unsavedGuard({
+		general: () => [additionalUrls, latitude, longitude],
+		account: () => [currentPassword, newUsername, newPassword],
+		google: () => [googleClientId, googleClientSecret, googleRedirectUri]
+	});
+	unsaved.markClean('account');
 
 	async function runPreviewImport() {
 		if (!importFile) return;
@@ -91,6 +100,7 @@
 			return;
 		}
 		googleClientSecret = '';
+		unsaved.markClean('google');
 		googleConfigSavedMessage = 'Saved.';
 		const config = await getGoogleConfig();
 		googleSecretSet = config.secretSet;
@@ -106,6 +116,7 @@
 		const lon = longitude.trim() ? Number(longitude) : null;
 		try {
 			await saveSettings(additionalUrls.trim() || null, lat, lon);
+			unsaved.markClean('general');
 			savedMessage = 'Saved.';
 		} catch (e) {
 			// A refused save (e.g. out-of-range location) is a 4xx, which request() throws on.
@@ -129,6 +140,7 @@
 		currentPassword = '';
 		newUsername = '';
 		newPassword = '';
+		unsaved.markClean('account');
 		accountSavedMessage = 'Account updated.';
 	}
 
@@ -139,6 +151,7 @@
 			lastSyncedAt = s.lastFilamentSyncAt;
 			latitude = s.latitude?.toString() ?? '';
 			longitude = s.longitude?.toString() ?? '';
+			unsaved.markClean('general');
 		});
 		me().then((r) => {
 			authenticated = r.authenticated;
@@ -148,6 +161,7 @@
 					googleClientId = c.clientId ?? '';
 					googleRedirectUri = c.redirectUri ?? '';
 					googleSecretSet = c.secretSet;
+					unsaved.markClean('google');
 				});
 			}
 		});

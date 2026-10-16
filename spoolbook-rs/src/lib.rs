@@ -69,6 +69,7 @@ pub fn app_with_camera_supervised(
         .merge(auth::router())
         .merge(google_oauth::router())
         .route("/api/version", get(|| async { Json(serde_json::json!({ "version": env!("CARGO_PKG_VERSION") })) }))
+        .layer(axum::middleware::from_fn_with_state(pool.clone(), auth::require_session))
         .layer(Extension(live_status))
         .layer(Extension(camera_registry))
         .layer(Extension(conn_supervisor))

@@ -21,8 +21,8 @@ Once it's up, it's at `http://<host-ip>:5070`.
 
 ## First run
 
-spoolbook is single-user. The admin password you set during install gates anything that changes
-data (editing, deleting, sending a print) — just browsing stays open to anyone on your LAN.
+spoolbook is single-user. You sign in with the admin account you set during install; until then
+it shows only the sign-in page — nothing in your notebook is visible to others on your LAN.
 Optionally link a Google account under **Settings → Account** for one-click sign-in afterward —
 your password still works either way. On first launch it seeds a starter filament catalog and
 begins syncing fresh data automatically in the background (throttled to once every 24 hours).

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import ColorSwatch from '$lib/components/color-swatch.svelte';
+	import { hexFor } from '$lib/color-hexes.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
@@ -114,7 +116,7 @@
 							<Table.Cell>{f.brand}</Table.Cell>
 							<Table.Cell>{f.material}</Table.Cell>
 							<Table.Cell>{f.variant}</Table.Cell>
-							<Table.Cell>{f.color}</Table.Cell>
+							<Table.Cell><span class="flex items-center gap-2"><ColorSwatch hex={hexFor(f.color)} />{f.color}</span></Table.Cell>
 							<Table.Cell>
 								{#if authenticated}
 									<a href="/filaments/edit/{f.id}" class="hover:underline">Edit</a>

@@ -315,7 +315,7 @@ async fn seed_spool(pool: &sqlx::SqlitePool, filament_id: i64) -> i64 {
 }
 
 async fn attach_print(pool: &sqlx::SqlitePool, profile_id: i64, spool_id: i64, printer_id: i64) {
-    let (status, body) = send(pool, "POST", "/api/prints", Some(json!({
+    let (status, body) = common::create_print(pool, Some(json!({
         "profileId": profile_id, "spoolId": spool_id, "printerId": printer_id,
         "input": {
             "startedAt": "2026-08-15T10:00:00Z", "endedAt": "2026-08-15T12:00:00Z",
@@ -567,18 +567,110 @@ async fn new_version_keeps_the_sources_provenance_and_notes_ignoring_the_request
     assert_eq!(version_name, None);
 }
 
+async fn new_version_from(pool: &sqlx::SqlitePool, id: i64) -> i64 {
+    let (_, body) = send(pool, "POST", &format!("/api/profiles/{id}/versions"), Some(full_profile_body())).await;
+    body["profile"]["id"].as_i64().unwrap()
+}
+
 // spec: 006/FR-021
 #[tokio::test]
-async fn new_version_from_a_superseded_version_is_rejected() {
+async fn new_version_from_any_version_numbers_after_the_highest_and_selects_only_it() {
     let pool = test_pool().await;
     let filament_id = seed_filament(&pool).await;
     let v1 = create_profile(&pool, filament_id).await;
-    send(&pool, "POST", &format!("/api/profiles/{v1}/versions"), Some(full_profile_body())).await;
+    let v2 = new_version_from(&pool, v1).await;
 
     let (status, body) = send(&pool, "POST", &format!("/api/profiles/{v1}/versions"), Some(full_profile_body())).await;
 
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body["errors"]["id"], "not_current_version");
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["profile"]["versionNumber"], 3);
+    assert_eq!(body["profile"]["previousVersionProfileId"], v1);
+    assert_eq!(body["profile"]["isCurrentVersion"], true);
+    assert!(!is_current(&pool, v1).await);
+    assert!(!is_current(&pool, v2).await);
+}
+
+// spec: 006/FR-023
+#[tokio::test]
+async fn versions_lists_the_whole_set_highest_first() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    let spool_id = seed_spool(&pool, filament_id).await;
+    let printer_id = seed_printer(&pool).await;
+    attach_print(&pool, v1, spool_id, printer_id).await;
+    let v2 = new_version_from(&pool, v1).await;
+    let v3 = new_version_from(&pool, v1).await;
+    let other = create_profile(&pool, filament_id).await;
+    sqlx::query("UPDATE print_profiles SET version_name = 'Winter' WHERE id = ?1").bind(v2).execute(&pool).await.unwrap();
+
+    for from in [v1, v2, v3] {
+        let (status, body) = send(&pool, "GET", &format!("/api/profiles/{from}/versions"), None).await;
+        assert_eq!(status, StatusCode::OK);
+        let ids: Vec<i64> = body.as_array().unwrap().iter().map(|v| v["id"].as_i64().unwrap()).collect();
+        assert_eq!(ids, vec![v3, v2, v1], "same set from v{from}, never {other}");
+    }
+    let (_, body) = send(&pool, "GET", &format!("/api/profiles/{v2}/versions"), None).await;
+    let [newest, middle, oldest] = body.as_array().unwrap().as_slice() else { panic!("{body}") };
+    assert_eq!(newest["versionNumber"], 3);
+    assert_eq!(newest["selected"], true);
+    assert_eq!(newest["locked"], false);
+    assert_eq!(middle["versionName"], "Winter");
+    assert_eq!(middle["nozzleTempC"], 220);
+    assert_eq!(oldest["selected"], false);
+    assert_eq!(oldest["locked"], true);
+    assert!(oldest["createdAt"].is_string());
+
+    let (status, _) = send(&pool, "GET", "/api/profiles/999/versions", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+// spec: 006/FR-024, 006/FR-022
+#[tokio::test]
+async fn select_makes_one_version_the_selected_one() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    let v2 = new_version_from(&pool, v1).await;
+
+    let (status, _) = send(&pool, "POST", &format!("/api/profiles/{v1}/select"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(is_current(&pool, v1).await);
+    assert!(!is_current(&pool, v2).await);
+    let (_, listed) = send(&pool, "GET", &format!("/api/profiles?filamentId={filament_id}"), None).await;
+    let ids: Vec<i64> = listed.as_array().unwrap().iter().map(|p| p["id"].as_i64().unwrap()).collect();
+    assert_eq!(ids, vec![v1]);
+
+    let (status, _) = send(&pool, "POST", &format!("/api/profiles/{v1}/select"), None).await;
+    assert_eq!(status, StatusCode::OK, "selecting the selected one is a no-op");
+    assert!(is_current(&pool, v1).await);
+
+    let (status, _) = send(&pool, "POST", "/api/profiles/999/select", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+// spec: 006/FR-025
+#[tokio::test]
+async fn version_name_is_set_trimmed_or_cleared_even_when_locked() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    let spool_id = seed_spool(&pool, filament_id).await;
+    let printer_id = seed_printer(&pool).await;
+    attach_print(&pool, v1, spool_id, printer_id).await;
+    let name = |pool: sqlx::SqlitePool| async move {
+        sqlx::query_scalar::<_, Option<String>>("SELECT version_name FROM print_profiles WHERE id = ?1").bind(v1).fetch_one(&pool).await.unwrap()
+    };
+
+    let (status, _) = send(&pool, "PUT", &format!("/api/profiles/{v1}/version-name"), Some(json!({ "versionName": "  Winter 2026 " }))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(name(pool.clone()).await.as_deref(), Some("Winter 2026"));
+
+    send(&pool, "PUT", &format!("/api/profiles/{v1}/version-name"), Some(json!({ "versionName": "  " }))).await;
+    assert_eq!(name(pool.clone()).await, None);
+
+    let (status, _) = send(&pool, "PUT", "/api/profiles/999/version-name", Some(json!({ "versionName": "x" }))).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 // spec: 006/FR-021
@@ -770,4 +862,110 @@ async fn field_spec_reports_the_profiles_filament_and_spool() {
     assert!(generic_spec.as_object().unwrap().contains_key("spoolId"));
     assert_eq!(specific_spec["filamentId"], filament_id);
     assert_eq!(specific_spec["spoolId"], spool_id);
+}
+
+// spec: 006/FR-013
+#[tokio::test]
+async fn deleting_an_unselected_version_leaves_the_selection_alone() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    let v2 = new_version_from(&pool, v1).await;
+    let v3 = new_version_from(&pool, v1).await;
+
+    let (status, _) = send(&pool, "DELETE", &format!("/api/profiles/{v2}"), None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(!is_current(&pool, v1).await);
+    assert!(is_current(&pool, v3).await);
+}
+
+// spec: 006/FR-002
+#[tokio::test]
+async fn inventory_filters_sorts_and_pages_selected_versions() {
+    let pool = test_pool().await;
+    let pla = seed_filament(&pool).await; // Bambu Lab PLA
+    let (_, petg) = send(&pool, "POST", "/api/filaments", Some(json!({ "brand": "Polymaker", "material": "PETG", "variant": null, "color": "Red" }))).await;
+    let petg = petg["entry"]["id"].as_i64().unwrap();
+    let petg_spool = seed_spool(&pool, petg).await;
+    sqlx::query("UPDATE spools SET lot_code = 'LOT-1' WHERE id = ?1").bind(petg_spool).execute(&pool).await.unwrap();
+    let body = |name: &str, nozzle: &str, spool: Option<i64>| {
+        let mut b = full_profile_body();
+        b["name"] = json!(name);
+        b["spoolId"] = json!(spool);
+        b["fields"]["NozzleTempC"] = json!(nozzle);
+        b
+    };
+    send(&pool, "POST", &format!("/api/profiles?filamentId={pla}"), Some(body("Bravo", "220", None))).await;
+    send(&pool, "POST", &format!("/api/profiles?filamentId={petg}"), Some(body("Alpha", "240", Some(petg_spool)))).await;
+    let (_, charlie) = send(&pool, "POST", &format!("/api/profiles?filamentId={pla}"), Some(body("Charlie", "210", None))).await;
+    let charlie = charlie["profile"]["id"].as_i64().unwrap();
+    send(&pool, "POST", &format!("/api/profiles/{charlie}/versions"), Some(body("Charlie", "205", None))).await;
+
+    let get = |query: &'static str| {
+        let pool = pool.clone();
+        async move {
+            let (status, body) = send(&pool, "GET", &format!("/api/profiles/inventory?{query}"), None).await;
+            assert_eq!(status, StatusCode::OK, "{query}: {body}");
+            body
+        }
+    };
+    let names = |body: &Value| body["profiles"].as_array().unwrap().iter().map(|p| p["name"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+
+    let all = get("").await;
+    assert_eq!(names(&all), ["Bravo", "Charlie", "Alpha"], "selected versions only, by filament then oldest");
+    assert_eq!(all["profiles"][1]["nozzleTempC"], 205);
+    assert_eq!(all["profiles"][2]["spool"]["lotCode"], "LOT-1");
+    assert_eq!(all["profiles"][2]["filament"]["brand"], "Polymaker");
+    assert_eq!(names(&get("brand=Polymaker").await), ["Alpha"]);
+    assert_eq!(names(&get("material=PLA").await), ["Bravo", "Charlie"]);
+    assert_eq!(names(&get("scope=generic").await), ["Bravo", "Charlie"]);
+    assert_eq!(names(&get("scope=spool").await), ["Alpha"]);
+    assert_eq!(names(&get("sort=name").await), ["Alpha", "Bravo", "Charlie"]);
+    assert_eq!(names(&get("sort=name&order=desc").await), ["Charlie", "Bravo", "Alpha"]);
+    assert_eq!(names(&get("sort=nozzleTemp").await), ["Charlie", "Bravo", "Alpha"]);
+    assert_eq!(names(&get("sort=created&order=desc").await), ["Charlie", "Alpha", "Bravo"]);
+
+    let paged = get("page=2&pageSize=2").await;
+    assert_eq!(names(&paged), ["Alpha"]);
+    assert_eq!((paged["total"].as_i64(), paged["page"].as_i64(), paged["pageSize"].as_i64(), paged["totalPages"].as_i64()), (Some(3), Some(2), Some(2), Some(2)));
+    assert_eq!(get("page=-1&pageSize=0").await["pageSize"], 20);
+}
+
+// spec: 006/FR-026
+#[tokio::test]
+async fn duplicate_copies_everything_into_a_new_independent_profile() {
+    let pool = test_pool().await;
+    let filament_id = seed_filament(&pool).await;
+    let spool_id = seed_spool(&pool, filament_id).await;
+    let v1 = create_profile(&pool, filament_id).await;
+    let v2 = new_version_from(&pool, v1).await;
+    sqlx::query("UPDATE print_profiles SET spool_id = ?1, source = 'BambuPreset', notes = 'dries well', version_name = 'Winter' WHERE id = ?2")
+        .bind(spool_id).bind(v2).execute(&pool).await.unwrap();
+
+    let (status, body) = send(&pool, "POST", &format!("/api/profiles/{v2}/duplicate"), None).await;
+
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["ok"], true);
+    let copy = &body["profile"];
+    let copy_id = copy["id"].as_i64().unwrap();
+    assert!(copy_id != v1 && copy_id != v2);
+    assert_eq!(copy["name"], "Cold day tune (copy)");
+    assert_eq!(copy["versionNumber"], 1);
+    assert_eq!(copy["previousVersionProfileId"], Value::Null);
+    assert_eq!(copy["isCurrentVersion"], true);
+    assert_eq!(copy["versionName"], Value::Null);
+    assert_eq!(copy["filamentId"], filament_id);
+    assert_eq!(copy["spoolId"], spool_id);
+    assert_eq!(copy["source"], "BambuPreset");
+    assert_eq!(copy["notes"], "dries well");
+    assert_eq!(copy["nozzleTempC"], 220);
+    assert_eq!(copy["startGcode"], "G28 ; home");
+    assert!(is_current(&pool, v2).await, "the original stays selected in its own set");
+
+    let (_, versions) = send(&pool, "GET", &format!("/api/profiles/{copy_id}/versions"), None).await;
+    assert_eq!(versions.as_array().unwrap().len(), 1, "its own version set");
+
+    let (status, _) = send(&pool, "POST", "/api/profiles/999/duplicate", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }

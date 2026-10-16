@@ -1,10 +1,13 @@
 <script lang="ts">
+	import ColorSwatch from '$lib/components/color-swatch.svelte';
+	import { hexFor } from '$lib/color-hexes.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
 	import Picker from '$lib/components/picker.svelte';
+	import ProjectAdder from '$lib/components/projects/ProjectAdder.svelte';
 	import {
 		amsSlotNumber,
 		getProjectPlates,
@@ -13,8 +16,7 @@
 		listSpools,
 		recommendProfile,
 		resliceProject,
-		startPrint,
-		uploadProject
+		startPrint
 	} from '$lib/api/client';
 	import type { AmsUnitReading, Printer, PrintProfile, Project, ProjectPlate, Spool } from '$lib/api/types';
 
@@ -60,8 +62,6 @@
 	let selectedProfileId = $state(0);
 	let useAms = $state(true);
 	let selectedAmsTrayKey = $state<string | null>(null);
-	let uploading = $state(false);
-	let uploadError = $state<string | null>(null);
 	let recommended = $state<PrintProfile | null>(null);
 	let sending = $state(false);
 	let sendError = $state<string | null>(null);
@@ -69,6 +69,12 @@
 	let resliceError = $state<string | null>(null);
 	let resliceSucceeded = $state(false);
 
+	// Plate stepping (004/FR-050): ‹ / › move through a multi-plate project, "n / N" shows where.
+	let plateIndex = $derived(plates.findIndex((p) => p.platerId === selectedPlaterId));
+	function stepPlate(delta: number) {
+		const next = plates[plateIndex + delta];
+		if (next) selectedPlaterId = next.platerId;
+	}
 	let selectedPlate = $derived(plates.find((p) => p.platerId === selectedPlaterId) ?? null);
 	let selectedAmsSlot = $derived.by(() => {
 		const tray = amsTrays.find((t) => t.key === selectedAmsTrayKey);
@@ -113,34 +119,13 @@
 		selectedProfileId = recommended && profiles.some((p) => p.id === recommended!.id) ? recommended.id : (profiles[0]?.id ?? 0);
 	}
 
-	async function applyUploadResult(result: { ok: boolean; error?: string | null; project?: Project | null }) {
-		if (!result.ok || !result.project) {
-			uploadError = `Import failed: ${result.error}`;
-			return;
-		}
-		const project = result.project;
-		if (!projects.some((p) => p.id === project.id)) projects = [...projects, project];
-
+	async function onProjectAdded(project: Project) {
+		projects = projects.some((p) => p.id === project.id) ? projects.map((p) => (p.id === project.id ? project : p)) : [...projects, project];
 		selectedProjectId = project.id;
 		plates = await getProjectPlates(project.id);
 		selectedPlaterId = plates[0]?.platerId ?? '';
 		recommended = await recommendProfile(project.id);
 		if (recommended && profiles.some((p) => p.id === recommended!.id)) selectedProfileId = recommended.id;
-	}
-
-	async function onThreeMfSelected(e: Event) {
-		const file = (e.currentTarget as HTMLInputElement).files?.[0];
-		if (!file) return;
-
-		uploading = true;
-		uploadError = null;
-		try {
-			await applyUploadResult(await uploadProject(file));
-		} catch (err) {
-			uploadError = `Import failed: ${err instanceof Error ? err.message : 'unknown error'}`;
-		} finally {
-			uploading = false;
-		}
 	}
 
 	async function reslice() {
@@ -228,16 +213,7 @@
 					options={[{ value: 0, label: '-- none --' }, ...projects.map((p) => ({ value: p.id, label: p.fileName }))]}
 				/>
 
-				<div class="mt-1 flex items-center gap-2">
-					<input
-						type="file"
-						accept=".3mf"
-						onchange={onThreeMfSelected}
-						class="text-sm file:mr-3 file:cursor-pointer file:rounded-md file:border file:bg-background file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-accent"
-					/>
-					{#if uploading}<span class="text-xs text-muted-foreground">Uploading…</span>{/if}
-				</div>
-				{#if uploadError}<p class="text-xs text-destructive">{uploadError}</p>{/if}
+				<div class="mt-1"><ProjectAdder onAdded={onProjectAdded} /></div>
 
 				{#if plates.length > 0}
 					<Label for="plate-select" class="mt-2">Plate</Label>
@@ -246,11 +222,28 @@
 						bind:value={selectedPlaterId}
 						options={plates.map((plate) => ({ value: plate.platerId, label: plate.platerName ?? `Plate ${plate.platerId}` }))}
 					/>
-					<div class="mt-1 flex h-40 items-center justify-center overflow-hidden rounded-md bg-slate-900">
+					<div class="relative mt-1 flex h-40 items-center justify-center overflow-hidden rounded-md bg-slate-900">
 						{#if selectedPlate?.thumbnailBytes}
 							<img src="data:image/png;base64,{selectedPlate.thumbnailBytes}" class="h-full w-full object-contain" alt="Plate preview" />
 						{:else}
 							<span class="text-sm text-slate-400">No plate preview</span>
+						{/if}
+						{#if plates.length > 1}
+							<button
+								type="button"
+								aria-label="Previous plate"
+								disabled={plateIndex <= 0}
+								onclick={() => stepPlate(-1)}
+								class="absolute top-1/2 left-1 -translate-y-1/2 rounded-full bg-black/50 px-2.5 py-1 text-lg text-white hover:bg-black/70 disabled:opacity-30"
+							>‹</button>
+							<button
+								type="button"
+								aria-label="Next plate"
+								disabled={plateIndex >= plates.length - 1}
+								onclick={() => stepPlate(1)}
+								class="absolute top-1/2 right-1 -translate-y-1/2 rounded-full bg-black/50 px-2.5 py-1 text-lg text-white hover:bg-black/70 disabled:opacity-30"
+							>›</button>
+							<span class="absolute bottom-1 left-1/2 -translate-x-1/2 rounded bg-black/50 px-2 text-xs text-white">{plateIndex + 1} / {plates.length}</span>
 						{/if}
 					</div>
 				{/if}
@@ -299,7 +292,8 @@
 						{ value: 0, label: '-- pick a spool --' },
 						...spools.map((s) => ({
 							value: s.id,
-							label: `${s.filament?.brand} ${s.filament?.material} ${s.filament?.variant ?? ''} — ${s.filament?.color}${s.lotCode ? ` (${s.lotCode})` : ''}`
+							label: `${s.filament?.brand} ${s.filament?.material} ${s.filament?.variant ?? ''} — ${s.filament?.color}${s.lotCode ? ` (${s.lotCode})` : ''}`,
+							hex: hexFor(s.filament?.color)
 						}))
 					]}
 				/>
@@ -310,7 +304,7 @@
 				<Picker
 					id="profile-select"
 					bind:value={selectedProfileId}
-					options={[{ value: 0, label: '-- pick a profile --' }, ...profiles.map((p) => ({ value: p.id, label: p.name }))]}
+					options={[{ value: 0, label: '-- pick a profile --' }, ...profiles.map((p) => ({ value: p.id, label: p.name, hex: hexFor(spools.find((s) => s.id === selectedSpoolId)?.filament?.color) }))]}
 				/>
 			</div>
 

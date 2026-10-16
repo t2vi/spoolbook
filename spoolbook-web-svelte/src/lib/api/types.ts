@@ -98,6 +98,10 @@ export interface PrintProfile {
 	hotPlateTempC?: number | null;
 	printSpeedMmS?: number | null;
 	source?: string;
+	spoolId?: number | null;
+	spool?: Spool | null; // inventory only
+	versionNumber?: number;
+	versionName?: string | null;
 }
 
 export interface ProfileFieldEntry {
@@ -180,6 +184,8 @@ export interface Print {
 	// when the print ends -- never manually entered, same as the ambient fields below.
 	amsHumidityPct: number | null;
 	chamberTempC: number | null;
+	// Hand-entered when annotating the outcome; chamberTempC above is telemetry.
+	actualRoomTempC: number | null;
 	cleanBuildPlate: boolean | null;
 	// Auto-fetched from Open-Meteo when the print ends (issues/94) -- never manually entered.
 	ambientTempC: number | null;

@@ -216,7 +216,7 @@ async fn system_presets_lists_names_from_the_slicer_services_bundled_manifest() 
     let pool = sqlx::sqlite::SqlitePoolOptions::new().max_connections(1).connect("sqlite::memory:").await.unwrap();
     sqlx::migrate!().run(&pool).await.unwrap();
 
-    let (status, body) = get_json(&pool, "/api/profiles/system-presets", None).await;
+    let (status, body) = get_json(&pool, "/api/profiles/system-presets", Some(&common::auth_cookie_header(&pool).await)).await;
     assert_eq!(status, StatusCode::OK, "{body:?}");
     let names = body["names"].as_array().unwrap();
     assert!(names.contains(&Value::String("Bambu PLA Basic @BBL X1C".to_string())), "{names:?}");
@@ -296,7 +296,7 @@ async fn system_presets_gives_up_on_a_hung_slicer_service() {
     // timeout (or, without one, the hour-late reply) arrives instantly.
     tokio::time::pause();
 
-    let (status, body) = get_json(&pool, "/api/profiles/system-presets", None).await;
+    let (status, body) = get_json(&pool, "/api/profiles/system-presets", Some(&common::auth_cookie_header(&pool).await)).await;
 
     assert_eq!(status, StatusCode::BAD_GATEWAY, "{body:?}");
 }

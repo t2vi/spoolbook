@@ -39,13 +39,18 @@ via an export zip that is *merged* into the target rather than replacing it.
   framework's 2 MB default is too small for a real `.3mf`). *Verify: integration*
 - **FR-006** — `GET /api/version` (open) returns `{ "version": "<backend crate version>" }`.
   *Verify: integration*
-- **FR-007** — Every page's sidebar shows the version and a "Source" link to the public
-  repository (`https://github.com/t2vi/spoolbook`), signed in or not — the offer of source that
+- **FR-007** — Every page shows the version and a "Source" link to the public repository
+  (`https://github.com/t2vi/spoolbook`) — in the sidebar when signed in, under the form on the
+  sign-in and setup pages otherwise — the offer of source that
   the AGPL-3.0 license requires of anyone running the app for others. *Verify: e2e*
+- **FR-008** — Every edit form (filament, color, spool, profile, printer, print outcome,
+  settings) tracks unsaved edits: leaving with unsaved edits — an in-app link, back, reload or
+  closing the tab — asks for confirmation first; saving or cancelling clears it.
+  *Verify: e2e*
 
 ### Settings
 
-- **FR-010** — `GET /api/settings` (open) returns `additionalFilamentSourceUrls`,
+- **FR-010** — `GET /api/settings` (signed in) returns `additionalFilamentSourceUrls`,
   `lastFilamentSyncAt`, `catalogUrl` (the published catalog URL, or its override — 007/FR-024),
   `latitude`,
   `longitude`. The first read on a fresh DB creates the settings row with all values null.
@@ -65,7 +70,7 @@ via an export zip that is *merged* into the target rather than replacing it.
 
 ### Dashboard
 
-- **FR-020** — `GET /api/dashboard` (open) returns: filament count; filaments grouped by brand
+- **FR-020** — `GET /api/dashboard` (signed in) returns: filament count; filaments grouped by brand
   and by material, each sorted by count descending; spools as **Unopened** (no `opened_at`),
   **Opened** (opened, not emptied), **Empty** (`emptied_at` set); prints by status, always
   listing all four of `Success`, `Failed`, `Partial`, `InProgress` even at zero; last catalog
@@ -112,6 +117,11 @@ via an export zip that is *merged* into the target rather than replacing it.
 ## Notes
 
 - Retroactive: behavior read from the code at `3fdca27`.
+- **Lost-features review (2026-10-16):** FR-008 restores the desktop app's unsaved-changes
+  guard (its edit windows all had one). Dropped on purpose: the desktop's Bambu Studio
+  import-path settings (no local preset folder on a server; columns removed in v1.5.0) and its
+  About panel (the version is in the sidebar, FR-007; the catalog sync time is on the
+  dashboard and in Settings).
 - **#157 (fixed):** `save_settings` used to accept any latitude/longitude, so a bad value made
   every later Print's weather fetch fail silently.
 - **#158 (fixed):** commit used to skip remapping `print_profiles.spool_id` and

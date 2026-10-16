@@ -17,35 +17,40 @@
 	let { children } = $props();
 
 	let authenticated = $state(false);
+	// Nothing renders until the session is known, so a signed-out visitor never sees app data.
+	let checked = $state(false);
 	let username = $state('');
 	let version = $state('');
+	let isAuthPage = $derived(page.url.pathname === '/login' || page.url.pathname === '/setup');
 
 	$effect(() => {
-		me().then((r) => {
-			authenticated = r.authenticated;
-			username = r.username ?? '';
-		});
 		getVersion().then((r) => (version = r.version));
 	});
 
-	// No admin account exists yet -- every route redirects to the wizard until one does, except
-	// /setup itself (nothing to redirect to/from there).
+	// Re-checked on every navigation (e.g. right after signing in). No account yet → /setup;
+	// signed out → /login. The API refuses every read without a session too; this is the UI half.
 	$effect(() => {
-		if (page.url.pathname === '/setup') return;
-		setupStatus().then((s) => {
-			if (s.needsSetup) goto('/setup');
+		const path = page.url.pathname;
+		Promise.all([me(), setupStatus()]).then(([r, s]) => {
+			authenticated = r.authenticated;
+			username = r.username ?? '';
+			checked = true;
+			if (s.needsSetup && path !== '/setup') goto('/setup');
+			else if (!s.needsSetup && !r.authenticated && path !== '/login') goto('/login');
 		});
 	});
 
 	async function signOut() {
 		await logout();
 		authenticated = false;
+		goto('/login');
 	}
 
 	const topItems = [{ href: '/', label: 'Dashboard', icon: LayoutDashboardIcon }];
 	const filamentsSubItems = [
 		{ href: '/filaments', label: 'List' },
-		{ href: '/spools', label: 'Spools' }
+		{ href: '/spools', label: 'Spools' },
+		{ href: '/filaments/colors', label: 'Colors' }
 	];
 	const workflowSubItems = [
 		{ href: '/profiles', label: 'Profiles' },
@@ -55,8 +60,12 @@
 	];
 	const bottomItems = [{ href: '/settings', label: 'Settings', icon: SettingsIcon }];
 
+	// The longest matching link wins, so /filaments/colors highlights Colors, not Filaments too.
+	const navHrefs = [...topItems, ...filamentsSubItems, ...workflowSubItems, ...bottomItems].map((i) => i.href);
 	function isActive(href: string) {
-		return href === '/' ? page.url.pathname === '/' : page.url.pathname.startsWith(href);
+		const path = page.url.pathname;
+		const matches = (h: string) => (h === '/' ? path === '/' : path === h || path.startsWith(`${h}/`));
+		return matches(href) && !navHrefs.some((h) => h.length > href.length && matches(h));
 	}
 
 	let filamentsOpen = $state(filamentsSubItems.some((item) => isActive(item.href)));
@@ -65,119 +74,128 @@
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
 
-<Sidebar.Provider>
-	<Sidebar.Root>
-		<Sidebar.Header>
-			<div class="flex items-center gap-2 px-2 py-1.5">
-				<img src={spoolbookIcon} alt="Spoolbook" class="size-8 rounded-lg" />
-				<div class="flex flex-col leading-tight">
-					<span class="text-sm font-semibold">Spoolbook</span>
-					<span class="text-xs text-sidebar-foreground/70">
-						{version ? `v${version} · ` : ''}<a href="https://github.com/t2vi/spoolbook" target="_blank" rel="noopener" class="underline-offset-2 hover:underline">Source</a>
-					</span>
-				</div>
-			</div>
-		</Sidebar.Header>
-		<Sidebar.Content>
-			<Sidebar.Group>
-				<Sidebar.GroupContent>
-					<Sidebar.Menu>
-						{#each topItems as item (item.href)}
-							<Sidebar.MenuItem>
-								<Sidebar.MenuButton>
-									{#snippet child({ props })}
-										<a href={item.href} {...props}>
-											<item.icon />
-											{item.label}
-										</a>
-									{/snippet}
-								</Sidebar.MenuButton>
-							</Sidebar.MenuItem>
-						{/each}
-
-						<Collapsible.Root bind:open={filamentsOpen} class="group/collapsible">
-							<Sidebar.MenuItem>
-								<Collapsible.Trigger>
-									{#snippet child({ props })}
-										<Sidebar.MenuButton {...props}>
-											<CylinderIcon />
-											Filaments
-											<ChevronRightIcon class="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-90" />
-										</Sidebar.MenuButton>
-									{/snippet}
-								</Collapsible.Trigger>
-								<Collapsible.Content>
-									<Sidebar.MenuSub>
-										{#each filamentsSubItems as item (item.href)}
-											<Sidebar.MenuSubItem>
-												<Sidebar.MenuSubButton href={item.href}>{item.label}</Sidebar.MenuSubButton>
-											</Sidebar.MenuSubItem>
-										{/each}
-									</Sidebar.MenuSub>
-								</Collapsible.Content>
-							</Sidebar.MenuItem>
-						</Collapsible.Root>
-
-						<Collapsible.Root bind:open={workflowOpen} class="group/collapsible">
-							<Sidebar.MenuItem>
-								<Collapsible.Trigger>
-									{#snippet child({ props })}
-										<Sidebar.MenuButton {...props}>
-											<PrinterIcon />
-											Print workflow
-											<ChevronRightIcon class="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-90" />
-										</Sidebar.MenuButton>
-									{/snippet}
-								</Collapsible.Trigger>
-								<Collapsible.Content>
-									<Sidebar.MenuSub>
-										{#each workflowSubItems as item (item.href)}
-											<Sidebar.MenuSubItem>
-												<Sidebar.MenuSubButton href={item.href}>{item.label}</Sidebar.MenuSubButton>
-											</Sidebar.MenuSubItem>
-										{/each}
-									</Sidebar.MenuSub>
-								</Collapsible.Content>
-							</Sidebar.MenuItem>
-						</Collapsible.Root>
-
-						{#each bottomItems as item (item.href)}
-							<Sidebar.MenuItem>
-								<Sidebar.MenuButton>
-									{#snippet child({ props })}
-										<a href={item.href} {...props}>
-											<item.icon />
-											{item.label}
-										</a>
-									{/snippet}
-								</Sidebar.MenuButton>
-							</Sidebar.MenuItem>
-						{/each}
-					</Sidebar.Menu>
-				</Sidebar.GroupContent>
-			</Sidebar.Group>
-		</Sidebar.Content>
-		<Sidebar.Footer>
-			{#if authenticated}
-				<NavUser {username} onSignOut={signOut} />
-			{:else}
-				<Sidebar.Menu>
-					<Sidebar.MenuItem>
-						<Sidebar.MenuButton>
-							{#snippet child({ props })}
-								<a href="/login" {...props}>Sign in</a>
-							{/snippet}
-						</Sidebar.MenuButton>
-					</Sidebar.MenuItem>
-				</Sidebar.Menu>
-			{/if}
-		</Sidebar.Footer>
-	</Sidebar.Root>
-
-	<Sidebar.Inset>
-		<header class="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-			<Sidebar.Trigger />
-		</header>
+{#if checked && !authenticated && isAuthPage}
+	<main class="flex min-h-svh flex-col items-center justify-center gap-6 p-4">
 		{@render children()}
-	</Sidebar.Inset>
-</Sidebar.Provider>
+		<p class="text-xs text-muted-foreground">
+			Spoolbook{version ? ` v${version}` : ''} · <a href="https://github.com/t2vi/spoolbook" target="_blank" rel="noopener" class="underline-offset-2 hover:underline">Source</a>
+		</p>
+	</main>
+{:else if checked && authenticated}
+	<Sidebar.Provider>
+		<Sidebar.Root>
+			<Sidebar.Header>
+				<div class="flex items-center gap-2 px-2 py-1.5">
+					<img src={spoolbookIcon} alt="Spoolbook" class="size-8 rounded-lg" />
+					<div class="flex flex-col leading-tight">
+						<span class="text-sm font-semibold">Spoolbook</span>
+						<span class="text-xs text-sidebar-foreground/70">
+							{version ? `v${version} · ` : ''}<a href="https://github.com/t2vi/spoolbook" target="_blank" rel="noopener" class="underline-offset-2 hover:underline">Source</a>
+						</span>
+					</div>
+				</div>
+			</Sidebar.Header>
+			<Sidebar.Content>
+				<Sidebar.Group>
+					<Sidebar.GroupContent>
+						<Sidebar.Menu>
+							{#each topItems as item (item.href)}
+								<Sidebar.MenuItem>
+									<Sidebar.MenuButton>
+										{#snippet child({ props })}
+											<a href={item.href} {...props}>
+												<item.icon />
+												{item.label}
+											</a>
+										{/snippet}
+									</Sidebar.MenuButton>
+								</Sidebar.MenuItem>
+							{/each}
+
+							<Collapsible.Root bind:open={filamentsOpen} class="group/collapsible">
+								<Sidebar.MenuItem>
+									<Collapsible.Trigger>
+										{#snippet child({ props })}
+											<Sidebar.MenuButton {...props}>
+												<CylinderIcon />
+												Filaments
+												<ChevronRightIcon class="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-90" />
+											</Sidebar.MenuButton>
+										{/snippet}
+									</Collapsible.Trigger>
+									<Collapsible.Content>
+										<Sidebar.MenuSub>
+											{#each filamentsSubItems as item (item.href)}
+												<Sidebar.MenuSubItem>
+													<Sidebar.MenuSubButton href={item.href}>{item.label}</Sidebar.MenuSubButton>
+												</Sidebar.MenuSubItem>
+											{/each}
+										</Sidebar.MenuSub>
+									</Collapsible.Content>
+								</Sidebar.MenuItem>
+							</Collapsible.Root>
+
+							<Collapsible.Root bind:open={workflowOpen} class="group/collapsible">
+								<Sidebar.MenuItem>
+									<Collapsible.Trigger>
+										{#snippet child({ props })}
+											<Sidebar.MenuButton {...props}>
+												<PrinterIcon />
+												Print workflow
+												<ChevronRightIcon class="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-90" />
+											</Sidebar.MenuButton>
+										{/snippet}
+									</Collapsible.Trigger>
+									<Collapsible.Content>
+										<Sidebar.MenuSub>
+											{#each workflowSubItems as item (item.href)}
+												<Sidebar.MenuSubItem>
+													<Sidebar.MenuSubButton href={item.href}>{item.label}</Sidebar.MenuSubButton>
+												</Sidebar.MenuSubItem>
+											{/each}
+										</Sidebar.MenuSub>
+									</Collapsible.Content>
+								</Sidebar.MenuItem>
+							</Collapsible.Root>
+
+							{#each bottomItems as item (item.href)}
+								<Sidebar.MenuItem>
+									<Sidebar.MenuButton>
+										{#snippet child({ props })}
+											<a href={item.href} {...props}>
+												<item.icon />
+												{item.label}
+											</a>
+										{/snippet}
+									</Sidebar.MenuButton>
+								</Sidebar.MenuItem>
+							{/each}
+						</Sidebar.Menu>
+					</Sidebar.GroupContent>
+				</Sidebar.Group>
+			</Sidebar.Content>
+			<Sidebar.Footer>
+				{#if authenticated}
+					<NavUser {username} onSignOut={signOut} />
+				{:else}
+					<Sidebar.Menu>
+						<Sidebar.MenuItem>
+							<Sidebar.MenuButton>
+								{#snippet child({ props })}
+									<a href="/login" {...props}>Sign in</a>
+								{/snippet}
+							</Sidebar.MenuButton>
+						</Sidebar.MenuItem>
+					</Sidebar.Menu>
+				{/if}
+			</Sidebar.Footer>
+		</Sidebar.Root>
+
+		<Sidebar.Inset>
+			<header class="flex h-12 shrink-0 items-center gap-2 border-b px-4">
+				<Sidebar.Trigger />
+			</header>
+			{@render children()}
+		</Sidebar.Inset>
+	</Sidebar.Provider>
+{/if}

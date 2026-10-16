@@ -182,6 +182,13 @@ export async function uploadProject(file: File): Promise<ProjectResult> {
 }
 
 export const importProjectFromUrl = (url: string) => request<ProjectResult>('/api/projects/import-url', json({ url }));
+// An existing Project that a new one looks like the next version of (same mesh, else same name).
+export const projectVersionCandidate = (project: Project) =>
+	request<Project | null>(
+		`/api/projects/version-candidate?${new URLSearchParams({ meshHash: project.meshHash ?? '', fileName: project.fileName, excludeProjectId: String(project.id) })}`
+	);
+export const linkProjectVersion = (projectId: number, previousVersionProjectId: number) =>
+	request<ApiResult>(`/api/projects/${projectId}/link-version`, json({ previousVersionProjectId }));
 
 export const renameProject = (projectId: number, fileName: string) =>
 	request<ProjectResult>(`/api/projects/${projectId}`, { method: 'PUT', body: JSON.stringify({ fileName }) });
@@ -195,27 +202,44 @@ export const listPrintsForProject = (projectId: number) => request<Print[]>(`/ap
 export const recommendProfile = (projectId: number) =>
 	request<PrintProfile | null>(`/api/prints/recommend-profile?projectId=${projectId}`);
 
-export const searchPrints = (status: PrintStatus | '', printerId: number | null, page: number, pageSize = 20) => {
-	// int?/enum? query params fail to bind from an empty string (unlike string?, which just
-	// gives ""), so omit them entirely rather than sending status= / printerId= blank.
-	const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-	if (status) params.set('status', status);
-	if (printerId !== null) params.set('printerId', String(printerId));
-	return request<PrintInventoryResult>(`/api/prints/inventory?${params}`);
-};
+// `query` is the /prints page's own URL query (status, printerId, brand, material, sort, order,
+// page, pageSize), passed through as-is. Blank values must be left out: printerId= fails to bind.
+export const listPrintInventory = (query: URLSearchParams) => request<PrintInventoryResult>(`/api/prints/inventory?${query}`);
 export const getPrint = (id: number) => request<Print>(`/api/prints/${id}`);
+// The only edit a Print allows: its outcome, once finished (003/FR-013).
+export interface PrintOutcome {
+	status: 'Success' | 'Failed' | 'Partial';
+	failureModes: FailureMode[];
+	notes: string | null;
+	actualRoomTempC: number | null;
+	cleanBuildPlate: boolean | null;
+}
+export const annotatePrint = (id: number, outcome: PrintOutcome) =>
+	requestAllowingError<{ ok: boolean; error?: string; print?: Print }>(`/api/prints/${id}`, { method: 'PUT', body: JSON.stringify(outcome) });
 export const deletePrint = (id: number) => request<ApiResult>(`/api/prints/${id}`, { method: 'DELETE' });
 export const getHourlyWeather = (id: number) => request<HourlyWeatherReading[]>(`/api/prints/${id}/hourly-weather`);
 export const getPrintReadings = (id: number) => request<PrintReading[]>(`/api/prints/${id}/readings`);
 
 export const listSpools = () => request<Spool[]>('/api/spools');
 export const getSpool = (id: number) => request<Spool>(`/api/spools/${id}`);
+export interface SpoolInventoryResult {
+	spools: Spool[];
+	total: number;
+	page: number;
+	pageSize: number;
+	totalPages: number;
+}
+// `query` is the /spools page's own URL query (brand, material, status, purchasedFrom/To, sort,
+// order, page, pageSize), passed through as-is.
+export const listSpoolInventory = (query: URLSearchParams) => request<SpoolInventoryResult>(`/api/spools/inventory?${query}`);
 export const listProfilesForFilament = (filamentId: number) =>
 	request<PrintProfile[]>(`/api/profiles?filamentId=${filamentId}`);
-export const searchProfiles = () => request<ProfileInventoryResult>('/api/profiles/inventory');
+// `query` is the /profiles page's own URL query (brand, material, scope, sort, order, page,
+// pageSize), passed through as-is.
+export const listProfileInventory = (query: URLSearchParams) => request<ProfileInventoryResult>(`/api/profiles/inventory?${query}`);
 export const getProfileFieldSpec = (profileId: number | null) =>
 	request<ProfileFieldSpecResponse>(`/api/profiles/field-spec${profileId === null ? '' : `?profileId=${profileId}`}`);
-export const deleteProfile = (id: number) => request<ApiResult>(`/api/profiles/${id}`, { method: 'DELETE' });
+export const deleteProfile = (id: number) => requestAllowingError<ApiResult>(`/api/profiles/${id}`, { method: 'DELETE' });
 
 // Accepts a sliced .3mf or a raw Bambu Studio preset export (.json) -- format is auto-detected
 // server-side (github.com/t2vi/spoolbook/issues/99).
@@ -249,9 +273,26 @@ export const createProfile = (filamentId: number, input: ProfileInput) =>
 	requestAllowingError<ProfileResult>(`/api/profiles?filamentId=${filamentId}`, json(input));
 export const updateProfile = (id: number, input: ProfileInput) =>
 	requestAllowingError<ProfileResult>(`/api/profiles/${id}`, { method: 'PUT', body: JSON.stringify(input) });
-// Saves the edits as version n+1 of profile `id` (the way to edit a version a Print has locked).
+// Saves the edits as a new version branched from `id` (the way to edit a version a Print has
+// locked), numbered after the set's highest and selected.
 export const saveProfileAsNewVersion = (id: number, input: ProfileInput) =>
 	requestAllowingError<ProfileResult>(`/api/profiles/${id}/versions`, json(input));
+
+export interface ProfileVersion {
+	id: number;
+	versionNumber: number;
+	versionName: string | null;
+	nozzleTempC: number;
+	createdAt: string;
+	selected: boolean;
+	locked: boolean;
+}
+// A new, independent profile copied from `id` (its own v1), named "<name> (copy)".
+export const duplicateProfile = (id: number) => requestAllowingError<ProfileResult>(`/api/profiles/${id}/duplicate`, { method: 'POST' });
+export const listProfileVersions = (id: number) => request<ProfileVersion[]>(`/api/profiles/${id}/versions`);
+export const selectProfileVersion = (id: number) => request<ApiResult>(`/api/profiles/${id}/select`, { method: 'POST' });
+export const setProfileVersionName = (id: number, versionName: string) =>
+	request<ApiResult>(`/api/profiles/${id}/version-name`, { method: 'PUT', body: JSON.stringify({ versionName }) });
 
 export interface SpoolInput {
 	lotCode: string | null;
@@ -296,6 +337,23 @@ export const deleteFilament = (id: number) => request<FilamentResult>(`/api/fila
 export const syncFilamentCatalog = () =>
 	request<{ ok: boolean; error?: string; added?: number; skipped?: number }>('/api/filaments/sync', { method: 'POST' });
 export const listFilamentColors = () => request<FilamentColor[]>('/api/filament-colors');
+export interface ColorInventoryResult {
+	colors: FilamentColor[];
+	total: number;
+	page: number;
+	pageSize: number;
+	totalPages: number;
+}
+export const listColorInventory = (q: string, sort: 'name' | 'hex', order: 'asc' | 'desc', page: number, pageSize: number) =>
+	request<ColorInventoryResult>(
+		`/api/filament-colors/inventory?${new URLSearchParams({ q, sort, order, page: String(page), pageSize: String(pageSize) })}`
+	);
+type ColorResult = { ok: boolean; error?: string; color?: FilamentColor };
+export const createColor = (name: string, hex: string) =>
+	requestAllowingError<ColorResult>('/api/filament-colors', { method: 'POST', body: JSON.stringify({ name, hex }) });
+export const updateColor = (id: number, name: string, hex: string) =>
+	requestAllowingError<ColorResult>(`/api/filament-colors/${id}`, { method: 'PUT', body: JSON.stringify({ name, hex }) });
+export const deleteColor = (id: number) => requestAllowingError<ColorResult>(`/api/filament-colors/${id}`, { method: 'DELETE' });
 
 // Bambu addresses AMS slots across units as unit_id * 4 + slot_id — same convention PrintModal.razor uses.
 export function amsSlotNumber(tray: { unitId: string; slotId: string }): number {

@@ -8,6 +8,7 @@
 	import type { SpoolInput } from '$lib/api/client';
 	import type { Filament } from '$lib/api/types';
 	import { goto } from '$app/navigation';
+	import { unsavedGuard } from '$lib/unsaved.svelte';
 	import { numOrNull } from '$lib/utils.js';
 
 	let { id }: { id: number | null } = $props();
@@ -22,10 +23,14 @@
 	let diameterMm = $state<number | string>('');
 	let notes = $state('');
 	let errorMessage = $state<string | null>(null);
+	const unsaved = unsavedGuard({
+		form: () => [selectedFilamentId, lotCode, purchasedAt, openedAt, emptiedAt, weightGrams, diameterMm, notes]
+	});
 
 	$effect(() => {
 		if (id === null) {
 			listAllFilaments().then((f) => (filaments = f));
+			unsaved.markClean();
 			return;
 		}
 		getSpool(id).then((existing) => {
@@ -36,6 +41,7 @@
 			weightGrams = existing.weightGrams?.toString() ?? '';
 			diameterMm = existing.diameterMm?.toString() ?? '';
 			notes = existing.notes ?? '';
+			unsaved.markClean();
 		});
 	});
 
@@ -58,7 +64,8 @@
 					errorMessage = result.error ?? 'Save failed.';
 					return;
 				}
-				goto('/spools');
+				unsaved.markClean();
+			goto('/spools');
 				return;
 			}
 
@@ -71,6 +78,7 @@
 				errorMessage = result.error ?? 'Save failed.';
 				return;
 			}
+			unsaved.markClean();
 			goto('/spools');
 		} catch (e) {
 			errorMessage = e instanceof Error ? e.message : 'Save failed.';
@@ -122,7 +130,7 @@
 
 		<div class="flex items-center gap-3 pt-2">
 			<Button type="submit">Save</Button>
-			<a href="/spools" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
+			<a href="/spools" onclick={() => unsaved.markClean()} class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
 		</div>
 	</form>
 </div>

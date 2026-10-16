@@ -27,39 +27,41 @@ and the ambient weather attached once a Print ends.
 
 ### Reading
 
-- **FR-001** — `GET /api/prints/{id}` (open) returns the Print with its profile version, spool,
+- **FR-001** — `GET /api/prints/{id}` (signed in) returns the Print with its profile version, spool,
   printer (id + name), project, failure modes and every auto-filled field; 404 if missing.
   *Verify: integration*
-- **FR-002** — `GET /api/prints` (open), newest `started_at` first: `?printerId=` → that
+- **FR-002** — `GET /api/prints` (signed in), newest `started_at` first: `?printerId=` → that
   printer's **5** most recent; `?projectId=` → all of that project's Prints; neither → all.
   *Verify: integration*
-- **FR-003** — `GET /api/prints/inventory` (open) filters by exact `status` and `printerId`,
-  pages with `page` (default 1) and `pageSize` (default 20; non-positive values fall back to the
-  defaults), newest first, and returns `{ prints, total, page, pageSize, totalPages }` with
-  `totalPages` ≥ 1. *Verify: integration*
-- **FR-004** — `GET /api/prints/{id}/hourly-weather` (open) returns that Print's hourly rows
+- **FR-003** — `GET /api/prints/inventory` (signed in) filters by exact `status`, `printerId`,
+  and the spool's filament `brand` and `material` (all combinable); sorts by `sort` =
+  `startedAt` (default) | `status` | `printer` with `order` = `asc` | `desc` (default `desc` for
+  `startedAt`, `asc` otherwise; ties newest first); pages with `page` (default 1) and `pageSize`
+  (default 20; non-positive values fall back to the defaults); returns `{ prints, total, page,
+  pageSize, totalPages }` with `totalPages` ≥ 1, each print carrying its spool (with filament),
+  printer and ambient temperature. *Verify: integration*
+- **FR-004** — `GET /api/prints/{id}/hourly-weather` (signed in) returns that Print's hourly rows
   ordered by hour; empty array if none. *Verify: integration*
-- **FR-005** — `GET /api/prints/{id}/readings` (open) returns the stored per-minute telemetry
+- **FR-005** — `GET /api/prints/{id}/readings` (signed in) returns the stored per-minute telemetry
   snapshot (001/FR-030); empty array if none. *Verify: integration*
 
 ### Writing
 
-- **FR-010** — `POST /api/prints` (editor) creates a Print from profile, spool, printer,
-  start, end, status, notes, clean-build-plate, optional project + plate, and failure modes;
-  returns `{ ok, print }` with the full Print. Auto-filled fields can't be set this way.
+- **FR-010** — A Print is only ever created by sending a job from spoolbook (FR-015): there is
+  no way to log a print by hand, because settings recorded from an actual print are trustworthy
+  and settings recalled from memory aren't. `POST /api/prints` does not exist (→ 405).
   *Verify: integration*
 - **FR-011** — Failure modes are de-duplicated. Any failure mode on a `Success` Print → 400
-  `failure_modes_require_failed_or_partial`, nothing saved (create and update).
-  *Verify: integration*
-- **FR-012** — Create/update reject with 400 `{ ok: false, error }` (nothing saved): a status
-  outside the four values → `Unknown status.`; a failure mode outside the known set →
-  `Unknown failure mode: <mode>.`; a profile/spool/printer/project id that doesn't exist →
-  `Unknown print profile.` / `Unknown spool.` / `Unknown printer.` / `Unknown project.`; an
-  `endedAt` before `startedAt` → `Ended before it started.` (a blank `endedAt` is fine).
-  *Verify: integration*
-- **FR-013** — `PUT /api/prints/{id}` (editor) updates printer, project + plate, times,
-  status, notes, clean-build-plate, and replaces the failure-mode set wholesale. Profile and
-  spool are fixed at creation. 404 if missing. *Verify: integration*
+  `failure_modes_require_failed_or_partial`, nothing saved. *Verify: integration*
+- **FR-012** — Annotating (FR-013) rejects with 400 `{ ok: false, error }`, nothing saved: a
+  status other than `Success` / `Failed` / `Partial` → `Unknown status.`; a failure mode
+  outside the known set → `Unknown failure mode: <mode>.`; a Print still `InProgress` →
+  `still_in_progress` (telemetry hasn't finalized it yet). *Verify: integration*
+- **FR-013** — `PUT /api/prints/{id}` `{ status, failureModes, notes, actualRoomTempC,
+  cleanBuildPlate }` (editor) annotates a finished Print's outcome: corrects the result,
+  replaces the failure-mode set wholesale, and sets notes, room temperature and clean-build-plate.
+  Nothing else can change — profile version, spool, printer, project + plate, times, and every
+  telemetry/auto-filled field stay as recorded. 404 if missing. *Verify: integration*
 - **FR-014** — `DELETE /api/prints/{id}` (editor) deletes the Print together with its failure
   modes and hourly weather; an attached telemetry Job is kept but unlinked. 404 if missing.
   *Verify: integration*
@@ -68,7 +70,7 @@ and the ambient weather attached once a Print ends.
 
 ### Recommendation
 
-- **FR-020** — `GET /api/prints/recommend-profile?projectId=&currentTempC=` (open) picks, among
+- **FR-020** — `GET /api/prints/recommend-profile?projectId=&currentTempC=` (signed in) picks, among
   that project's Prints, the best by status (`Success` > `Partial` > `Failed` > `InProgress`),
   then by ambient temperature closest to `currentTempC` (Prints without ambient weather, or no
   `currentTempC` given, rank last on this key), then most recent; returns that Print's exact
@@ -76,12 +78,10 @@ and the ambient weather attached once a Print ends.
 
 ### Linking telemetry Jobs
 
-- **FR-030** — `GET /api/prints/job-match?printerId=&startedAt=` (open) returns the 001/FR-040
-  candidate Job or `null`. *Verify: integration*
-- **FR-031** — `POST /api/prints/{id}/attach-job` `{ jobId }` (editor) attaches the Job
-  (001/FR-041). Missing Print or Job → 404 `not_found`; a Job already attached to a different
-  Print → 409 `already_attached` (attaching it again to the same Print is fine).
-  *Verify: integration*
+- **FR-030** — Telemetry Jobs attach to their Print automatically when it's sent (001/FR-015);
+  with no hand-logged prints there is nothing to match by hand, so `GET /api/prints/job-match`
+  and `POST /api/prints/{id}/attach-job` do not exist — requests to them fail with a client
+  error and match or attach nothing. *Verify: integration*
 
 ### Ambient weather
 
@@ -101,13 +101,26 @@ and the ambient weather attached once a Print ends.
 
 ### Pages
 
-- **FR-050** — `/prints` lists Prints newest first, 20 per page, with a status filter, an
-  optional printer filter from `?printerId=`, and a status badge per row. *Verify: e2e*
+- **FR-050** — `/prints` lists Prints (FR-003) with columns started, filament (with its color
+  swatch, 007/FR-050), profile, spool (lot code), printer, status badge and ambient temperature;
+  filters for brand, material, printer and status; sortable started / status / printer headers;
+  paging with a page-size choice (10 / 20 / 50). Filters, sort and page live in the URL, so a
+  view survives refresh, back and sharing. *Verify: e2e*
 - **FR-051** — `/prints/[id]` shows the Print's details and failure modes, ambient weather with
   its hourly chart, chamber temperature / AMS humidity and layer-progress charts from the
   telemetry snapshot, the bed photo, and deletes after confirmation. *Verify: e2e*
+- **FR-052** — Once a Print is finished, `/prints/[id]` offers "Edit outcome" (editor): result
+  (Success / Failed / Partial), failure-mode tags (shown only for Failed / Partial), notes, room
+  temperature and clean build plate, saved via FR-013 with errors shown; unsaved edits are
+  guarded (002/FR-008). Everything else on the page stays read-only. *Verify: e2e*
 
 ## Notes
+
+- **Decisions (2026-10-16 lost-features review):** no hand-logged prints and no manual
+  job-match chip (FR-010, FR-030) — the Blazor "Log a print" form was removed in v1.2.0 on
+  purpose; only the outcome annotation of sent prints is restored (FR-013, FR-052). The
+  standalone Recommend page (removed v0.1.7) stays gone: the recommendation pre-selects the
+  profile in the Print modal (FR-020, 004/FR-050).
 
 - Retroactive: behavior read from the code at `3fdca27`.
 - **No UI to log or edit a Print (#164):** the frontend has no client for create, update,

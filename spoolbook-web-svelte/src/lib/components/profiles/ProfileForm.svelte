@@ -12,8 +12,10 @@
 	import Picker from '$lib/components/picker.svelte';
 	import FilamentPicker from '$lib/components/filament-picker.svelte';
 	import SearchablePicker from '$lib/components/searchable-picker.svelte';
+	import VersionsPanel from '$lib/components/profiles/VersionsPanel.svelte';
 	import {
 		createProfile,
+		duplicateProfile,
 		getProfileFieldSpec,
 		importProfilePreset,
 		listAllFilaments,
@@ -26,6 +28,7 @@
 	import type { ProfileInput } from '$lib/api/client';
 	import type { Filament, ImportResult, ProfileFieldTab, ProfileSource, SlicerType, Spool } from '$lib/api/types';
 	import { goto } from '$app/navigation';
+	import { unsavedGuard } from '$lib/unsaved.svelte';
 
 	let { id }: { id: number | null } = $props();
 
@@ -75,6 +78,10 @@
 		if (spoolId !== 0 && !spoolOptions.some((o) => o.value === spoolId)) spoolId = 0;
 	});
 
+	const unsaved = unsavedGuard({
+		form: () => [selectedFilamentId, name, spoolId, tabs.flatMap((t) => t.sections.flatMap((s) => s.fields.map((f) => f.value)))]
+	});
+
 	let systemPresetOptions = $state<{ value: string; label: string }[]>([]);
 	let selectedSystemPreset = $state('');
 
@@ -103,6 +110,7 @@
 			versionNumber = spec.versionNumber ?? null;
 			isCurrentVersion = spec.isCurrentVersion ?? true;
 			activeTab = tabs[0]?.title ?? '';
+			unsaved.markClean();
 		})();
 	});
 
@@ -158,6 +166,17 @@
 		}
 	}
 
+	// Copies the saved profile (not unsaved edits) and opens the copy (006/FR-043).
+	async function duplicate() {
+		if (id === null) return;
+		const result = await duplicateProfile(id);
+		if (!result.ok || !result.profile) {
+			errorMessage = 'Duplicate failed.';
+			return;
+		}
+		goto(`/profiles/edit/${result.profile.id}`);
+	}
+
 	async function save(e: Event, asNewVersion = false) {
 		e.preventDefault();
 		const fields: Record<string, string> = {};
@@ -182,6 +201,7 @@
 			return;
 		}
 
+		unsaved.markClean();
 		goto('/profiles');
 	}
 </script>
@@ -189,7 +209,7 @@
 <h1 class="mb-6 flex items-center gap-3 text-2xl font-semibold">
 	{id === null ? 'Add profile' : 'Edit profile'}
 	{#if versionNumber !== null}
-		<Badge variant={isCurrentVersion ? 'default' : 'outline'}>v{versionNumber}{isCurrentVersion ? '' : ' (superseded)'}</Badge>
+		<Badge variant={isCurrentVersion ? 'default' : 'outline'}>v{versionNumber}{isCurrentVersion ? ' · selected' : ''}</Badge>
 	{/if}
 </h1>
 
@@ -317,9 +337,16 @@
 
 	<form onsubmit={save} class="flex items-center gap-3">
 		<Button type="submit">Save</Button>
-		{#if id !== null && isCurrentVersion}
+		{#if id !== null}
 			<Button type="button" variant="outline" onclick={(e) => save(e, true)}>Save as new version</Button>
+			<Button type="button" variant="outline" onclick={duplicate}>Duplicate</Button>
 		{/if}
-		<a href="/profiles" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
+		<a href="/profiles" onclick={() => unsaved.markClean()} class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
 	</form>
+
+	{#if id !== null}
+		{#key id}
+			<VersionsPanel {id} onSelected={(selectedId) => (isCurrentVersion = selectedId === id)} />
+		{/key}
+	{/if}
 </div>

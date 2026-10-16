@@ -48,12 +48,14 @@ async fn test_pool() -> sqlx::SqlitePool {
 #[tokio::test]
 async fn list_all_returns_empty_array_when_no_filaments() {
     let pool = test_pool().await;
+    let cookie = common::auth_cookie_header(&pool).await;
     let app = spoolbook_rs::app(pool);
 
     let response = app
         .oneshot(
             Request::builder()
                 .uri("/api/filaments/all")
+                .header("cookie", cookie)
                 .body(Body::empty())
                 .unwrap(),
         )
