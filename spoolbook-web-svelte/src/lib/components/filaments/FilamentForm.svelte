@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ColorSwatch from '$lib/components/color-swatch.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -72,9 +73,7 @@
 					<option value={c.name}></option>
 				{/each}
 			</datalist>
-			{#if swatchHex}
-				<span class="inline-block h-5 w-5 shrink-0 rounded border" style:background={swatchHex}></span>
-			{/if}
+			<ColorSwatch hex={swatchHex} class="size-5" />
 		</div>
 	</div>
 

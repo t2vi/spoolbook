@@ -1,4 +1,6 @@
 <script lang="ts">
+	import ColorSwatch from '$lib/components/color-swatch.svelte';
+	import { hexFor } from '$lib/color-hexes.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
@@ -299,7 +301,8 @@
 						{ value: 0, label: '-- pick a spool --' },
 						...spools.map((s) => ({
 							value: s.id,
-							label: `${s.filament?.brand} ${s.filament?.material} ${s.filament?.variant ?? ''} — ${s.filament?.color}${s.lotCode ? ` (${s.lotCode})` : ''}`
+							label: `${s.filament?.brand} ${s.filament?.material} ${s.filament?.variant ?? ''} — ${s.filament?.color}${s.lotCode ? ` (${s.lotCode})` : ''}`,
+							hex: hexFor(s.filament?.color)
 						}))
 					]}
 				/>
@@ -310,7 +313,7 @@
 				<Picker
 					id="profile-select"
 					bind:value={selectedProfileId}
-					options={[{ value: 0, label: '-- pick a profile --' }, ...profiles.map((p) => ({ value: p.id, label: p.name }))]}
+					options={[{ value: 0, label: '-- pick a profile --' }, ...profiles.map((p) => ({ value: p.id, label: p.name, hex: hexFor(spools.find((s) => s.id === selectedSpoolId)?.filament?.color) }))]}
 				/>
 			</div>
 

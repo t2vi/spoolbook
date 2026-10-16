@@ -49,7 +49,8 @@
 	const topItems = [{ href: '/', label: 'Dashboard', icon: LayoutDashboardIcon }];
 	const filamentsSubItems = [
 		{ href: '/filaments', label: 'List' },
-		{ href: '/spools', label: 'Spools' }
+		{ href: '/spools', label: 'Spools' },
+		{ href: '/filaments/colors', label: 'Colors' }
 	];
 	const workflowSubItems = [
 		{ href: '/profiles', label: 'Profiles' },
@@ -59,8 +60,12 @@
 	];
 	const bottomItems = [{ href: '/settings', label: 'Settings', icon: SettingsIcon }];
 
+	// The longest matching link wins, so /filaments/colors highlights Colors, not Filaments too.
+	const navHrefs = [...topItems, ...filamentsSubItems, ...workflowSubItems, ...bottomItems].map((i) => i.href);
 	function isActive(href: string) {
-		return href === '/' ? page.url.pathname === '/' : page.url.pathname.startsWith(href);
+		const path = page.url.pathname;
+		const matches = (h: string) => (h === '/' ? path === '/' : path === h || path.startsWith(`${h}/`));
+		return matches(href) && !navHrefs.some((h) => h.length > href.length && matches(h));
 	}
 
 	let filamentsOpen = $state(filamentsSubItems.some((item) => isActive(item.href)));

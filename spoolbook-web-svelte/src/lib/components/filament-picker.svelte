@@ -1,5 +1,6 @@
 <script lang="ts">
 	import SearchablePicker from '$lib/components/searchable-picker.svelte';
+	import { hexFor } from '$lib/color-hexes.svelte';
 	import type { Filament } from '$lib/api/types';
 
 	// Thin wrapper over SearchablePicker: builds the {value, label} option list from Filament
@@ -19,7 +20,7 @@
 	} = $props();
 
 	let options = $derived(
-		filaments.map((f) => ({ value: f.id, label: `${f.brand} ${f.material} ${f.variant ?? ''} — ${f.color}` }))
+		filaments.map((f) => ({ value: f.id, label: `${f.brand} ${f.material} ${f.variant ?? ''} — ${f.color}`, hex: hexFor(f.color) }))
 	);
 </script>
 

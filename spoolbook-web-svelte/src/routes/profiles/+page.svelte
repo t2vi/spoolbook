@@ -1,4 +1,6 @@
 <script lang="ts">
+	import ColorSwatch from '$lib/components/color-swatch.svelte';
+	import { hexFor } from '$lib/color-hexes.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
@@ -70,7 +72,7 @@
 					{#each result.profiles as p (p.id)}
 						<Table.Row>
 							<Table.Cell>{p.name}</Table.Cell>
-							<Table.Cell>{p.filament?.brand} {p.filament?.material} {p.filament?.variant ?? ''} — {p.filament?.color}</Table.Cell>
+							<Table.Cell><span class="flex items-center gap-2"><ColorSwatch hex={hexFor(p.filament?.color)} />{p.filament?.brand} {p.filament?.material} {p.filament?.variant ?? ''} — {p.filament?.color}</span></Table.Cell>
 							<Table.Cell>{p.nozzleTempC}°C</Table.Cell>
 							<Table.Cell>{p.source}</Table.Cell>
 							<Table.Cell>

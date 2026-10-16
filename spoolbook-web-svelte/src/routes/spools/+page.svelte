@@ -1,4 +1,6 @@
 <script lang="ts">
+	import ColorSwatch from '$lib/components/color-swatch.svelte';
+	import { hexFor } from '$lib/color-hexes.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
@@ -76,7 +78,7 @@
 				{:else}
 					{#each spools as s (s.id)}
 						<Table.Row>
-							<Table.Cell>{s.filament?.brand} {s.filament?.material} {s.filament?.variant ?? ''} — {s.filament?.color}</Table.Cell>
+							<Table.Cell><span class="flex items-center gap-2"><ColorSwatch hex={hexFor(s.filament?.color)} />{s.filament?.brand} {s.filament?.material} {s.filament?.variant ?? ''} — {s.filament?.color}</span></Table.Cell>
 							<Table.Cell>{s.lotCode}</Table.Cell>
 							<Table.Cell>{s.purchasedAt ? formatDate(s.purchasedAt) : ''}</Table.Cell>
 							<Table.Cell>{s.openedAt ? formatDate(s.openedAt) : ''}</Table.Cell>
