@@ -181,7 +181,7 @@
 	<title>Settings</title>
 </svelte:head>
 
-<div class="mx-auto max-w-3xl px-4 py-8">
+<div class="mx-auto w-full max-w-3xl px-4 py-8">
 	<h1 class="mb-6 text-2xl font-semibold">Settings</h1>
 
 	{#if !authenticated}

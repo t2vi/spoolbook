@@ -22,7 +22,7 @@
 	<title>Printers</title>
 </svelte:head>
 
-<div class="mx-auto max-w-3xl px-4 py-8">
+<div class="mx-auto w-full max-w-3xl px-4 py-8">
 	<div class="mb-6 flex items-center justify-between">
 		<h1 class="text-2xl font-semibold">Printers</h1>
 		{#if authenticated}

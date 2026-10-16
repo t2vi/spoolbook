@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { Badge, printStatusVariant } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
@@ -13,19 +13,6 @@
 	let project = $state<Project | null>(null);
 	let plates = $state<ProjectPlate[]>([]);
 	let prints = $state<Print[]>([]);
-
-	function statusBadgeClass(status: PrintStatus) {
-		switch (status) {
-			case 'Success':
-				return 'bg-green-100 text-green-800 hover:bg-green-100';
-			case 'Partial':
-				return 'bg-amber-100 text-amber-800 hover:bg-amber-100';
-			case 'Failed':
-				return 'bg-red-100 text-red-800 hover:bg-red-100';
-			case 'InProgress':
-				return 'bg-blue-100 text-blue-800 hover:bg-blue-100';
-		}
-	}
 
 	function formatBytes(bytes: number) {
 		if (bytes < 1024) return `${bytes} B`;
@@ -45,7 +32,7 @@
 	<title>Project details</title>
 </svelte:head>
 
-<div class="mx-auto max-w-2xl px-4 py-8">
+<div class="mx-auto w-full max-w-2xl px-4 py-8">
 	{#if project === null}
 		<Card.Root>
 			<Card.Header>
@@ -130,7 +117,7 @@
 								<li class="flex items-center justify-between px-3 py-2 text-sm">
 									<span>{formatDateTime(p.startedAt)}</span>
 									<div class="flex items-center gap-3">
-										<Badge class={statusBadgeClass(p.status)}>{p.status}</Badge>
+										<Badge variant={printStatusVariant[p.status]}>{p.status}</Badge>
 										<a href="/prints/{p.id}" class="text-muted-foreground hover:text-foreground hover:underline">View</a>
 									</div>
 								</li>

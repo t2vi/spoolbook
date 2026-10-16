@@ -48,7 +48,7 @@
 	<title>Sign in</title>
 </svelte:head>
 
-<div class="mx-auto max-w-sm px-4 py-16">
+<div class="mx-auto w-full max-w-sm px-4 py-16">
 	<h1 class="mb-6 text-2xl font-semibold">Sign in</h1>
 	<form class="space-y-4" onsubmit={submit}>
 		<Input bind:value={username} placeholder="Username" autofocus />
