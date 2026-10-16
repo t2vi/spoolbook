@@ -99,7 +99,7 @@
 	<title>Spools</title>
 </svelte:head>
 
-<div class="mx-auto max-w-6xl px-4 py-8">
+<div class="mx-auto w-full max-w-6xl px-4 py-8">
 	<h1 class="mb-6 text-2xl font-semibold">Spools</h1>
 
 	<div class="mb-4 flex flex-wrap items-end gap-3">
@@ -152,7 +152,7 @@
 							<Table.Cell>{s.purchasedAt ? formatDate(s.purchasedAt) : ''}</Table.Cell>
 							<Table.Cell>{s.openedAt ? formatDate(s.openedAt) : ''}</Table.Cell>
 							<Table.Cell>{s.emptiedAt ? formatDate(s.emptiedAt) : ''}</Table.Cell>
-							<Table.Cell><Badge variant={status(s) === 'Opened' ? 'default' : 'outline'}>{status(s)}</Badge></Table.Cell>
+							<Table.Cell><Badge variant={status(s) === 'Opened' ? 'success' : status(s) === 'Unopened' ? 'info' : 'neutral'}>{status(s)}</Badge></Table.Cell>
 							<Table.Cell class="text-right whitespace-nowrap">
 								{#if authenticated}
 									<a href="/spools/edit/{s.id}" class="hover:underline">Edit</a>

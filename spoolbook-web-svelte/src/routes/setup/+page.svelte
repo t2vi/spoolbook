@@ -40,7 +40,7 @@
 	<title>Set up spoolbook</title>
 </svelte:head>
 
-<div class="mx-auto max-w-sm px-4 py-16">
+<div class="mx-auto w-full max-w-sm px-4 py-16">
 	<h1 class="mb-2 text-2xl font-semibold">Welcome to spoolbook</h1>
 	<p class="mb-6 text-sm text-muted-foreground">Create the admin account to get started.</p>
 	<form class="space-y-4" onsubmit={submit}>

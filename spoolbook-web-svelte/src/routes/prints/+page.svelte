@@ -1,7 +1,7 @@
 <script lang="ts">
 	import ColorSwatch from '$lib/components/color-swatch.svelte';
 	import { hexFor } from '$lib/color-hexes.svelte';
-	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { Badge, printStatusVariant } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
@@ -77,19 +77,6 @@
 		await load();
 	}
 
-	function statusBadgeClass(status: PrintStatus) {
-		switch (status) {
-			case 'Success':
-				return 'bg-green-100 text-green-800 hover:bg-green-100';
-			case 'Partial':
-				return 'bg-amber-100 text-amber-800 hover:bg-amber-100';
-			case 'Failed':
-				return 'bg-red-100 text-red-800 hover:bg-red-100';
-			case 'InProgress':
-				return 'bg-blue-100 text-blue-800 hover:bg-blue-100';
-		}
-	}
-
 	$effect(() => {
 		load();
 	});
@@ -105,7 +92,7 @@
 	<title>Prints</title>
 </svelte:head>
 
-<div class="mx-auto max-w-6xl px-4 py-8">
+<div class="mx-auto w-full max-w-6xl px-4 py-8">
 	<h1 class="mb-6 text-2xl font-semibold">Prints</h1>
 
 	<div class="mb-4 flex flex-wrap items-center gap-3">
@@ -145,7 +132,7 @@
 							<Table.Cell>{p.profile?.name}</Table.Cell>
 							<Table.Cell>{p.spool?.lotCode ?? ''}</Table.Cell>
 							<Table.Cell>{p.printer?.name}</Table.Cell>
-							<Table.Cell><Badge class={statusBadgeClass(p.status)}>{p.status}</Badge></Table.Cell>
+							<Table.Cell><Badge variant={printStatusVariant[p.status]}>{p.status}</Badge></Table.Cell>
 							<Table.Cell>{p.ambientTempC !== null ? `${p.ambientTempC.toFixed(1)} °C` : ''}</Table.Cell>
 							<Table.Cell class="text-right whitespace-nowrap">
 								<a href="/prints/{p.id}" class="hover:underline">View</a>

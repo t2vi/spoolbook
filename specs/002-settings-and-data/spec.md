@@ -47,6 +47,12 @@ via an export zip that is *merged* into the target rather than replacing it.
   settings) tracks unsaved edits: leaving with unsaved edits — an in-app link, back, reload or
   closing the tab — asks for confirmation first; saving or cancelling clears it.
   *Verify: e2e*
+- **FR-009** — When signed in, a top bar over every page shows where you are as a breadcrumb —
+  home, then the sidebar group and page as the sidebar names them (e.g. Filaments / Colors),
+  then *New*, *Edit* or *Details* on a sub-page. Home and the page link to themselves unless
+  they're the last part; the group is a label. It also has a light/dark switch:
+  the first visit follows the system setting, and a choice is remembered in that browser across
+  reloads. *Verify: e2e*
 
 ### Settings
 

@@ -6,6 +6,6 @@
 	<title>Add spool</title>
 </svelte:head>
 
-<div class="mx-auto max-w-3xl px-4 py-8">
+<div class="mx-auto w-full max-w-3xl px-4 py-8">
 	<SpoolForm id={null} />
 </div>

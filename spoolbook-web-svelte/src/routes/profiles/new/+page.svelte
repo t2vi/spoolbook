@@ -6,6 +6,6 @@
 	<title>Add profile</title>
 </svelte:head>
 
-<div class="mx-auto max-w-4xl px-4 py-8">
+<div class="mx-auto w-full max-w-4xl px-4 py-8">
 	<ProfileForm id={null} />
 </div>

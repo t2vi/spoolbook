@@ -2,7 +2,7 @@
 	import { unsavedGuard } from '$lib/unsaved.svelte';
 	import ColorSwatch from '$lib/components/color-swatch.svelte';
 	import { hexFor } from '$lib/color-hexes.svelte';
-	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { Badge, printStatusVariant } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Chart from '$lib/components/ui/chart/index.js';
@@ -119,19 +119,6 @@
 		closeEditor();
 	}
 
-	function statusBadgeClass(status: Print['status']) {
-		switch (status) {
-			case 'Success':
-				return 'bg-green-100 text-green-800 hover:bg-green-100';
-			case 'Partial':
-				return 'bg-amber-100 text-amber-800 hover:bg-amber-100';
-			case 'Failed':
-				return 'bg-red-100 text-red-800 hover:bg-red-100';
-			case 'InProgress':
-				return 'bg-blue-100 text-blue-800 hover:bg-blue-100';
-		}
-	}
-
 	$effect(() => {
 		(async () => {
 			print = await getPrint(id);
@@ -147,7 +134,7 @@
 	<title>Print details</title>
 </svelte:head>
 
-<div class="mx-auto max-w-5xl px-4 py-8">
+<div class="mx-auto w-full max-w-5xl px-4 py-8">
 	{#if print === null}
 		<Card.Root>
 			<Card.Header>
@@ -165,7 +152,7 @@
 			<Card.Header>
 				<Card.Title class="text-2xl">Print details</Card.Title>
 				<Card.Action class="flex items-center gap-2">
-					<Badge class={statusBadgeClass(print.status)}>{print.status}</Badge>
+					<Badge variant={printStatusVariant[print.status]}>{print.status}</Badge>
 					{#if print.status !== 'InProgress'}
 						<Button size="sm" variant="outline" onclick={startEditing}>Edit outcome</Button>
 					{/if}

@@ -11,6 +11,12 @@
 				outline: "border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground",
 				ghost: "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
 				link: "text-primary underline-offset-4 hover:underline",
+				// Tinted with a border, after the Pinx template's status pills.
+				success: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+				warning: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+				danger: "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-400",
+				info: "border-indigo-500/30 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300",
+				neutral: "border-border bg-muted text-muted-foreground",
 			},
 		},
 		defaultVariants: {
@@ -19,6 +25,8 @@
 	});
 
 	export type BadgeVariant = VariantProps<typeof badgeVariants>["variant"];
+
+	export const printStatusVariant = { Success: "success", Partial: "warning", Failed: "danger", InProgress: "info" } as const;
 </script>
 
 <script lang="ts">
