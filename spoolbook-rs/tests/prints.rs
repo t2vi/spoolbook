@@ -462,3 +462,50 @@ async fn send_raw(pool: &sqlx::SqlitePool, method: &str, uri: &str) -> (StatusCo
     let status = response.status();
     (status, axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap().to_vec())
 }
+
+// spec: 003/FR-003
+#[tokio::test]
+async fn inventory_filters_by_filament_and_printer_and_sorts() {
+    let pool = test_pool().await;
+    let f = seed_all(&pool).await; // Bambu Lab PLA on "P2S #1"
+    let (_, petg) = send(&pool, "POST", "/api/filaments", Some(json!({ "brand": "Polymaker", "material": "PETG", "variant": null, "color": "Red" }))).await;
+    let petg = petg["entry"]["id"].as_i64().unwrap();
+    let petg_spool = seed_spool(&pool, petg).await;
+    let alpha = seed_printer(&pool, "Alpha").await;
+    let print = |note: &str, spool: i64, printer: i64, started: &str, status: &str| {
+        let mut body = print_body(&f, status, vec![]);
+        body["spoolId"] = json!(spool);
+        body["printerId"] = json!(printer);
+        body["input"]["startedAt"] = json!(started);
+        body["input"]["notes"] = json!(note);
+        body
+    };
+    common::create_print(&pool, Some(print("a", f.spool_id, f.printer_id, "2026-08-01T10:00:00Z", "Success"))).await;
+    common::create_print(&pool, Some(print("b", petg_spool, alpha, "2026-08-03T10:00:00Z", "Failed"))).await;
+    common::create_print(&pool, Some(print("c", f.spool_id, alpha, "2026-08-02T10:00:00Z", "Partial"))).await;
+    sqlx::query("UPDATE prints SET ambient_temp_c = 18.5 WHERE notes = 'a'").execute(&pool).await.unwrap();
+
+    let notes = |query: String| {
+        let pool = pool.clone();
+        async move {
+            let (status, body) = send(&pool, "GET", &format!("/api/prints/inventory?{query}"), None).await;
+            assert_eq!(status, StatusCode::OK, "{query}: {body}");
+            body["prints"].as_array().unwrap().iter().map(|p| p["notes"].as_str().unwrap().to_string()).collect::<Vec<_>>()
+        }
+    };
+
+    assert_eq!(notes(String::new()).await, ["b", "c", "a"], "newest started first by default");
+    assert_eq!(notes("brand=Polymaker".into()).await, ["b"]);
+    assert_eq!(notes("material=PLA".into()).await, ["c", "a"]);
+    assert_eq!(notes(format!("brand=Bambu%20Lab&printerId={alpha}")).await, ["c"]);
+    assert_eq!(notes("sort=startedAt&order=asc".into()).await, ["a", "c", "b"]);
+    assert_eq!(notes("sort=status".into()).await, ["b", "c", "a"], "status ascending by default");
+    assert_eq!(notes("sort=printer".into()).await, ["b", "c", "a"], "Alpha before P2S #1, ties newest first");
+    assert_eq!(notes("sort=printer&order=desc".into()).await, ["a", "b", "c"]);
+
+    let (_, body) = send(&pool, "GET", "/api/prints/inventory?page=2&pageSize=2", None).await;
+    assert_eq!((body["total"].as_i64(), body["totalPages"].as_i64()), (Some(3), Some(2)));
+    assert_eq!(body["prints"][0]["ambientTempC"], 18.5);
+    assert_eq!(body["prints"][0]["printer"]["name"], "P2S #1");
+    assert_eq!(body["prints"][0]["spool"]["filament"]["brand"], "Bambu Lab");
+}

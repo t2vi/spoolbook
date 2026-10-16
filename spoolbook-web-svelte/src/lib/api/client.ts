@@ -195,14 +195,9 @@ export const listPrintsForProject = (projectId: number) => request<Print[]>(`/ap
 export const recommendProfile = (projectId: number) =>
 	request<PrintProfile | null>(`/api/prints/recommend-profile?projectId=${projectId}`);
 
-export const searchPrints = (status: PrintStatus | '', printerId: number | null, page: number, pageSize = 20) => {
-	// int?/enum? query params fail to bind from an empty string (unlike string?, which just
-	// gives ""), so omit them entirely rather than sending status= / printerId= blank.
-	const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-	if (status) params.set('status', status);
-	if (printerId !== null) params.set('printerId', String(printerId));
-	return request<PrintInventoryResult>(`/api/prints/inventory?${params}`);
-};
+// `query` is the /prints page's own URL query (status, printerId, brand, material, sort, order,
+// page, pageSize), passed through as-is. Blank values must be left out: printerId= fails to bind.
+export const listPrintInventory = (query: URLSearchParams) => request<PrintInventoryResult>(`/api/prints/inventory?${query}`);
 export const getPrint = (id: number) => request<Print>(`/api/prints/${id}`);
 // The only edit a Print allows: its outcome, once finished (003/FR-013).
 export interface PrintOutcome {
