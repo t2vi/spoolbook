@@ -76,6 +76,16 @@ filament. Colors are discovered from filaments as they're added.
   `Variant`, `Color`, `Hex`). *Verify: unit*
 - **FR-024** — `FILAMENT_CATALOG_URL`, when set, replaces the published catalog URL for syncing
   and for the URL Settings shows (used by tests). *Verify: integration*
+- **FR-025** — An imported entry whose material or variant contains HTML markup is cleaned
+  before FR-010's create path: material and variant are joined, tags (`<…>`) removed, whitespace
+  collapsed, and the result re-split at the first space — material is the first word, variant
+  the rest (none if nothing is left). So `<span` + `class="align-middle">PLA Matte</span>`
+  imports as material `PLA`, variant `Matte`. *Verify: unit*
+- **FR-026** — At startup, every stored filament whose material or variant contains markup is
+  repaired the same way (FR-025). If no other filament has the cleaned brand / material /
+  variant / color, it's renamed in place; otherwise its spools and profiles move to that
+  filament and the broken one is deleted, all in one transaction. Nothing that references a
+  filament is lost. *Verify: integration*
 
 ### Spools
 

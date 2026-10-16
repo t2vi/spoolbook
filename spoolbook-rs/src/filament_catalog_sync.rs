@@ -28,6 +28,72 @@ async fn fetch_text(client: &reqwest::Client, url: &str) -> Result<String, Strin
     resp.text().await.map_err(|e| format!("couldn't read {url}: {e}"))
 }
 
+// The published feed has scraper artifacts: every Bambu Lab row arrives as material `<span`,
+// variant `class="align-middle">PLA Matte</span>` (a title with its HTML, split at the first
+// space). Join, drop the tags, re-split at the first space (007/FR-025). None = already clean.
+pub fn clean_markup(material: &str, variant: Option<&str>) -> Option<(String, Option<String>)> {
+    let joined = format!("{material} {}", variant.unwrap_or(""));
+    if !joined.contains(['<', '>']) {
+        return None;
+    }
+    let mut text = String::new();
+    let mut in_tag = false;
+    for c in joined.chars() {
+        match c {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            c if !in_tag => text.push(c),
+            _ => {}
+        }
+    }
+    let words: Vec<&str> = text.split_whitespace().collect();
+    let (first, rest) = words.split_first()?;
+    Some((first.to_string(), (!rest.is_empty()).then(|| rest.join(" "))))
+}
+
+// Startup repair of filaments already imported with markup (007/FR-026): rename in place, or,
+// when the cleaned name already exists, move its spools and profiles there and drop it.
+pub async fn repair_markup(pool: &SqlitePool) {
+    let broken: Vec<(i64, String, String, Option<String>, String)> =
+        sqlx::query_as("SELECT id, brand, material, variant, color FROM filaments WHERE material LIKE '%<%' OR material LIKE '%>%' OR variant LIKE '%<%' OR variant LIKE '%>%'")
+            .fetch_all(pool)
+            .await
+            .expect("query failed");
+    for (id, brand, material, variant, color) in broken {
+        let Some((material, variant)) = clean_markup(&material, variant.as_deref()) else { continue };
+        let mut tx = pool.begin().await.expect("begin failed");
+        let twin: Option<i64> = sqlx::query_scalar(
+            "SELECT id FROM filaments WHERE brand = ?1 AND material = ?2 AND variant IS ?3 AND color = ?4 AND id != ?5",
+        )
+        .bind(&brand)
+        .bind(&material)
+        .bind(&variant)
+        .bind(&color)
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await
+        .expect("query failed");
+        match twin {
+            Some(twin) => {
+                for table in ["spools", "print_profiles"] {
+                    sqlx::query(&format!("UPDATE {table} SET filament_id = ?1 WHERE filament_id = ?2")).bind(twin).bind(id).execute(&mut *tx).await.expect("update failed");
+                }
+                sqlx::query("DELETE FROM filaments WHERE id = ?1").bind(id).execute(&mut *tx).await.expect("delete failed");
+            }
+            None => {
+                sqlx::query("UPDATE filaments SET material = ?1, variant = ?2 WHERE id = ?3")
+                    .bind(&material)
+                    .bind(&variant)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await
+                    .expect("update failed");
+            }
+        }
+        tx.commit().await.expect("commit failed");
+    }
+}
+
 // Mirrors FilamentService.ImportManyAsync: each entry goes through the same
 // validate/dedupe/persist path as a manual create, so a bad or already-known entry is just
 // skipped rather than failing the whole batch.
@@ -35,6 +101,14 @@ pub async fn import_many(pool: &SqlitePool, entries: &[FilamentInput]) -> (i64, 
     let mut added = 0;
     let mut skipped = 0;
     for entry in entries {
+        let cleaned;
+        let entry = match clean_markup(&entry.material, entry.variant.as_deref()) {
+            Some((material, variant)) => {
+                cleaned = FilamentInput { material, variant, ..entry.clone() };
+                &cleaned
+            }
+            None => entry,
+        };
         match filaments::create_one(pool, entry).await {
             Ok(_) => added += 1,
             Err(_) => skipped += 1,

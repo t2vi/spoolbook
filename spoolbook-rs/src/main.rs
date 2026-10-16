@@ -22,6 +22,8 @@ async fn main() {
     // get migrated seamlessly (no wizard); a genuinely fresh install with no users and no env
     // var falls through and the frontend shows the setup wizard (GET /api/setup-status).
     spoolbook_rs::auth::migrate_env_var_admin_if_needed(&pool).await;
+    // Fix filaments imported with the catalog feed's HTML artifacts before anything shows them.
+    spoolbook_rs::filament_catalog_sync::repair_markup(&pool).await;
 
     // Converts any already-finished Print's raw Readings into its telemetry_json snapshot --
     // covers Prints that finished before Readings were collapsed at job end. Idempotent, same posture as the
