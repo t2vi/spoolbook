@@ -63,7 +63,8 @@ can catch that before confirming.
 ## Adding your first spool
 
 1. Go to **Filaments → List**, find or add the filament type on your roll (brand + material +
-   variant + color).
+   variant + color). **Filaments → Colors** holds each color's hex code — give a multi-color
+   filament several (`#1A1A1A, #D4AF37`) and its swatch shows them all.
 2. Go to **Filaments → Spools**, create a Spool against that Filament — this represents the
    physical roll.
 3. Go to **Print workflow → Profiles**, create a Print Profile for it — start from a Bambu Studio
@@ -73,7 +74,10 @@ can catch that before confirming.
 4. Send the print (see above) — spoolbook creates the Print record automatically and locks in the
    exact settings from the Profile version you used. That version is then locked: to tweak it
    later (e.g. a seasonal temperature change), open it and use **Save as new version**, so a past
-   print always shows what it was really printed with. **Print workflow → Prints** shows
-   the full history; each entry is read-only, and fills in automatically once the print ends — a
-   photo of the finished bed, outdoor weather for the print window, and (P2S/AMS hardware that
-   reports it) chamber temperature, AMS humidity, and layer progress charted over the print.
+   print always shows what it was really printed with. A profile's **Versions** panel lists them
+   all — name one ("Winter 2026") and use **Use this version** to switch which one you print with.
+   **Print workflow → Prints** shows the full history; each entry fills in automatically once the
+   print ends — a photo of the finished bed, outdoor weather for the print window, and (P2S/AMS
+   hardware that reports it) chamber temperature, AMS humidity, and layer progress charted over
+   the print. Use **Edit outcome** on a finished print to record how it came out: result, failure
+   modes, notes, room temperature and whether the plate was clean.

@@ -279,9 +279,12 @@ async fn importing_a_raw_preset_json_resolves_its_inherits_chain() {
 }
 
 // spec: 006/FR-030, 006/FR-032
-#[tokio::test]
+// Calls the fetch directly, with no DB: under a paused clock, a query on sqlx's SQLite worker
+// thread looks idle to tokio, which then jumps the clock past the pool's acquire timeout
+// (PoolTimedOut, but only on a slow enough machine).
+#[tokio::test(start_paused = true)]
 async fn system_presets_gives_up_on_a_hung_slicer_service() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let app = axum::Router::new().fallback(|| async {
@@ -290,13 +293,24 @@ async fn system_presets_gives_up_on_a_hung_slicer_service() {
     });
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     unsafe { std::env::set_var("RESLICE_SERVICE_URL", format!("http://{addr}")) };
+
+    let result = spoolbook_rs::bambu_import::fetch_bbl_manifest().await;
+
+    assert!(result.is_err(), "should time out before the hour-late reply");
+}
+
+// spec: 006/FR-032
+#[tokio::test]
+async fn system_presets_reports_an_unreachable_slicer_service_as_bad_gateway() {
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    // A port nothing listens on any more: the connection is refused at once.
+    let addr = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap();
+    unsafe { std::env::set_var("RESLICE_SERVICE_URL", format!("http://{addr}")) };
     let pool = sqlx::sqlite::SqlitePoolOptions::new().max_connections(1).connect("sqlite::memory:").await.unwrap();
     sqlx::migrate!().run(&pool).await.unwrap();
-    // Paused after the DB is up: the clock then jumps straight to the next timer, so the 30 s
-    // timeout (or, without one, the hour-late reply) arrives instantly.
-    tokio::time::pause();
 
     let (status, body) = get_json(&pool, "/api/profiles/system-presets", Some(&common::auth_cookie_header(&pool).await)).await;
 
     assert_eq!(status, StatusCode::BAD_GATEWAY, "{body:?}");
+    assert_eq!(body["ok"], false);
 }
