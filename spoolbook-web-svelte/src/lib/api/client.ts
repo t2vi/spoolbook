@@ -182,6 +182,13 @@ export async function uploadProject(file: File): Promise<ProjectResult> {
 }
 
 export const importProjectFromUrl = (url: string) => request<ProjectResult>('/api/projects/import-url', json({ url }));
+// An existing Project that a new one looks like the next version of (same mesh, else same name).
+export const projectVersionCandidate = (project: Project) =>
+	request<Project | null>(
+		`/api/projects/version-candidate?${new URLSearchParams({ meshHash: project.meshHash ?? '', fileName: project.fileName, excludeProjectId: String(project.id) })}`
+	);
+export const linkProjectVersion = (projectId: number, previousVersionProjectId: number) =>
+	request<ApiResult>(`/api/projects/${projectId}/link-version`, json({ previousVersionProjectId }));
 
 export const renameProject = (projectId: number, fileName: string) =>
 	request<ProjectResult>(`/api/projects/${projectId}`, { method: 'PUT', body: JSON.stringify({ fileName }) });

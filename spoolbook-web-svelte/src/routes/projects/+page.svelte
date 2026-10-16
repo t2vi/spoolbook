@@ -4,6 +4,7 @@
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
+	import ProjectAdder from '$lib/components/projects/ProjectAdder.svelte';
 	import { deleteProject, listProjects, me, renameProject } from '$lib/api/client';
 	import type { Project } from '$lib/api/types';
 
@@ -117,6 +118,10 @@
 	<p class="mb-4 text-sm text-muted-foreground">
 		Every uploaded or re-sliced <code>.3mf</code> project. Re-slicing supersedes the previous version instead of adding a duplicate here.
 	</p>
+
+	{#if authenticated}
+		<div class="mb-6 max-w-md"><ProjectAdder onAdded={load} /></div>
+	{/if}
 
 	{#if authenticated && selected.size > 0}
 		<div class="mb-4">
