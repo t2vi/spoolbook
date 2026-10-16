@@ -9,6 +9,19 @@ on:
       - 'slicer-service/**'
       - 'docker-compose.yml'
       - '.github/workflows/docker-images.yml'
+  # Backfill: build an existing release tag and publish it as :<tag>, leaving :latest alone.
+  # (gh workflow run docker-images.yml -f tag=1.4.3)
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build and publish (e.g. 1.4.3)'
+        required: true
+
+# Every image gets its release version as a tag: on a push to main (only release/hotfix merges
+# land there) that's spoolbook-rs/Cargo.toml's version, plus :latest; on a backfill run it's the
+# requested tag. Both images share the version so a slicer always pairs with its app.
+env:
+  BACKFILL_TAG: ${{ inputs.tag }}
 
 permissions:
   contents: read
@@ -19,6 +32,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.sha }}
+
+      - name: Resolve image tags
+        run: |
+          if [ -n "$BACKFILL_TAG" ]; then
+            echo "IMAGE_TAGS=$BACKFILL_TAG" >> "$GITHUB_ENV"
+          else
+            echo "IMAGE_TAGS=$(grep -m1 '^version' spoolbook-rs/Cargo.toml | cut -d'"' -f2) latest" >> "$GITHUB_ENV"
+          fi
 
       - name: Build slicer image
         run: docker build -t spoolbook-slicer:ci ./slicer-service
@@ -62,16 +85,32 @@ jobs:
       - name: Push slicer image
         if: success()
         run: |
-          docker tag spoolbook-slicer:ci ghcr.io/${{ github.repository_owner }}/spoolbook-slicer:latest
-          docker push ghcr.io/${{ github.repository_owner }}/spoolbook-slicer:latest
+          for tag in $IMAGE_TAGS; do
+            docker tag spoolbook-slicer:ci ghcr.io/${{ github.repository_owner }}/spoolbook-slicer:$tag
+            docker push ghcr.io/${{ github.repository_owner }}/spoolbook-slicer:$tag
+          done
 
   spoolbook:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.sha }}
+
+      - name: Resolve image tags
+        run: |
+          if [ -n "$BACKFILL_TAG" ]; then
+            echo "IMAGE_TAGS=$BACKFILL_TAG" >> "$GITHUB_ENV"
+          else
+            echo "IMAGE_TAGS=$(grep -m1 '^version' spoolbook-rs/Cargo.toml | cut -d'"' -f2) latest" >> "$GITHUB_ENV"
+          fi
 
       - name: Build spoolbook image
-        run: docker build -t spoolbook:ci -f spoolbook-rs/Dockerfile .
+        # 0.1.8 (the .NET web app) kept its Dockerfile elsewhere; only matters for backfills.
+        run: |
+          dockerfile=spoolbook-rs/Dockerfile
+          [ -f "$dockerfile" ] || dockerfile=Spoolbook.Web/Dockerfile
+          docker build -t spoolbook:ci -f "$dockerfile" .
 
       - name: Run spoolbook container
         run: docker run -d --name spoolbook -p 5070:5070 -e SPOOLBOOK_ADMIN_PASSWORD=ci-test spoolbook:ci
@@ -103,5 +142,7 @@ jobs:
       - name: Push spoolbook image
         if: success()
         run: |
-          docker tag spoolbook:ci ghcr.io/${{ github.repository_owner }}/spoolbook:latest
-          docker push ghcr.io/${{ github.repository_owner }}/spoolbook:latest
+          for tag in $IMAGE_TAGS; do
+            docker tag spoolbook:ci ghcr.io/${{ github.repository_owner }}/spoolbook:$tag
+            docker push ghcr.io/${{ github.repository_owner }}/spoolbook:$tag
+          done
