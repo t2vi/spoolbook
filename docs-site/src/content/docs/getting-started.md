@@ -26,7 +26,11 @@ it shows only the sign-in page — nothing in your notebook is visible to others
 Optionally link a Google account under **Settings → Account** for one-click sign-in afterward —
 your password still works either way. After 5 wrong passwords in 15 minutes, sign-in for that
 username pauses for 15 minutes; changing your password signs out every other device. On first
-launch it seeds a starter filament catalog and begins syncing fresh data automatically in the background (throttled to once every 24 hours).
+launch it seeds a starter filament catalog and begins syncing fresh data automatically in the
+background (throttled to once every 24 hours).
+
+The moon/sun button at the top right switches between light and dark. Until you pick one it
+follows your system setting; your choice is remembered in that browser.
 
 ## Building from source instead
 
