@@ -6,6 +6,7 @@
 	import type { PrinterInput } from '$lib/api/client';
 	import { KNOWN_PRINTER_MODELS } from '$lib/printer-image';
 	import { goto } from '$app/navigation';
+	import { unsavedGuard } from '$lib/unsaved.svelte';
 
 	let { id }: { id: number | null } = $props();
 
@@ -21,9 +22,10 @@
 	let errorMessage = $state<string | null>(null);
 	let testing = $state(false);
 	let testResult = $state<{ ok: boolean; error?: string | null } | null>(null);
+	const unsaved = unsavedGuard({ form: () => [name, model, ipAddress, accessCode, serialNumber] });
 
 	$effect(() => {
-		if (id === null) return;
+		if (id === null) return unsaved.markClean();
 		getPrinter(id).then((existing) => {
 			if (!existing) return;
 			name = existing.name;
@@ -31,6 +33,7 @@
 			ipAddress = existing.ipAddress ?? '';
 			hasStoredAccessCode = existing.hasAccessCode;
 			serialNumber = existing.serialNumber ?? '';
+			unsaved.markClean();
 		});
 	});
 
@@ -64,6 +67,7 @@
 				errorMessage = result.error === 'duplicate' ? 'A printer with this name already exists.' : (result.error ?? 'Save failed.');
 				return;
 			}
+			unsaved.markClean();
 			goto('/printers');
 		} catch (e) {
 			errorMessage = e instanceof Error ? e.message : 'Save failed.';
@@ -121,6 +125,6 @@
 
 	<div class="flex items-center gap-3 pt-2">
 		<Button type="submit">Save</Button>
-		<a href="/printers" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
+		<a href="/printers" onclick={() => unsaved.markClean()} class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
 	</div>
 </form>

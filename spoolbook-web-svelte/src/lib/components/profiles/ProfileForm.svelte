@@ -28,6 +28,7 @@
 	import type { ProfileInput } from '$lib/api/client';
 	import type { Filament, ImportResult, ProfileFieldTab, ProfileSource, SlicerType, Spool } from '$lib/api/types';
 	import { goto } from '$app/navigation';
+	import { unsavedGuard } from '$lib/unsaved.svelte';
 
 	let { id }: { id: number | null } = $props();
 
@@ -77,6 +78,10 @@
 		if (spoolId !== 0 && !spoolOptions.some((o) => o.value === spoolId)) spoolId = 0;
 	});
 
+	const unsaved = unsavedGuard({
+		form: () => [selectedFilamentId, name, spoolId, tabs.flatMap((t) => t.sections.flatMap((s) => s.fields.map((f) => f.value)))]
+	});
+
 	let systemPresetOptions = $state<{ value: string; label: string }[]>([]);
 	let selectedSystemPreset = $state('');
 
@@ -105,6 +110,7 @@
 			versionNumber = spec.versionNumber ?? null;
 			isCurrentVersion = spec.isCurrentVersion ?? true;
 			activeTab = tabs[0]?.title ?? '';
+			unsaved.markClean();
 		})();
 	});
 
@@ -195,6 +201,7 @@
 			return;
 		}
 
+		unsaved.markClean();
 		goto('/profiles');
 	}
 </script>
@@ -334,7 +341,7 @@
 			<Button type="button" variant="outline" onclick={(e) => save(e, true)}>Save as new version</Button>
 			<Button type="button" variant="outline" onclick={duplicate}>Duplicate</Button>
 		{/if}
-		<a href="/profiles" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
+		<a href="/profiles" onclick={() => unsaved.markClean()} class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
 	</form>
 
 	{#if id !== null}
