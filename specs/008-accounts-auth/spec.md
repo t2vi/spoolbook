@@ -49,6 +49,14 @@ signed-in user can link a Google account and then sign in with it.
 - **FR-014** — `GET /api/me` → `{ authenticated: true, username, googleLinked }` for a valid
   session, else `{ authenticated: false }` (no error, also for a garbage cookie).
   *Verify: integration*
+- **FR-015** — Creating a session (setup, sign-in, Google sign-in) first deletes every expired
+  session, so they don't pile up. *Verify: integration*
+- **FR-016** — Sign-in is throttled per username: after 5 failed attempts for a username within
+  15 minutes, `POST /api/login` answers 429 `too_many_attempts` for it — even with the right
+  password — until the oldest of those failures is 15 minutes old. Unknown usernames count
+  too, so the throttle doesn't reveal which exist. A successful sign-in clears that username's
+  failures; failures older than 15 minutes are deleted as new ones are recorded. The sign-in
+  page says to try again later. *Verify: integration*
 
 ### Account
 
@@ -58,6 +66,9 @@ signed-in user can link a Google account and then sign in with it.
 - **FR-021** — A new password under 8 chars → 400 `password_too_short`; a username already
   taken by another user → 400 `username_taken`; on any error nothing is changed (username and
   password are saved together or not at all). *Verify: integration*
+- **FR-022** — Changing the password ends every other session of that user (a stolen cookie
+  stops working); the session that made the change stays signed in. Changing only the username
+  ends none. *Verify: integration*
 
 ### Google sign-in
 
@@ -81,6 +92,9 @@ signed-in user can link a Google account and then sign in with it.
   *Verify: integration*
 - **FR-035** — `GOOGLE_TOKEN_URL` / `GOOGLE_USERINFO_URL` override Google's endpoints (used by
   tests). *Verify: integration*
+- **FR-036** — Pending Google sign-in states expire after 5 minutes (FR-033); expired ones are
+  dropped whenever a new Google sign-in starts, so abandoned sign-ins don't accumulate in
+  memory. *Verify: unit*
 
 ### Pages
 
@@ -97,8 +111,8 @@ signed-in user can link a Google account and then sign in with it.
 
 - Retroactive: behavior read from the code at `3fdca27`.
 - **#178 (fixed):** a short new password was silently ignored (yet `ok`), and a taken
-  username was a 500. **#179:** session purge, revoke-on-password-change,
-  login throttling, OAuth state cleanup. **#165:** camera retry route isn't editor-gated.
+  username was a 500. **#179 (fixed):** session purge, revoke-on-password-change,
+  login throttling, OAuth state cleanup (FR-015, FR-016, FR-022, FR-036). **#165:** camera retry route isn't editor-gated.
 - **#93:** once `password_hash` becomes nullable (Google-only users), unlinking needs a guard
   so the last credential can't be removed.
 - **#91 / #92:** multi-user roles and invite-based Google registration are future work; today
