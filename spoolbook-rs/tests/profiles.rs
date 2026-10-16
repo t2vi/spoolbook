@@ -315,7 +315,7 @@ async fn seed_spool(pool: &sqlx::SqlitePool, filament_id: i64) -> i64 {
 }
 
 async fn attach_print(pool: &sqlx::SqlitePool, profile_id: i64, spool_id: i64, printer_id: i64) {
-    let (status, body) = send(pool, "POST", "/api/prints", Some(json!({
+    let (status, body) = common::create_print(pool, Some(json!({
         "profileId": profile_id, "spoolId": spool_id, "printerId": printer_id,
         "input": {
             "startedAt": "2026-08-15T10:00:00Z", "endedAt": "2026-08-15T12:00:00Z",

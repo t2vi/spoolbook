@@ -175,7 +175,7 @@ async fn delete_rejects_a_spool_with_prints() {
     .await
     .unwrap();
     let printer_id = seed_printer(&pool).await;
-    send(&pool, "POST", "/api/prints", Some(json!({
+    common::create_print(&pool, Some(json!({
         "profileId": profile_id, "spoolId": id, "printerId": printer_id,
         "input": {
             "startedAt": "2026-08-15T10:00:00Z", "endedAt": "2026-08-15T12:00:00Z",

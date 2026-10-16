@@ -1,7 +1,6 @@
 use spoolbook_rs::bambu_mqtt_payload_parser::ReadingInput;
 use spoolbook_rs::printer_telemetry::{
-    attach_job_to_print, backfill_reading_snapshots, collapse_readings_to_snapshot, end_job, find_match_for_print,
-    purge_stale_jobs, purge_unattached_jobs_older_than, record_reading,
+    backfill_reading_snapshots, collapse_readings_to_snapshot, end_job, purge_stale_jobs, purge_unattached_jobs_older_than, record_reading,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::str::FromStr;
@@ -413,55 +412,6 @@ async fn end_job_does_not_touch_print_status_when_job_has_no_attached_print() {
     assert_eq!(print_id, None);
 }
 
-// spec: 001/FR-040
-#[tokio::test]
-async fn find_match_for_print_returns_closest_unattached_job_by_start_time() {
-    let pool = test_pool().await;
-    let printer_id = seed_printer(&pool).await;
-    record_reading(&pool, printer_id, "job-far", &reading(245.0), Some("2026-01-01T06:00:00Z")).await;
-    record_reading(&pool, printer_id, "job-close", &reading(245.0), Some("2026-01-01T08:00:00Z")).await;
-
-    let matched = find_match_for_print(&pool, printer_id, "2026-01-01T08:05:00Z").await;
-
-    assert_eq!(matched.unwrap().external_job_id, "job-close");
-}
-
-// spec: 001/FR-040
-#[tokio::test]
-async fn find_match_for_print_excludes_already_attached_jobs() {
-    let pool = test_pool().await;
-    let printer_id = seed_printer(&pool).await;
-    let (profile_id, spool_id) = seed_print_deps(&pool).await;
-    record_reading(&pool, printer_id, "job-1", &reading(245.0), Some("2026-01-01T08:00:00Z")).await;
-    let job_id = sqlx::query_scalar::<_, i64>("SELECT id FROM printer_jobs").fetch_one(&pool).await.unwrap();
-    let print_id = sqlx::query_scalar::<_, i64>(
-        "INSERT INTO prints (profile_id, spool_id, printer_id, started_at, ended_at, status)
-         VALUES (?1, ?2, ?3, '2026-01-01T08:00:00Z', '2026-01-01T10:00:00Z', 'Success') RETURNING id",
-    )
-    .bind(profile_id)
-    .bind(spool_id)
-    .bind(printer_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    attach_job_to_print(&pool, job_id, print_id).await;
-
-    let matched = find_match_for_print(&pool, printer_id, "2026-01-01T08:00:00Z").await;
-
-    assert!(matched.is_none());
-}
-
-// spec: 001/FR-040
-#[tokio::test]
-async fn find_match_for_print_returns_none_when_no_unattached_jobs_exist() {
-    let pool = test_pool().await;
-    let printer_id = seed_printer(&pool).await;
-
-    let matched = find_match_for_print(&pool, printer_id, "2026-01-01T08:00:00Z").await;
-
-    assert!(matched.is_none());
-}
-
 // spec: 001/FR-030
 #[tokio::test]
 async fn collapse_readings_to_snapshot_keeps_last_value_per_minute_and_deletes_raw_rows() {
@@ -483,7 +433,7 @@ async fn collapse_readings_to_snapshot_keeps_last_value_per_minute_and_deletes_r
     record_reading(&pool, printer_id, "job-1", &early, Some("2026-01-01T08:00:10Z")).await;
     record_reading(&pool, printer_id, "job-1", &late, Some("2026-01-01T08:00:50Z")).await;
     let job_id = sqlx::query_scalar::<_, i64>("SELECT id FROM printer_jobs").fetch_one(&pool).await.unwrap();
-    attach_job_to_print(&pool, job_id, print_id).await;
+    attach(&pool, job_id, print_id).await;
 
     collapse_readings_to_snapshot(&pool, print_id, job_id).await;
 
@@ -507,7 +457,7 @@ async fn collapse_readings_to_snapshot_produces_one_bucket_per_minute_spanned() 
     record_reading(&pool, printer_id, "job-1", &reading(241.0), Some("2026-01-01T08:01:10Z")).await;
     record_reading(&pool, printer_id, "job-1", &reading(242.0), Some("2026-01-01T08:02:10Z")).await;
     let job_id = sqlx::query_scalar::<_, i64>("SELECT id FROM printer_jobs").fetch_one(&pool).await.unwrap();
-    attach_job_to_print(&pool, job_id, print_id).await;
+    attach(&pool, job_id, print_id).await;
 
     collapse_readings_to_snapshot(&pool, print_id, job_id).await;
 
@@ -525,12 +475,12 @@ async fn collapse_readings_to_snapshot_leaves_telemetry_json_null_when_no_readin
     let printer_id = seed_printer(&pool).await;
     let (profile_id, spool_id) = seed_print_deps(&pool).await;
     let print_id = seed_in_progress_print(&pool, profile_id, spool_id, printer_id, "2026-01-01T08:00:00Z").await;
-    // A job with zero readings -- attach_job_to_print requires a job to exist, so create one via
+    // A job with zero readings -- attaching requires a job to exist, so create one via
     // a single reading, then delete it, leaving the job attached but reading-less.
     record_reading(&pool, printer_id, "job-1", &reading(240.0), None).await;
     let job_id = sqlx::query_scalar::<_, i64>("SELECT id FROM printer_jobs").fetch_one(&pool).await.unwrap();
     sqlx::query("DELETE FROM printer_readings WHERE printer_job_id = ?1").bind(job_id).execute(&pool).await.unwrap();
-    attach_job_to_print(&pool, job_id, print_id).await;
+    attach(&pool, job_id, print_id).await;
 
     collapse_readings_to_snapshot(&pool, print_id, job_id).await;
 
@@ -558,7 +508,7 @@ async fn backfill_reading_snapshots_converts_an_already_finished_print_with_no_s
     .unwrap();
     record_reading(&pool, printer_id, "job-1", &reading(240.0), Some("2026-01-01T08:00:10Z")).await;
     let job_id = sqlx::query_scalar::<_, i64>("SELECT id FROM printer_jobs").fetch_one(&pool).await.unwrap();
-    attach_job_to_print(&pool, job_id, print_id).await;
+    attach(&pool, job_id, print_id).await;
 
     backfill_reading_snapshots(&pool).await;
 
@@ -585,7 +535,7 @@ async fn backfill_reading_snapshots_skips_prints_that_already_have_a_snapshot() 
     .unwrap();
     record_reading(&pool, printer_id, "job-1", &reading(240.0), Some("2026-01-01T08:00:10Z")).await;
     let job_id = sqlx::query_scalar::<_, i64>("SELECT id FROM printer_jobs").fetch_one(&pool).await.unwrap();
-    attach_job_to_print(&pool, job_id, print_id).await;
+    attach(&pool, job_id, print_id).await;
     backfill_reading_snapshots(&pool).await;
     // A stray reading that shows up after the print already has a snapshot -- should be left
     // alone, not silently collapsed/deleted by a second backfill pass.
@@ -594,31 +544,6 @@ async fn backfill_reading_snapshots_skips_prints_that_already_have_a_snapshot() 
     backfill_reading_snapshots(&pool).await;
 
     assert_eq!(reading_count(&pool).await, 1, "second pass skips prints that already have telemetry_json");
-}
-
-// spec: 001/FR-041
-#[tokio::test]
-async fn attach_job_to_print_sets_print_id() {
-    let pool = test_pool().await;
-    let printer_id = seed_printer(&pool).await;
-    let (profile_id, spool_id) = seed_print_deps(&pool).await;
-    record_reading(&pool, printer_id, "job-1", &reading(245.0), None).await;
-    let job_id = sqlx::query_scalar::<_, i64>("SELECT id FROM printer_jobs").fetch_one(&pool).await.unwrap();
-    let print_id = sqlx::query_scalar::<_, i64>(
-        "INSERT INTO prints (profile_id, spool_id, printer_id, started_at, ended_at, status)
-         VALUES (?1, ?2, ?3, '2026-01-01T08:00:00Z', '2026-01-01T10:00:00Z', 'Success') RETURNING id",
-    )
-    .bind(profile_id)
-    .bind(spool_id)
-    .bind(printer_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-
-    attach_job_to_print(&pool, job_id, print_id).await;
-
-    let updated: Option<i64> = sqlx::query_scalar("SELECT print_id FROM printer_jobs WHERE id = ?1").bind(job_id).fetch_one(&pool).await.unwrap();
-    assert_eq!(updated, Some(print_id));
 }
 
 // spec: 001/FR-032
@@ -652,7 +577,7 @@ async fn purge_unattached_jobs_older_than_keeps_attached_jobs_regardless_of_age(
     .fetch_one(&pool)
     .await
     .unwrap();
-    attach_job_to_print(&pool, job_id, print_id).await;
+    attach(&pool, job_id, print_id).await;
 
     purge_unattached_jobs_older_than(&pool, "2026-01-05T00:00:00Z").await;
 
@@ -719,4 +644,8 @@ async fn end_job_returns_without_waiting_for_a_hung_weather_fetch() {
     assert!(ended.is_ok(), "end_job waited on the weather fetch");
     let status: String = sqlx::query_scalar("SELECT status FROM prints WHERE id = ?1").bind(print_id).fetch_one(&pool).await.unwrap();
     assert_eq!(status, "Success", "Print is finalized before end_job returns");
+}
+
+async fn attach(pool: &sqlx::SqlitePool, job_id: i64, print_id: i64) {
+    sqlx::query("UPDATE printer_jobs SET print_id = ?1 WHERE id = ?2").bind(print_id).bind(job_id).execute(pool).await.unwrap();
 }

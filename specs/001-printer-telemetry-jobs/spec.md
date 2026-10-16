@@ -100,10 +100,10 @@ discarded after 7 days. All of this runs in the background — no request trigge
 
 ### Matching a Job to a Print by hand
 
-- **FR-040** — The match candidate for a Print is the same Printer's unattached Job whose
-  `started_at` is closest to the Print's start time; already-attached Jobs are never offered;
-  no unattached Jobs → no candidate. *Verify: integration*
-- **FR-041** — Attaching a Job to a Print sets the Job's `print_id`. *Verify: integration*
+- **FR-040** — Retired 2026-10-16: there are no hand-logged Prints (003/FR-010), so a Job is never
+  matched to a Print by hand — it attaches itself on send (FR-015). The candidate search and
+  manual attach (former FR-040/041) are removed with their endpoints (003/FR-030).
+  *Verify: integration*
 
 ## Notes
 

@@ -28,6 +28,7 @@ struct PrintRow {
     notes: Option<String>,
     ams_humidity_pct: Option<i64>,
     chamber_temp_c: Option<f64>,
+    actual_room_temp_c: Option<f64>,
     clean_build_plate: Option<bool>,
     ambient_temp_c: Option<f64>,
     ambient_humidity_pct: Option<f64>,
@@ -67,6 +68,8 @@ pub struct Print {
     notes: Option<String>,
     ams_humidity_pct: Option<i64>,
     chamber_temp_c: Option<f64>,
+    // Hand-entered when annotating the outcome (FR-013); chamber_temp_c is telemetry.
+    actual_room_temp_c: Option<f64>,
     clean_build_plate: Option<bool>,
     // Auto-fetched only (issues/94) -- never client-writable, so these have no counterpart in
     // PrintInputBody.
@@ -124,6 +127,7 @@ async fn hydrate(pool: &SqlitePool, row: PrintRow) -> Print {
         notes: row.notes,
         ams_humidity_pct: row.ams_humidity_pct,
         chamber_temp_c: row.chamber_temp_c,
+        actual_room_temp_c: row.actual_room_temp_c,
         clean_build_plate: row.clean_build_plate,
         ambient_temp_c: row.ambient_temp_c,
         ambient_humidity_pct: row.ambient_humidity_pct,
@@ -133,33 +137,17 @@ async fn hydrate(pool: &SqlitePool, row: PrintRow) -> Print {
     }
 }
 
+// The only writable part of a Print: its outcome, annotated once it's finished (003/FR-013).
+// Anything else in the request is ignored — a Print's settings come from the actual print.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PrintInputBody {
-    started_at: String,
-    ended_at: String,
+pub struct OutcomeBody {
     status: String,
-    notes: Option<String>,
-    clean_build_plate: Option<bool>,
-    project_id: Option<i64>,
-    project_plater_id: Option<String>,
+    #[serde(default)]
     failure_modes: Vec<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CreatePrintBody {
-    profile_id: i64,
-    spool_id: i64,
-    printer_id: i64,
-    input: PrintInputBody,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UpdatePrintBody {
-    printer_id: i64,
-    input: PrintInputBody,
+    notes: Option<String>,
+    actual_room_temp_c: Option<f64>,
+    clean_build_plate: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -181,56 +169,29 @@ fn dedup(modes: &[String]) -> Vec<String> {
     modes.iter().filter(|m| seen.insert((*m).clone())).cloned().collect()
 }
 
-const STATUSES: [&str; 4] = ["Success", "Failed", "Partial", "InProgress"];
+// InProgress is telemetry's to set and clear, never an annotation.
+const OUTCOMES: [&str; 3] = ["Success", "Failed", "Partial"];
 const FAILURE_MODES: [&str; 8] = ["Stringing", "LayerAdhesion", "Warping", "UnderExtrusion", "OverExtrusion", "LayerShift", "Clog", "Other"];
 
-async fn exists(pool: &SqlitePool, table: &str, id: i64) -> bool {
-    sqlx::query_scalar::<_, bool>(&format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE id = ?1)"))
-        .bind(id)
-        .fetch_one(pool)
-        .await
-        .expect("query failed")
-}
-
-// Shared by create and update; profile/spool are only passed on create (fixed afterwards).
-async fn validate(pool: &SqlitePool, profile_and_spool: Option<(i64, i64)>, printer_id: i64, input: &PrintInputBody) -> Result<(), String> {
-    if !STATUSES.contains(&input.status.as_str()) {
+fn validate(outcome: &OutcomeBody, modes: &[String]) -> Result<(), String> {
+    if !OUTCOMES.contains(&outcome.status.as_str()) {
         return Err("Unknown status.".into());
     }
-    if let Some(mode) = input.failure_modes.iter().find(|m| !FAILURE_MODES.contains(&m.as_str())) {
+    if let Some(mode) = modes.iter().find(|m| !FAILURE_MODES.contains(&m.as_str())) {
         return Err(format!("Unknown failure mode: {mode}."));
     }
-    if let Some((profile_id, spool_id)) = profile_and_spool {
-        if !exists(pool, "print_profiles", profile_id).await {
-            return Err("Unknown print profile.".into());
-        }
-        if !exists(pool, "spools", spool_id).await {
-            return Err("Unknown spool.".into());
-        }
-    }
-    if !exists(pool, "printers", printer_id).await {
-        return Err("Unknown printer.".into());
-    }
-    if let Some(project_id) = input.project_id
-        && !exists(pool, "projects", project_id).await
-    {
-        return Err("Unknown project.".into());
-    }
-    // Lexical compare is chronological for same-shaped ISO-8601 strings.
-    if !input.ended_at.is_empty() && input.ended_at < input.started_at {
-        return Err("Ended before it started.".into());
+    if !modes.is_empty() && outcome.status == "Success" {
+        return Err("failure_modes_require_failed_or_partial".into());
     }
     Ok(())
 }
 
 pub fn router() -> Router<SqlitePool> {
     Router::new()
-        .route("/api/prints", get(list).post(create))
+        .route("/api/prints", get(list))
         .route("/api/prints/inventory", get(inventory))
         .route("/api/prints/recommend-profile", get(recommend_profile))
-        .route("/api/prints/job-match", get(job_match))
         .route("/api/prints/{id}", get(get_one).put(update).delete(delete))
-        .route("/api/prints/{id}/attach-job", axum::routing::post(attach_job))
         .route("/api/prints/{id}/hourly-weather", get(hourly_weather))
         .route("/api/prints/{id}/readings", get(readings))
 }
@@ -257,48 +218,6 @@ async fn hourly_weather(State(pool): State<SqlitePool>, Path(id): Path<i64>) -> 
 async fn readings(State(pool): State<SqlitePool>, Path(id): Path<i64>) -> Json<Vec<crate::printer_telemetry::ReadingSnapshot>> {
     let json: Option<String> = sqlx::query_scalar("SELECT telemetry_json FROM prints WHERE id = ?1").bind(id).fetch_optional(&pool).await.expect("query failed").flatten();
     Json(json.map(|j| serde_json::from_str(&j).expect("stored telemetry_json is always valid")).unwrap_or_default())
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct JobMatchQuery {
-    printer_id: i64,
-    started_at: String,
-}
-
-async fn job_match(
-    State(pool): State<SqlitePool>,
-    Query(q): Query<JobMatchQuery>,
-) -> Json<Option<crate::printer_telemetry::PrinterJob>> {
-    Json(crate::printer_telemetry::find_match_for_print(&pool, q.printer_id, &q.started_at).await)
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct AttachJobRequest {
-    job_id: i64,
-}
-
-async fn attach_job(
-    _editor: crate::auth::Editor,
-    State(pool): State<SqlitePool>,
-    Path(id): Path<i64>,
-    Json(req): Json<AttachJobRequest>,
-) -> (StatusCode, Json<serde_json::Value>) {
-    let job = sqlx::query_scalar::<_, Option<i64>>("SELECT print_id FROM printer_jobs WHERE id = ?1")
-        .bind(req.job_id)
-        .fetch_optional(&pool)
-        .await
-        .expect("query failed");
-    let Some(attached_to) = job else { return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "ok": false, "error": "not_found" }))) };
-    if !exists(&pool, "prints", id).await {
-        return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "ok": false, "error": "not_found" })));
-    }
-    if attached_to.is_some_and(|p| p != id) {
-        return (StatusCode::CONFLICT, Json(serde_json::json!({ "ok": false, "error": "already_attached" })));
-    }
-    crate::printer_telemetry::attach_job_to_print(&pool, req.job_id, id).await;
-    (StatusCode::OK, Json(serde_json::json!({ "ok": true })))
 }
 
 #[derive(Deserialize)]
@@ -482,124 +401,41 @@ pub(crate) async fn create_in_progress(
     .expect("insert failed")
 }
 
-async fn create(
-    _editor: crate::auth::Editor,
-    State(pool): State<SqlitePool>,
-    Json(body): Json<CreatePrintBody>,
-) -> (StatusCode, Json<PrintResult>) {
-    let modes = dedup(&body.input.failure_modes);
-    if !modes.is_empty() && body.input.status == "Success" {
-        return err(StatusCode::BAD_REQUEST, "failure_modes_require_failed_or_partial");
-    }
-    if let Err(e) = validate(&pool, Some((body.profile_id, body.spool_id)), body.printer_id, &body.input).await {
-        return err(StatusCode::BAD_REQUEST, &e);
-    }
-
-    let mut tx = pool.begin().await.expect("begin failed");
-
-    let id = sqlx::query_scalar::<_, i64>(
-        "INSERT INTO prints (
-            profile_id, spool_id, printer_id, project_id, project_plater_id,
-            started_at, ended_at, status, notes, clean_build_plate
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
-        RETURNING id",
-    )
-    .bind(body.profile_id)
-    .bind(body.spool_id)
-    .bind(body.printer_id)
-    .bind(body.input.project_id)
-    .bind(&body.input.project_plater_id)
-    .bind(&body.input.started_at)
-    .bind(&body.input.ended_at)
-    .bind(&body.input.status)
-    .bind(&body.input.notes)
-    .bind(body.input.clean_build_plate)
-    .fetch_one(&mut *tx)
-    .await
-    .expect("insert failed");
-
-    for mode in &modes {
-        sqlx::query("INSERT INTO print_failure_modes (print_id, mode) VALUES (?1, ?2)")
-            .bind(id)
-            .bind(mode)
-            .execute(&mut *tx)
-            .await
-            .expect("insert failed");
-    }
-
-    tx.commit().await.expect("commit failed");
-
-    let row = sqlx::query_as::<_, PrintRow>("SELECT * FROM prints WHERE id = ?1")
-        .bind(id)
-        .fetch_one(&pool)
-        .await
-        .expect("query failed");
-    let print = hydrate(&pool, row).await;
-
-    (StatusCode::OK, Json(PrintResult { ok: true, error: None, print: Some(print) }))
-}
-
 async fn update(
     _editor: crate::auth::Editor,
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
-    Json(body): Json<UpdatePrintBody>,
+    Json(body): Json<OutcomeBody>,
 ) -> (StatusCode, Json<PrintResult>) {
-    let modes = dedup(&body.input.failure_modes);
-    if !modes.is_empty() && body.input.status == "Success" {
-        return err(StatusCode::BAD_REQUEST, "failure_modes_require_failed_or_partial");
-    }
-    if let Err(e) = validate(&pool, None, body.printer_id, &body.input).await {
+    let modes = dedup(&body.failure_modes);
+    if let Err(e) = validate(&body, &modes) {
         return err(StatusCode::BAD_REQUEST, &e);
+    }
+    let current: Option<String> = sqlx::query_scalar("SELECT status FROM prints WHERE id = ?1").bind(id).fetch_optional(&pool).await.expect("query failed");
+    match current.as_deref() {
+        None => return err(StatusCode::NOT_FOUND, "not_found"),
+        Some("InProgress") => return err(StatusCode::BAD_REQUEST, "still_in_progress"),
+        Some(_) => {}
     }
 
     let mut tx = pool.begin().await.expect("begin failed");
-
-    let updated = sqlx::query(
-        "UPDATE prints SET printer_id = ?1, project_id = ?2, project_plater_id = ?3, started_at = ?4,
-         ended_at = ?5, status = ?6, notes = ?7, clean_build_plate = ?8
-         WHERE id = ?9",
-    )
-    .bind(body.printer_id)
-    .bind(body.input.project_id)
-    .bind(&body.input.project_plater_id)
-    .bind(&body.input.started_at)
-    .bind(&body.input.ended_at)
-    .bind(&body.input.status)
-    .bind(&body.input.notes)
-    .bind(body.input.clean_build_plate)
-    .bind(id)
-    .execute(&mut *tx)
-    .await
-    .expect("update failed");
-
-    if updated.rows_affected() == 0 {
-        return err(StatusCode::NOT_FOUND, "not_found");
-    }
-
-    sqlx::query("DELETE FROM print_failure_modes WHERE print_id = ?1")
+    sqlx::query("UPDATE prints SET status = ?1, notes = ?2, actual_room_temp_c = ?3, clean_build_plate = ?4 WHERE id = ?5")
+        .bind(&body.status)
+        .bind(&body.notes)
+        .bind(body.actual_room_temp_c)
+        .bind(body.clean_build_plate)
         .bind(id)
         .execute(&mut *tx)
         .await
-        .expect("delete failed");
+        .expect("update failed");
+    sqlx::query("DELETE FROM print_failure_modes WHERE print_id = ?1").bind(id).execute(&mut *tx).await.expect("delete failed");
     for mode in &modes {
-        sqlx::query("INSERT INTO print_failure_modes (print_id, mode) VALUES (?1, ?2)")
-            .bind(id)
-            .bind(mode)
-            .execute(&mut *tx)
-            .await
-            .expect("insert failed");
+        sqlx::query("INSERT INTO print_failure_modes (print_id, mode) VALUES (?1, ?2)").bind(id).bind(mode).execute(&mut *tx).await.expect("insert failed");
     }
-
     tx.commit().await.expect("commit failed");
 
-    let row = sqlx::query_as::<_, PrintRow>("SELECT * FROM prints WHERE id = ?1")
-        .bind(id)
-        .fetch_one(&pool)
-        .await
-        .expect("query failed");
+    let row = sqlx::query_as::<_, PrintRow>("SELECT * FROM prints WHERE id = ?1").bind(id).fetch_one(&pool).await.expect("query failed");
     let print = hydrate(&pool, row).await;
-
     (StatusCode::OK, Json(PrintResult { ok: true, error: None, print: Some(print) }))
 }
 

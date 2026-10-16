@@ -80,7 +80,8 @@ and the ambient weather attached once a Print ends.
 
 - **FR-030** — Telemetry Jobs attach to their Print automatically when it's sent (001/FR-015);
   with no hand-logged prints there is nothing to match by hand, so `GET /api/prints/job-match`
-  and `POST /api/prints/{id}/attach-job` do not exist (→ 404). *Verify: integration*
+  and `POST /api/prints/{id}/attach-job` do not exist — requests to them fail with a client
+  error and match or attach nothing. *Verify: integration*
 
 ### Ambient weather
 

@@ -2,8 +2,8 @@ use crate::bambu_mqtt_payload_parser::ReadingInput;
 use serde::Serialize;
 use sqlx::SqlitePool;
 
-// Buffers live MQTT telemetry into Jobs/Readings and matches them to the retrospective Print
-// form afterward. A Job is what the printer reports; a Print is the user's record — kept separate
+// Buffers live MQTT telemetry into Jobs/Readings and attaches each Job to the Print its send
+// created. A Job is what the printer reports; a Print is the user's record — kept separate
 // so telemetry never edits history by itself. This is the DB side; printer_mqtt.rs is the wire
 // client feeding it, and tests drive this directly rather than over a network.
 #[derive(Serialize, sqlx::FromRow, Clone)]
@@ -16,8 +16,6 @@ pub struct PrinterJob {
     pub ended_at: Option<String>,
     pub print_id: Option<i64>,
 }
-
-const COLUMNS: &str = "id, printer_id, external_job_id, started_at, ended_at, print_id";
 
 // Called from the MQTT eventloop task (printer_mqtt::handle_message) for every active-state
 // reading. A DB error here must not unwind -- a panic in that spawned task kills the whole
@@ -82,10 +80,9 @@ async fn try_record_reading(
     .execute(pool)
     .await?;
 
-    // Auto-create-on-send: a brand-new Job attaches
-    // straight to the printer's open (InProgress, not yet attached) Print instead of waiting for
-    // the retrospective dismissible-chip match — there's no ambiguity, since the Print was
-    // created moments before by the same "send" action that produced this Job. Only checked for
+    // Auto-create-on-send: a brand-new Job attaches straight to the printer's open (InProgress,
+    // not yet attached) Print — there's no ambiguity, since the Print was created moments before
+    // by the same "send" action that produced this Job. Only checked for
     // a *new* job — an already-attached job must never be reassigned to a later open Print.
     if is_new_job {
         let open_print_id = sqlx::query_scalar::<_, i64>(
@@ -252,32 +249,6 @@ pub async fn end_job(
         crate::printer_camera::capture_and_store(&pool, &camera_registry, print_id, printer_id).await;
         collapse_readings_to_snapshot(&pool, print_id, job_id).await;
     }))
-}
-
-// Auto-match candidate for the retrospective Print form: closest unattached Job for this Printer
-// by start time, shown as a dismissible chip rather than attached silently.
-pub async fn find_match_for_print(pool: &SqlitePool, printer_id: i64, print_started_at: &str) -> Option<PrinterJob> {
-    let sql = format!(
-        "SELECT {COLUMNS} FROM printer_jobs
-         WHERE printer_id = ?1 AND print_id IS NULL
-         ORDER BY ABS(julianday(started_at) - julianday(?2))
-         LIMIT 1"
-    );
-    sqlx::query_as::<_, PrinterJob>(&sql)
-        .bind(printer_id)
-        .bind(print_started_at)
-        .fetch_optional(pool)
-        .await
-        .expect("query failed")
-}
-
-pub async fn attach_job_to_print(pool: &SqlitePool, job_id: i64, print_id: i64) {
-    sqlx::query("UPDATE printer_jobs SET print_id = ?1 WHERE id = ?2")
-        .bind(print_id)
-        .bind(job_id)
-        .execute(pool)
-        .await
-        .expect("update failed");
 }
 
 // Unattached Jobs (and their Readings, via ON DELETE CASCADE) older than the cutoff are
