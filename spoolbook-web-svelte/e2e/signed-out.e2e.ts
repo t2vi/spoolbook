@@ -23,7 +23,7 @@ test('signing in with username and password lands on the app', async ({ page }) 
 	await expect(page.getByText(/invalid|wrong|incorrect/i)).toBeVisible();
 	await page.getByPlaceholder('Password').fill(USER.password);
 	await page.getByRole('button', { name: 'Sign in' }).click();
-	await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible();
+	await expect(page.locator('[data-sidebar="sidebar"]').getByRole('link', { name: 'Dashboard' })).toBeVisible();
 });
 
 // spec: 008/FR-016

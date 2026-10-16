@@ -105,7 +105,7 @@
 	<title>Colors</title>
 </svelte:head>
 
-<div class="mx-auto max-w-5xl px-4 py-8">
+<div class="mx-auto w-full max-w-5xl px-4 py-8">
 	<h1 class="mb-6 text-2xl font-semibold">Colors</h1>
 
 	<div class="mb-4 flex flex-wrap items-center gap-3">

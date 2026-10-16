@@ -1,7 +1,7 @@
 <script lang="ts">
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { Badge, printStatusVariant } from '$lib/components/ui/badge/index.js';
 	import PrintModal from './PrintModal.svelte';
 	import Link2 from '@lucide/svelte/icons/link-2';
 	import Link2Off from '@lucide/svelte/icons/link-2-off';
@@ -121,19 +121,6 @@
 		refreshRecentPrints();
 	}
 
-	function statusBadgeClass(status: PrintStatus) {
-		switch (status) {
-			case 'Success':
-				return 'bg-green-100 text-green-800 hover:bg-green-100';
-			case 'Partial':
-				return 'bg-amber-100 text-amber-800 hover:bg-amber-100';
-			case 'Failed':
-				return 'bg-red-100 text-red-800 hover:bg-red-100';
-			case 'InProgress':
-				return 'bg-blue-100 text-blue-800 hover:bg-blue-100';
-		}
-	}
-
 	// Bambu tray_color is RRGGBB or RRGGBBAA — keep the alpha (CSS takes 8-digit hex) so a
 	// clear/transparent filament (e.g. "00000000") renders see-through, not solid black.
 	function trayFill(colorHex: string | null): string | undefined {
@@ -191,20 +178,12 @@
 			</div>
 			{#if printer.model}<p class="text-sm text-muted-foreground">{printer.model}</p>{/if}
 			<div class="mt-2 flex flex-wrap gap-2">
-				<Badge class={connected ? 'bg-green-100 text-green-800 hover:bg-green-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-100'}>
+				<Badge variant={connected ? 'success' : 'neutral'}>
 					{#if connected}<Link2 />{:else}<Link2Off />{/if}
 					{connected ? 'Connected' : 'Not connected'}
 				</Badge>
 				{#if hasTelemetryConfig}
-					<Badge
-						class={cameraStatus === 'Streaming'
-							? 'bg-green-100 text-green-800 hover:bg-green-100'
-							: cameraStatus === 'Connecting'
-								? 'bg-amber-100 text-amber-800 hover:bg-amber-100'
-								: cameraStatus === 'Unavailable'
-									? 'bg-red-100 text-red-800 hover:bg-red-100'
-									: 'bg-slate-100 text-slate-600 hover:bg-slate-100'}
-					>
+					<Badge variant={cameraStatus === 'Streaming' ? 'success' : cameraStatus === 'Connecting' ? 'warning' : cameraStatus === 'Unavailable' ? 'danger' : 'neutral'}>
 						{#if cameraStatus === 'Unavailable'}<CameraOff />{:else}<Camera />{/if}
 						{cameraStatus === 'Streaming' ? 'Live' : cameraStatus === 'Connecting' ? 'Connecting' : cameraStatus === 'Unavailable' ? 'Camera error' : 'No camera'}
 					</Badge>
@@ -347,7 +326,7 @@
 					<li class="flex items-center justify-between px-3 py-2 text-sm">
 						<span>{formatDateTime(p.startedAt)} — {p.spool?.filament?.brand} {p.spool?.filament?.material}</span>
 						<div class="flex items-center gap-3">
-							<Badge class={statusBadgeClass(p.status)}>{p.status}</Badge>
+							<Badge variant={printStatusVariant[p.status]}>{p.status}</Badge>
 							<a href="/prints/{p.id}" class="text-muted-foreground hover:text-foreground hover:underline">View</a>
 						</div>
 					</li>
