@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"> <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="description" content="spoolbook — personal FDM 3D-printing notebook"><title>Getting Started — spoolbook</title><link rel="stylesheet" href="/spoolbook/_astro/BaseLayout.C9VdHCU4.css"></head> <body> <header class="border-b border-border"> <nav class="mx-auto flex max-w-4xl items-center justify-between px-6 py-4"> <a href="/spoolbook/" class="font-semibold">spoolbook</a> <div class="flex gap-6 text-sm"> <a href="/spoolbook/docs/getting-started">Docs</a> <a href="https://github.com/t2vi/spoolbook">GitHub</a> </div> </nav> </header> <main class="mx-auto max-w-4xl px-6 py-12">  <article class="prose max-w-none prose-headings:font-semibold"> <h2 id="installing">Installing</h2>
+<!DOCTYPE html><html lang="en"> <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="description" content="spoolbook — personal FDM 3D-printing notebook"><title>Getting Started — spoolbook</title><link rel="stylesheet" href="/spoolbook/_astro/BaseLayout.CKLlgifi.css"></head> <body> <header class="border-b border-border"> <nav class="mx-auto flex max-w-4xl items-center justify-between px-6 py-4"> <a href="/spoolbook/" class="font-semibold">spoolbook</a> <div class="flex gap-6 text-sm"> <a href="/spoolbook/docs/getting-started">Docs</a> <a href="https://github.com/t2vi/spoolbook">GitHub</a> </div> </nav> </header> <main class="mx-auto max-w-4xl px-6 py-12">  <article class="prose max-w-none prose-headings:font-semibold"> <h2 id="installing">Installing</h2>
 <p>spoolbook is a self-hosted web app — reachable from a phone or any device on your LAN, not just
 the machine it’s running on. The one-click install runs it via Docker Compose:</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>curl -fsSL https://raw.githubusercontent.com/t2vi/spoolbook/main/install.sh | bash</span></span></code></pre>
@@ -8,8 +8,8 @@ both. Works anywhere Docker runs: bare metal, a VM, or a Proxmox LXC (enable nes
 running inside an unprivileged LXC). Requires Docker + the Compose plugin.</p>
 <p>Once it’s up, it’s at <code>http://&#x3C;host-ip>:5070</code>.</p>
 <h2 id="first-run">First run</h2>
-<p>spoolbook is single-user. The admin password you set during install gates anything that changes
-data (editing, deleting, sending a print) — just browsing stays open to anyone on your LAN.
+<p>spoolbook is single-user. You sign in with the admin account you set during install; until then
+it shows only the sign-in page — nothing in your notebook is visible to others on your LAN.
 Optionally link a Google account under <strong>Settings → Account</strong> for one-click sign-in afterward —
 your password still works either way. On first launch it seeds a starter filament catalog and
 begins syncing fresh data automatically in the background (throttled to once every 24 hours).</p>
