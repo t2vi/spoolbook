@@ -7,6 +7,7 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
 	import Picker from '$lib/components/picker.svelte';
+	import ProjectAdder from '$lib/components/projects/ProjectAdder.svelte';
 	import {
 		amsSlotNumber,
 		getProjectPlates,
@@ -15,8 +16,7 @@
 		listSpools,
 		recommendProfile,
 		resliceProject,
-		startPrint,
-		uploadProject
+		startPrint
 	} from '$lib/api/client';
 	import type { AmsUnitReading, Printer, PrintProfile, Project, ProjectPlate, Spool } from '$lib/api/types';
 
@@ -62,8 +62,6 @@
 	let selectedProfileId = $state(0);
 	let useAms = $state(true);
 	let selectedAmsTrayKey = $state<string | null>(null);
-	let uploading = $state(false);
-	let uploadError = $state<string | null>(null);
 	let recommended = $state<PrintProfile | null>(null);
 	let sending = $state(false);
 	let sendError = $state<string | null>(null);
@@ -121,34 +119,13 @@
 		selectedProfileId = recommended && profiles.some((p) => p.id === recommended!.id) ? recommended.id : (profiles[0]?.id ?? 0);
 	}
 
-	async function applyUploadResult(result: { ok: boolean; error?: string | null; project?: Project | null }) {
-		if (!result.ok || !result.project) {
-			uploadError = `Import failed: ${result.error}`;
-			return;
-		}
-		const project = result.project;
-		if (!projects.some((p) => p.id === project.id)) projects = [...projects, project];
-
+	async function onProjectAdded(project: Project) {
+		projects = projects.some((p) => p.id === project.id) ? projects.map((p) => (p.id === project.id ? project : p)) : [...projects, project];
 		selectedProjectId = project.id;
 		plates = await getProjectPlates(project.id);
 		selectedPlaterId = plates[0]?.platerId ?? '';
 		recommended = await recommendProfile(project.id);
 		if (recommended && profiles.some((p) => p.id === recommended!.id)) selectedProfileId = recommended.id;
-	}
-
-	async function onThreeMfSelected(e: Event) {
-		const file = (e.currentTarget as HTMLInputElement).files?.[0];
-		if (!file) return;
-
-		uploading = true;
-		uploadError = null;
-		try {
-			await applyUploadResult(await uploadProject(file));
-		} catch (err) {
-			uploadError = `Import failed: ${err instanceof Error ? err.message : 'unknown error'}`;
-		} finally {
-			uploading = false;
-		}
 	}
 
 	async function reslice() {
@@ -236,16 +213,7 @@
 					options={[{ value: 0, label: '-- none --' }, ...projects.map((p) => ({ value: p.id, label: p.fileName }))]}
 				/>
 
-				<div class="mt-1 flex items-center gap-2">
-					<input
-						type="file"
-						accept=".3mf"
-						onchange={onThreeMfSelected}
-						class="text-sm file:mr-3 file:cursor-pointer file:rounded-md file:border file:bg-background file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-accent"
-					/>
-					{#if uploading}<span class="text-xs text-muted-foreground">Uploading…</span>{/if}
-				</div>
-				{#if uploadError}<p class="text-xs text-destructive">{uploadError}</p>{/if}
+				<div class="mt-1"><ProjectAdder onAdded={onProjectAdded} /></div>
 
 				{#if plates.length > 0}
 					<Label for="plate-select" class="mt-2">Plate</Label>
