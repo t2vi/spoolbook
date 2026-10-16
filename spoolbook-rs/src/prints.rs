@@ -265,6 +265,10 @@ async fn get_one(State(pool): State<SqlitePool>, Path(id): Path<i64>) -> Result<
 #[derive(Deserialize)]
 struct InventoryQuery {
     status: Option<String>,
+    brand: Option<String>,
+    material: Option<String>,
+    sort: Option<String>,
+    order: Option<String>,
     #[serde(rename = "printerId")]
     printer_id: Option<i64>,
     page: Option<i64>,
@@ -285,23 +289,40 @@ struct PrintInventoryResult {
 async fn inventory(State(pool): State<SqlitePool>, Query(q): Query<InventoryQuery>) -> Json<PrintInventoryResult> {
     let page = q.page.filter(|&p| p > 0).unwrap_or(1);
     let page_size = q.page_size.filter(|&s| s > 0).unwrap_or(20);
-    let status = q.status.filter(|s| !s.is_empty());
+    let blank_is_none = |v: Option<String>| v.filter(|s| !s.is_empty());
+    let (status, brand, material) = (blank_is_none(q.status), blank_is_none(q.brand), blank_is_none(q.material));
+    // Whitelisted, never interpolated from the request as-is. Started defaults to newest first,
+    // the others to ascending; ties are always newest first.
+    let (column, default_desc) = match q.sort.as_deref() {
+        Some("status") => ("p.status", false),
+        Some("printer") => ("pr.name", false),
+        _ => ("p.started_at", true),
+    };
+    let desc = q.order.as_deref().map_or(default_desc, |o| o == "desc");
+    let direction = if desc { "DESC" } else { "ASC" };
+    let filter = "FROM prints p
+         LEFT JOIN printers pr ON pr.id = p.printer_id
+         LEFT JOIN spools s ON s.id = p.spool_id
+         LEFT JOIN filaments f ON f.id = s.filament_id
+         WHERE (?1 IS NULL OR p.status = ?1) AND (?2 IS NULL OR p.printer_id = ?2)
+           AND (?3 IS NULL OR f.brand = ?3) AND (?4 IS NULL OR f.material = ?4)";
 
-    let total = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM prints WHERE (?1 IS NULL OR status = ?1) AND (?2 IS NULL OR printer_id = ?2)",
-    )
+    let total = sqlx::query_scalar::<_, i64>(&format!("SELECT COUNT(*) {filter}"))
+        .bind(&status)
+        .bind(q.printer_id)
+        .bind(&brand)
+        .bind(&material)
+        .fetch_one(&pool)
+        .await
+        .expect("query failed");
+
+    let rows = sqlx::query_as::<_, PrintRow>(&format!(
+        "SELECT p.* {filter} ORDER BY {column} {direction}, p.started_at DESC, p.id DESC LIMIT ?5 OFFSET ?6"
+    ))
     .bind(&status)
     .bind(q.printer_id)
-    .fetch_one(&pool)
-    .await
-    .expect("query failed");
-
-    let rows = sqlx::query_as::<_, PrintRow>(
-        "SELECT * FROM prints WHERE (?1 IS NULL OR status = ?1) AND (?2 IS NULL OR printer_id = ?2)
-         ORDER BY started_at DESC LIMIT ?3 OFFSET ?4",
-    )
-    .bind(&status)
-    .bind(q.printer_id)
+    .bind(&brand)
+    .bind(&material)
     .bind(page_size)
     .bind((page - 1) * page_size)
     .fetch_all(&pool)
