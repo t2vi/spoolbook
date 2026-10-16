@@ -2,7 +2,7 @@ use crate::filaments::Filament;
 use axum::http::StatusCode;
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     routing::get,
 };
 use serde::{Deserialize, Serialize};
@@ -69,6 +69,7 @@ pub struct SpoolResult {
 pub fn router() -> Router<SqlitePool> {
     Router::new()
         .route("/api/spools", get(list_all).post(create))
+        .route("/api/spools/inventory", get(inventory))
         .route("/api/spools/{id}", get(get_one).put(update).delete(delete))
 }
 
@@ -113,6 +114,78 @@ async fn list_all(State(pool): State<SqlitePool>) -> Json<Vec<Spool>> {
     }
 
     Json(spools)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct InventoryQuery {
+    brand: Option<String>,
+    material: Option<String>,
+    status: Option<String>,
+    purchased_from: Option<String>,
+    purchased_to: Option<String>,
+    sort: Option<String>,
+    order: Option<String>,
+    page: Option<i64>,
+    page_size: Option<i64>,
+}
+
+// The spool list's filtered, sorted, paged view (007/FR-034).
+async fn inventory(State(pool): State<SqlitePool>, Query(q): Query<InventoryQuery>) -> Json<serde_json::Value> {
+    let page = q.page.filter(|p| *p > 0).unwrap_or(1);
+    let page_size = q.page_size.filter(|p| *p > 0).unwrap_or(20);
+    let direction = if q.order.as_deref() == Some("desc") { "DESC" } else { "ASC" };
+    // Whitelisted, never interpolated from the request as-is. Date sorts put spools without that
+    // date last in either direction.
+    let order_by = match q.sort.as_deref() {
+        Some(col @ ("purchasedAt" | "openedAt" | "emptiedAt")) => {
+            let col = match col { "purchasedAt" => "purchased_at", "openedAt" => "opened_at", _ => "emptied_at" };
+            format!("s.{col} IS NULL, s.{col} {direction}, s.created_at")
+        }
+        _ => format!("f.brand {direction}, f.material {direction}, s.created_at"),
+    };
+    let status = match q.status.as_deref() {
+        Some("Unopened") => "s.opened_at IS NULL",
+        Some("Opened") => "s.opened_at IS NOT NULL AND s.emptied_at IS NULL",
+        Some("Empty") => "s.emptied_at IS NOT NULL",
+        _ => "1",
+    };
+    let filter = format!(
+        "FROM spools s JOIN filaments f ON f.id = s.filament_id
+         WHERE (?1 IS NULL OR f.brand = ?1) AND (?2 IS NULL OR f.material = ?2) AND {status}
+           AND (?3 IS NULL OR substr(s.purchased_at, 1, 10) >= ?3) AND (?4 IS NULL OR substr(s.purchased_at, 1, 10) <= ?4)"
+    );
+    let blank_is_none = |v: Option<String>| v.filter(|v| !v.trim().is_empty());
+    let (brand, material, from, to) = (blank_is_none(q.brand), blank_is_none(q.material), blank_is_none(q.purchased_from), blank_is_none(q.purchased_to));
+
+    let total: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) {filter}"))
+        .bind(&brand)
+        .bind(&material)
+        .bind(&from)
+        .bind(&to)
+        .fetch_one(&pool)
+        .await
+        .expect("query failed");
+    let rows = sqlx::query_as::<_, SpoolRow>(&format!(
+        "SELECT s.id, s.filament_id, s.lot_code, s.purchased_at, s.opened_at, s.emptied_at, s.weight_grams, s.diameter_mm, s.notes
+         {filter} ORDER BY {order_by} LIMIT ?5 OFFSET ?6"
+    ))
+    .bind(&brand)
+    .bind(&material)
+    .bind(&from)
+    .bind(&to)
+    .bind(page_size)
+    .bind((page - 1) * page_size)
+    .fetch_all(&pool)
+    .await
+    .expect("query failed");
+
+    let mut spools = Vec::with_capacity(rows.len());
+    for row in rows {
+        spools.push(attach_filament(&pool, row).await);
+    }
+    let total_pages = ((total + page_size - 1) / page_size).max(1);
+    Json(serde_json::json!({ "spools": spools, "total": total, "page": page, "pageSize": page_size, "totalPages": total_pages }))
 }
 
 async fn get_one(State(pool): State<SqlitePool>, Path(id): Path<i64>) -> Result<Json<Spool>, StatusCode> {

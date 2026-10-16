@@ -220,6 +220,16 @@ export const getPrintReadings = (id: number) => request<PrintReading[]>(`/api/pr
 
 export const listSpools = () => request<Spool[]>('/api/spools');
 export const getSpool = (id: number) => request<Spool>(`/api/spools/${id}`);
+export interface SpoolInventoryResult {
+	spools: Spool[];
+	total: number;
+	page: number;
+	pageSize: number;
+	totalPages: number;
+}
+// `query` is the /spools page's own URL query (brand, material, status, purchasedFrom/To, sort,
+// order, page, pageSize), passed through as-is.
+export const listSpoolInventory = (query: URLSearchParams) => request<SpoolInventoryResult>(`/api/spools/inventory?${query}`);
 export const listProfilesForFilament = (filamentId: number) =>
 	request<PrintProfile[]>(`/api/profiles?filamentId=${filamentId}`);
 export const searchProfiles = () => request<ProfileInventoryResult>('/api/profiles/inventory');
