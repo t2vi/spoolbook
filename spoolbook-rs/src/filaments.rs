@@ -20,7 +20,7 @@ pub struct Filament {
 // Aliases accept the catalog feed's PascalCase field names (Brand/Material/Variant/Color/Hex)
 // alongside the API's lowercase ones, so the same type deserializes both without a second
 // struct — matches .NET's PropertyNameCaseInsensitive on the catalog parser.
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct FilamentInput {
     #[serde(alias = "Brand")]
     pub brand: String,
