@@ -40,7 +40,8 @@ can catch that before confirming.</p>
 <h2 id="adding-your-first-spool">Adding your first spool</h2>
 <ol>
 <li>Go to <strong>Filaments → List</strong>, find or add the filament type on your roll (brand + material +
-variant + color).</li>
+variant + color). <strong>Filaments → Colors</strong> holds each color’s hex code — give a multi-color
+filament several (<code>#1A1A1A, #D4AF37</code>) and its swatch shows them all.</li>
 <li>Go to <strong>Filaments → Spools</strong>, create a Spool against that Filament — this represents the
 physical roll.</li>
 <li>Go to <strong>Print workflow → Profiles</strong>, create a Print Profile for it — start from a Bambu Studio
@@ -50,10 +51,13 @@ one spool.</li>
 <li>Send the print (see above) — spoolbook creates the Print record automatically and locks in the
 exact settings from the Profile version you used. That version is then locked: to tweak it
 later (e.g. a seasonal temperature change), open it and use <strong>Save as new version</strong>, so a past
-print always shows what it was really printed with. <strong>Print workflow → Prints</strong> shows
-the full history; each entry is read-only, and fills in automatically once the print ends — a
-photo of the finished bed, outdoor weather for the print window, and (P2S/AMS hardware that
-reports it) chamber temperature, AMS humidity, and layer progress charted over the print.</li>
+print always shows what it was really printed with. A profile’s <strong>Versions</strong> panel lists them
+all — name one (“Winter 2026”) and use <strong>Use this version</strong> to switch which one you print with.
+<strong>Print workflow → Prints</strong> shows the full history; each entry fills in automatically once the
+print ends — a photo of the finished bed, outdoor weather for the print window, and (P2S/AMS
+hardware that reports it) chamber temperature, AMS humidity, and layer progress charted over
+the print. Use <strong>Edit outcome</strong> on a finished print to record how it came out: result, failure
+modes, notes, room temperature and whether the plate was clean.</li>
 </ol> </article>  </main> <footer class="mt-24 border-t border-border"> <p class="mx-auto max-w-4xl px-6 py-8 text-sm text-muted-foreground">
 spoolbook is a personal project — single-user, no account needed.
 </p> </footer> </body></html>
