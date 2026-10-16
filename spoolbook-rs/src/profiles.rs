@@ -424,6 +424,7 @@ pub fn router() -> Router<SqlitePool> {
         .route("/api/profiles/{id}", axum::routing::put(update).delete(delete))
         .route("/api/profiles/{id}/versions", get(list_versions).post(new_version))
         .route("/api/profiles/{id}/select", axum::routing::post(select_version))
+        .route("/api/profiles/{id}/duplicate", axum::routing::post(duplicate))
         .route("/api/profiles/{id}/version-name", axum::routing::put(set_version_name))
 }
 
@@ -1187,6 +1188,34 @@ async fn new_version(
     tx.commit().await.expect("commit failed");
 
     (StatusCode::OK, Json(ProfileResult { ok: true, errors: None, profile: Some(profile) }))
+}
+
+// A new, independent profile from `{id}`: every setting, the filament, spool, provenance and notes
+// copied, but its own version set (v1, selected, no version name), named "<name> (copy)".
+async fn duplicate(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Path(id): Path<i64>) -> (StatusCode, Json<ProfileResult>) {
+    let copied = COLUMNS.trim_start_matches("id, ");
+    let mut tx = pool.begin().await.expect("begin failed");
+    let new_id: Option<i64> = sqlx::query_scalar(&format!(
+        "INSERT INTO print_profiles ({copied}) SELECT {copied} FROM print_profiles WHERE id = ?1 RETURNING id"
+    ))
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await
+    .expect("insert failed");
+    let Some(new_id) = new_id else {
+        return (StatusCode::NOT_FOUND, Json(ProfileResult { ok: false, errors: Some(serde_json::json!({ "id": "not_found" })), profile: None }));
+    };
+    sqlx::query(
+        "UPDATE print_profiles SET name = name || ' (copy)', version_number = 1, previous_version_profile_id = NULL,
+         is_current_version = 1, version_name = NULL WHERE id = ?1",
+    )
+    .bind(new_id)
+    .execute(&mut *tx)
+    .await
+    .expect("update failed");
+    tx.commit().await.expect("commit failed");
+
+    (StatusCode::OK, Json(ProfileResult { ok: true, errors: None, profile: get_by_id(&pool, new_id).await }))
 }
 
 async fn delete(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Path(id): Path<i64>) -> (StatusCode, Json<serde_json::Value>) {
