@@ -98,6 +98,10 @@ export interface PrintProfile {
 	hotPlateTempC?: number | null;
 	printSpeedMmS?: number | null;
 	source?: string;
+	spoolId?: number | null;
+	spool?: Spool | null; // inventory only
+	versionNumber?: number;
+	versionName?: string | null;
 }
 
 export interface ProfileFieldEntry {

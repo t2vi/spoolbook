@@ -879,3 +879,55 @@ async fn deleting_an_unselected_version_leaves_the_selection_alone() {
     assert!(!is_current(&pool, v1).await);
     assert!(is_current(&pool, v3).await);
 }
+
+// spec: 006/FR-002
+#[tokio::test]
+async fn inventory_filters_sorts_and_pages_selected_versions() {
+    let pool = test_pool().await;
+    let pla = seed_filament(&pool).await; // Bambu Lab PLA
+    let (_, petg) = send(&pool, "POST", "/api/filaments", Some(json!({ "brand": "Polymaker", "material": "PETG", "variant": null, "color": "Red" }))).await;
+    let petg = petg["entry"]["id"].as_i64().unwrap();
+    let petg_spool = seed_spool(&pool, petg).await;
+    sqlx::query("UPDATE spools SET lot_code = 'LOT-1' WHERE id = ?1").bind(petg_spool).execute(&pool).await.unwrap();
+    let body = |name: &str, nozzle: &str, spool: Option<i64>| {
+        let mut b = full_profile_body();
+        b["name"] = json!(name);
+        b["spoolId"] = json!(spool);
+        b["fields"]["NozzleTempC"] = json!(nozzle);
+        b
+    };
+    send(&pool, "POST", &format!("/api/profiles?filamentId={pla}"), Some(body("Bravo", "220", None))).await;
+    send(&pool, "POST", &format!("/api/profiles?filamentId={petg}"), Some(body("Alpha", "240", Some(petg_spool)))).await;
+    let (_, charlie) = send(&pool, "POST", &format!("/api/profiles?filamentId={pla}"), Some(body("Charlie", "210", None))).await;
+    let charlie = charlie["profile"]["id"].as_i64().unwrap();
+    send(&pool, "POST", &format!("/api/profiles/{charlie}/versions"), Some(body("Charlie", "205", None))).await;
+
+    let get = |query: &'static str| {
+        let pool = pool.clone();
+        async move {
+            let (status, body) = send(&pool, "GET", &format!("/api/profiles/inventory?{query}"), None).await;
+            assert_eq!(status, StatusCode::OK, "{query}: {body}");
+            body
+        }
+    };
+    let names = |body: &Value| body["profiles"].as_array().unwrap().iter().map(|p| p["name"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+
+    let all = get("").await;
+    assert_eq!(names(&all), ["Bravo", "Charlie", "Alpha"], "selected versions only, by filament then oldest");
+    assert_eq!(all["profiles"][1]["nozzleTempC"], 205);
+    assert_eq!(all["profiles"][2]["spool"]["lotCode"], "LOT-1");
+    assert_eq!(all["profiles"][2]["filament"]["brand"], "Polymaker");
+    assert_eq!(names(&get("brand=Polymaker").await), ["Alpha"]);
+    assert_eq!(names(&get("material=PLA").await), ["Bravo", "Charlie"]);
+    assert_eq!(names(&get("scope=generic").await), ["Bravo", "Charlie"]);
+    assert_eq!(names(&get("scope=spool").await), ["Alpha"]);
+    assert_eq!(names(&get("sort=name").await), ["Alpha", "Bravo", "Charlie"]);
+    assert_eq!(names(&get("sort=name&order=desc").await), ["Charlie", "Bravo", "Alpha"]);
+    assert_eq!(names(&get("sort=nozzleTemp").await), ["Charlie", "Bravo", "Alpha"]);
+    assert_eq!(names(&get("sort=created&order=desc").await), ["Charlie", "Alpha", "Bravo"]);
+
+    let paged = get("page=2&pageSize=2").await;
+    assert_eq!(names(&paged), ["Alpha"]);
+    assert_eq!((paged["total"].as_i64(), paged["page"].as_i64(), paged["pageSize"].as_i64(), paged["totalPages"].as_i64()), (Some(3), Some(2), Some(2), Some(2)));
+    assert_eq!(get("page=-1&pageSize=0").await["pageSize"], 20);
+}
