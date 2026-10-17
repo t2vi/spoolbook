@@ -69,14 +69,18 @@ it grew into are both retired.
 
 ## Filament catalog
 
-Filament data is scraped daily by a separate repo,
-[`spoolbook-filament-sync`](https://github.com/t2vi/spoolbook-filament-sync), which publishes a
+Filament data is gathered daily by a separate repo,
+[`spoolbook-filament-sync`](https://github.com/t2vi/spoolbook-filament-sync) — most brands from
+[SpoolmanDB](https://github.com/Donkie/SpoolmanDB), the community filament database, plus its own
+store scrapers for Bambu Lab, eSUN, Hatchbox, Prusament and Colorfabb — and published as a
 static `data/filament-catalog.json`. This app fetches that file directly and imports new entries
 into the live DB — automatically on launch (throttled to once/24h) and on demand via the "Sync
 filament catalog" button in Settings → Filaments. No server, no auth — GitHub raw content is the
 only host: a static published file already behaves like a minimal read API, so nothing needs to
-be deployed or authenticated against. Scraped color names resolve to real hex values (CSS Color
-Module Level 4 + a small supplementary filament-marketing list) rather than a flat placeholder.
+be deployed or authenticated against. Each entry carries a hex — SpoolmanDB's measured value, or
+one resolved from the color name — and a multi-color filament carries one per color (`Black+Gold`,
+the Rainbow family). Each sync refreshes a color's hex from the catalog, except a hex you've set
+yourself on the Colors screen.
 
 ## Installing
 

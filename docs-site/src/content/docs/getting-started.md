@@ -70,7 +70,10 @@ counts before confirming one of those twice.)
 
 1. Go to **Filaments → List**, find or add the filament type on your roll (brand + material +
    variant + color). **Filaments → Colors** holds each color's hex code — give a multi-color
-   filament several (`#1A1A1A, #D4AF37`) and its swatch shows them all.
+   filament several (`#1A1A1A, #D4AF37`) and its swatch shows them all. Colors from the catalog
+   arrive with their hex (several for a multi-color filament) and the catalog sync keeps them up
+   to date — except one you've edited, which stays yours. Adding or editing anything opens a
+   form over the list you're on; closing it with unsaved changes asks first.
 2. Go to **Filaments → Spools**, create a Spool against that Filament — this represents the
    physical roll.
 3. Go to **Print workflow → Profiles**, create a Print Profile for it — start from a Bambu Studio
