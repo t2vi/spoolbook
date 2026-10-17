@@ -12,13 +12,19 @@ export function unsavedGuard<K extends string>(parts: Record<K, () => unknown>) 
 	const baselines = $state<Partial<Record<K, string>>>({});
 	const isDirty = (key: K) => baselines[key] !== undefined && JSON.stringify(parts[key]()) !== baselines[key];
 
+	const ask = () => confirm('You have unsaved changes. Leave without saving?');
+
 	beforeNavigate((navigation) => {
 		if (!keys.some(isDirty)) return;
 		// 'leave' = reload / close tab / external URL: cancelling shows the browser's own dialog.
-		if (navigation.type === 'leave' || !confirm('You have unsaved changes. Leave without saving?')) navigation.cancel();
+		if (navigation.type === 'leave' || !ask()) navigation.cancel();
 	});
 
 	return {
+		// For closing a modal that isn't in the URL (no navigation to intercept): true = go ahead.
+		confirmLeave() {
+			return !keys.some(isDirty) || ask();
+		},
 		// Untracked: called from an $effect, reading the fields would re-run it on every edit.
 		markClean(...only: K[]) {
 			untrack(() => {

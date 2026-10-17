@@ -15,6 +15,8 @@
 	import { formatDate } from '$lib/utils.js';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import SpoolForm from '$lib/components/spools/SpoolForm.svelte';
+	import { formHref, listParams, openForm } from '$lib/form-url';
 
 	// Spool list (007/FR-041). Filters, sort and page live in the URL, so a view survives refresh,
 	// back and sharing; the server does the filtering (007/FR-034).
@@ -66,8 +68,14 @@
 		return s.emptiedAt ? 'Empty' : s.openedAt ? 'Opened' : 'Unopened';
 	}
 
+	// The list reloads on every URL change, closing a form included.
+	let form = $derived(openForm(page.url));
+	function closeForm() {
+		goto(formHref(page.url, undefined), { noScroll: true });
+	}
+
 	async function load() {
-		result = await listSpoolInventory(page.url.searchParams);
+		result = await listSpoolInventory(listParams(page.url));
 	}
 
 	async function remove(id: number) {
@@ -116,7 +124,7 @@
 		</div>
 		{#if page.url.search}<Button variant="ghost" onclick={() => goto('?')}>Clear</Button>{/if}
 		<div class="ml-auto">
-			{#if authenticated}<Button href="/spools/new">+ Add spool</Button>{/if}
+			{#if authenticated}<Button href={formHref(page.url, null)}>+ Add spool</Button>{/if}
 		</div>
 	</div>
 
@@ -155,7 +163,7 @@
 							<Table.Cell><Badge variant={status(s) === 'Opened' ? 'success' : status(s) === 'Unopened' ? 'info' : 'neutral'}>{status(s)}</Badge></Table.Cell>
 							<Table.Cell class="text-right whitespace-nowrap">
 								{#if authenticated}
-									<a href="/spools/edit/{s.id}" class="hover:underline">Edit</a>
+									<a href={formHref(page.url, s.id)} class="hover:underline">Edit</a>
 									<button onclick={() => remove(s.id)} class="ml-3 text-destructive hover:underline">Delete</button>
 								{/if}
 							</Table.Cell>
@@ -192,3 +200,9 @@
 		</div>
 	{/if}
 </div>
+
+{#if form !== undefined}
+	{#key form}
+		<SpoolForm id={form} onClose={closeForm} />
+	{/key}
+{/if}

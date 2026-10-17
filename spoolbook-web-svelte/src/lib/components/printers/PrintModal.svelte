@@ -1,7 +1,7 @@
 <script lang="ts">
 	import ColorSwatch from '$lib/components/color-swatch.svelte';
 	import { hexFor } from '$lib/color-hexes.svelte';
-	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import FormModal from '$lib/components/form-modal.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -197,12 +197,16 @@
 	let resliceDisabled = $derived(reslicing || sending || !selectedProjectId || !selectedPlaterId || !selectedProfileId);
 </script>
 
-<Dialog.Root open={true} onOpenChange={(open) => !open && onClose()}>
-	<Dialog.Content class="max-h-[90vh] max-w-lg overflow-y-auto sm:max-w-lg">
-		<Dialog.Header>
-			<Dialog.Title>Print on {printer.name}</Dialog.Title>
-		</Dialog.Header>
-
+<FormModal
+	title="Print on {printer.name}"
+	error={sendError}
+	submitLabel={sending ? 'Sending…' : 'Send to printer'}
+	disabled={sendDisabled}
+	{onClose}
+	onSubmit={send}
+>
+	<!-- The body holds ProjectAdder's own form, so it sits outside the modal's. -->
+	{#snippet aside()}
 		<div class="space-y-4">
 			<div class="flex flex-col gap-1">
 				<Label for="project-select">Project</Label>
@@ -309,7 +313,7 @@
 			</div>
 
 			{#if resliceError}<p class="text-sm text-destructive">{resliceError}</p>{/if}
-			{#if resliceSucceeded}<p class="text-sm text-green-700">Re-sliced — now sending the freshly-sliced version.</p>{/if}
+			{#if resliceSucceeded}<p class="text-sm text-emerald-600 dark:text-emerald-400">Re-sliced — now sending the freshly-sliced version.</p>{/if}
 			<div>
 				<Button variant="outline" size="sm" disabled={resliceDisabled} onclick={reslice}>
 					{reslicing ? 'Re-slicing…' : 'Re-slice with this profile'}
@@ -320,12 +324,6 @@
 				</p>
 			</div>
 
-			{#if sendError}<p class="text-sm text-destructive">{sendError}</p>{/if}
-
-			<div class="flex items-center gap-3 pt-2">
-				<Button disabled={sendDisabled} onclick={send}>{sending ? 'Sending…' : 'Send to printer'}</Button>
-				<Button variant="ghost" onclick={onClose}>Cancel</Button>
-			</div>
 		</div>
-	</Dialog.Content>
-</Dialog.Root>
+	{/snippet}
+</FormModal>

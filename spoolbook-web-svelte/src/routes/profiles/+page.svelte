@@ -10,6 +10,8 @@
 	import type { ProfileInventoryResult, Spool } from '$lib/api/types';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import ProfileForm from '$lib/components/profiles/ProfileForm.svelte';
+	import { formHref, listParams, openForm } from '$lib/form-url';
 
 	// Profiles list (006/FR-040): the selected version of each profile. Filters, sort and page
 	// live in the URL, so a view survives refresh, back and sharing; the server does the
@@ -57,8 +59,14 @@
 		return sort === column ? (order === 'asc' ? ' ▲' : ' ▼') : '';
 	}
 
+	// The list reloads on every URL change, closing a form included.
+	let form = $derived(openForm(page.url));
+	function closeForm() {
+		goto(formHref(page.url, undefined), { noScroll: true });
+	}
+
 	async function load() {
-		result = await listProfileInventory(page.url.searchParams);
+		result = await listProfileInventory(listParams(page.url));
 	}
 
 	async function remove(id: number) {
@@ -99,7 +107,7 @@
 		<div class="w-40"><Picker value={param('scope')} options={scopeOptions} onValueChange={(v) => setQuery({ scope: v })} /></div>
 		{#if page.url.search}<Button variant="ghost" onclick={() => goto('?')}>Clear</Button>{/if}
 		<div class="ml-auto">
-			{#if authenticated}<Button href="/profiles/new">+ Add profile</Button>{/if}
+			{#if authenticated}<Button href={formHref(page.url, null)}>+ Add profile</Button>{/if}
 		</div>
 	</div>
 
@@ -134,7 +142,7 @@
 							<Table.Cell>v{p.versionNumber}{p.versionName ? ` · ${p.versionName}` : ''}</Table.Cell>
 							<Table.Cell class="text-right whitespace-nowrap">
 								{#if authenticated}
-									<a href="/profiles/edit/{p.id}" class="hover:underline">Edit</a>
+									<a href={formHref(page.url, p.id)} class="hover:underline">Edit</a>
 									<button onclick={() => remove(p.id)} class="ml-3 text-destructive hover:underline">Delete</button>
 								{/if}
 							</Table.Cell>
@@ -171,3 +179,9 @@
 		</div>
 	{/if}
 </div>
+
+{#if form !== undefined}
+	{#key form}
+		<ProfileForm id={form} onClose={closeForm} />
+	{/key}
+{/if}

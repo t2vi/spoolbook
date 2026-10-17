@@ -44,15 +44,27 @@ via an export zip that is *merged* into the target rather than replacing it.
   sign-in and setup pages otherwise — the offer of source that
   the AGPL-3.0 license requires of anyone running the app for others. *Verify: e2e*
 - **FR-008** — Every edit form (filament, color, spool, profile, printer, print outcome,
-  settings) tracks unsaved edits: leaving with unsaved edits — an in-app link, back, reload or
-  closing the tab — asks for confirmation first; saving or cancelling clears it.
+  settings) tracks unsaved edits: leaving with unsaved edits — an in-app link, back, reload,
+  closing the tab, or closing the form's modal (FR-015) — asks for confirmation first; saving
+  clears it.
   *Verify: e2e*
 - **FR-009** — When signed in, a top bar over every page shows where you are as a breadcrumb —
   home, then the sidebar group and page as the sidebar names them (e.g. Filaments / Colors),
-  then *New*, *Edit* or *Details* on a sub-page. Home and the page link to themselves unless
+  then *New* or *Edit* while an add/edit form is open (FR-015), or *Details* on a detail page.
+  Home and the page link to themselves unless
   they're the last part; the group is a label. It also has a light/dark switch:
   the first visit follows the system setting, and a choice is remembered in that browser across
   reloads. *Verify: e2e*
+- **FR-015** — Every add and edit form — filament, spool, color, profile, printer, print
+  outcome, project rename and add-from-link, and the Print dialog — opens as a modal over the
+  page it starts from, never a page of its own, and all share one design: a title, a scrolling
+  body, errors just above a footer that holds Cancel and the primary action on the right; the
+  profile form uses the wide size; at phone width the modal fills the
+  screen. On the filament, spool, profile and printer lists the open form is in the URL (`?new`,
+  or `?edit=<id>`), so reload, back and shared links reopen it, and the old `/…/new` and
+  `/…/edit/<id>` addresses redirect there. Saving closes the modal and refreshes the list behind
+  it, keeping its filters, sort and page. Cancel, ×, Escape and a click outside close it —
+  asking first when there are unsaved edits (FR-008). *Verify: e2e*
 
 ### Settings
 

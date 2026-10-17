@@ -6,6 +6,8 @@
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { listProfileVersions, selectProfileVersion, setProfileVersionName } from '$lib/api/client';
 	import type { ProfileVersion } from '$lib/api/client';
+	import { formHref } from '$lib/form-url';
+	import { page } from '$app/state';
 
 	// Versions panel (006/FR-042): a profile's versions are working variants — open any one, pick
 	// which one lists and pickers use ("Use this version"), and name them ("Winter 2026").
@@ -80,7 +82,7 @@
 						<Table.Cell>{v.nozzleTempC} °C</Table.Cell>
 						<Table.Cell>{new Date(v.createdAt).toLocaleDateString()}</Table.Cell>
 						<Table.Cell class="text-right whitespace-nowrap">
-							{#if v.id !== id}<a href="/profiles/edit/{v.id}" class="text-sm hover:underline">Open</a>{/if}
+							{#if v.id !== id}<a href={formHref(page.url, v.id)} class="text-sm hover:underline">Open</a>{/if}
 							{#if !v.selected}
 								<Button type="button" size="sm" variant="outline" class="ml-2" onclick={() => use(v.id)}>Use this version</Button>
 							{/if}

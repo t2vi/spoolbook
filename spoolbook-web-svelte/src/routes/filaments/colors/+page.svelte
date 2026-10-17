@@ -1,7 +1,7 @@
 <script lang="ts">
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import FormModal from '$lib/components/form-modal.svelte';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
@@ -50,6 +50,11 @@
 	function closeEditor() {
 		editing = null;
 		unsaved.markClean();
+	}
+
+	// Cancel, ×, Escape, outside click: asks first when there are edits (002/FR-008).
+	function requestClose() {
+		if (unsaved.confirmLeave()) closeEditor();
 	}
 
 	function openEditor(color: FilamentColor | null) {
@@ -198,32 +203,20 @@
 </div>
 
 {#if editing}
-	<Dialog.Root open={true} onOpenChange={(open) => !open && closeEditor()}>
-		<Dialog.Content class="max-w-md">
-			<Dialog.Header>
-				<Dialog.Title>{editing.id === null ? 'Add color' : 'Edit color'}</Dialog.Title>
-			</Dialog.Header>
-			<div class="space-y-4">
-				<div class="flex flex-col gap-1">
-					<Label for="color-name">Name</Label>
-					<Input id="color-name" bind:value={editing.name} />
-				</div>
-				<div class="flex flex-col gap-1">
-					<Label for="color-hex">Hex</Label>
-					<div class="flex items-center gap-2">
-						<Input id="color-hex" class="font-mono" bind:value={editing.hex} />
-						<ColorSwatch hex={editing.hex} class="size-9" />
-					</div>
-					<p class="text-xs text-muted-foreground">#RRGGBB — comma-separate for multi-color, e.g. #1A1A1A, #D4AF37</p>
-				</div>
-				{#if formError}<p class="text-sm text-destructive">{formError}</p>{/if}
+	<FormModal title={editing.id === null ? 'Add color' : 'Edit color'} error={formError} onClose={requestClose} onSubmit={save}>
+		<div class="flex flex-col gap-1.5">
+			<Label for="color-name">Name</Label>
+			<Input id="color-name" bind:value={editing.name} />
+		</div>
+		<div class="flex flex-col gap-1.5">
+			<Label for="color-hex">Hex</Label>
+			<div class="flex items-center gap-2">
+				<Input id="color-hex" class="font-mono" bind:value={editing.hex} />
+				<ColorSwatch hex={editing.hex} class="size-9" />
 			</div>
-			<Dialog.Footer>
-				<Button variant="ghost" onclick={closeEditor}>Cancel</Button>
-				<Button onclick={save}>Save</Button>
-			</Dialog.Footer>
-		</Dialog.Content>
-	</Dialog.Root>
+			<p class="text-xs text-muted-foreground">#RRGGBB — comma-separate for multi-color, e.g. #1A1A1A, #D4AF37</p>
+		</div>
+	</FormModal>
 {/if}
 
 <AlertDialog.Root open={deleteTarget !== null} onOpenChange={(open) => !open && closeDelete()}>
