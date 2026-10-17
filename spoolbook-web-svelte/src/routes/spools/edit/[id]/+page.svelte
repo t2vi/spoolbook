@@ -1,14 +1,1 @@
-<script lang="ts">
-	import SpoolForm from '$lib/components/spools/SpoolForm.svelte';
-	import { page } from '$app/state';
-
-	let id = $derived(Number(page.params.id));
-</script>
-
-<svelte:head>
-	<title>Edit spool</title>
-</svelte:head>
-
-<div class="mx-auto w-full max-w-3xl px-4 py-8">
-	<SpoolForm {id} />
-</div>
+<!-- Redirects to the list's edit modal (+page.ts, 002/FR-015). -->

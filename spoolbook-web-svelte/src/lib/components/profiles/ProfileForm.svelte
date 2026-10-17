@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import * as Card from '$lib/components/ui/card/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as InputGroup from '$lib/components/ui/input-group/index.js';
@@ -28,9 +27,13 @@
 	import type { ProfileInput } from '$lib/api/client';
 	import type { Filament, ImportResult, ProfileFieldTab, ProfileSource, SlicerType, Spool } from '$lib/api/types';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
+	import FormModal from '$lib/components/form-modal.svelte';
+	import { formHref } from '$lib/form-url';
 	import { unsavedGuard } from '$lib/unsaved.svelte';
 
-	let { id }: { id: number | null } = $props();
+	// `onClose(true)` after a save; `onClose(false)` to close without one.
+	let { id, onClose }: { id: number | null; onClose: (saved: boolean) => void } = $props();
 
 	// Browsers won't let a page set the file dialog's starting folder (that'd let a site probe
 	// filesystem structure), so this is just a hint for where to navigate the first time --
@@ -174,11 +177,10 @@
 			errorMessage = 'Duplicate failed.';
 			return;
 		}
-		goto(`/profiles/edit/${result.profile.id}`);
+		goto(formHref(page.url, result.profile.id));
 	}
 
-	async function save(e: Event, asNewVersion = false) {
-		e.preventDefault();
+	async function save(asNewVersion = false) {
 		const fields: Record<string, string> = {};
 		for (const tab of tabs) for (const section of tab.sections) for (const field of section.fields) fields[field.name] = field.value;
 
@@ -202,151 +204,147 @@
 		}
 
 		unsaved.markClean();
-		goto('/profiles');
+		onClose(true);
 	}
 </script>
 
-<h1 class="mb-6 flex items-center gap-3 text-2xl font-semibold">
-	{id === null ? 'Add profile' : 'Edit profile'}
-	{#if versionNumber !== null}
-		<Badge variant={isCurrentVersion ? 'default' : 'outline'}>v{versionNumber}{isCurrentVersion ? ' · selected' : ''}</Badge>
-	{/if}
-</h1>
+<FormModal
+	title={id === null ? 'Add profile' : 'Edit profile'}
+	size="wide"
+	error={errorMessage}
+	onClose={() => onClose(false)}
+	onSubmit={() => save()}
+>
+	{#snippet titleExtra()}
+		{#if versionNumber !== null}
+			<Badge variant={isCurrentVersion ? 'success' : 'outline'}>v{versionNumber}{isCurrentVersion ? ' · selected' : ''}</Badge>
+		{/if}
+	{/snippet}
 
-<div class="max-w-3xl space-y-6">
 	{#if id === null}
-		<Card.Root>
-			<Card.Header>
-				<Card.Title>Start from</Card.Title>
-				<Card.Description>Pick a filament, then optionally seed the fields below from a Bambu Studio default or an imported preset.</Card.Description>
-			</Card.Header>
-			<Card.Content class="space-y-4">
-				<div class="flex flex-col gap-1">
-					<Label for="filament-select">Filament</Label>
-					<FilamentPicker id="filament-select" bind:value={selectedFilamentId} {filaments} />
-				</div>
+		<section class="space-y-4 rounded-lg border bg-muted/30 p-4">
+			<div>
+				<h3 class="font-semibold">Start from</h3>
+				<p class="text-sm text-muted-foreground">Pick a filament, then optionally seed the fields below from a Bambu Studio default or an imported preset.</p>
+			</div>
+			<div class="flex flex-col gap-1">
+				<Label for="filament-select">Filament</Label>
+				<FilamentPicker id="filament-select" bind:value={selectedFilamentId} {filaments} />
+			</div>
 
-				<div class="flex flex-col gap-1">
-					<Label for="system-preset">Start from a Bambu Studio default (optional)</Label>
-					<SearchablePicker
-						id="system-preset"
-						bind:value={selectedSystemPreset}
-						options={systemPresetOptions}
-						placeholder="-- pick a Bambu default --"
-						searchPlaceholder="Search Bambu presets…"
-						onValueChange={onSystemPresetSelected}
-					/>
-				</div>
+			<div class="flex flex-col gap-1">
+				<Label for="system-preset">Start from a Bambu Studio default (optional)</Label>
+				<SearchablePicker
+					id="system-preset"
+					bind:value={selectedSystemPreset}
+					options={systemPresetOptions}
+					placeholder="-- pick a Bambu default --"
+					searchPlaceholder="Search Bambu presets…"
+					onValueChange={onSystemPresetSelected}
+				/>
+			</div>
 
-				<div class="flex flex-col gap-1">
-					<Label for="import-preset">Or import a sliced .3mf / Bambu Studio preset (.json) (optional)</Label>
-					<input
-						id="import-preset"
-						type="file"
-						accept=".3mf,.json"
-						onchange={onFileSelected}
-						class="text-sm file:mr-3 file:cursor-pointer file:rounded-md file:border file:bg-background file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-accent"
-					/>
-					{#if bambuPresetsDirHint}
-						<p class="text-xs text-muted-foreground">
-							Your saved presets live in <code class="rounded bg-muted px-1 py-0.5">{bambuPresetsDirHint}</code> — the browser remembers this
-							folder after your first visit here.
-						</p>
-					{/if}
-					{#if importMessage}<p class="text-sm text-muted-foreground">{importMessage}</p>{/if}
-				</div>
-			</Card.Content>
-		</Card.Root>
+			<div class="flex flex-col gap-1">
+				<Label for="import-preset">Or import a sliced .3mf / Bambu Studio preset (.json) (optional)</Label>
+				<input
+					id="import-preset"
+					type="file"
+					accept=".3mf,.json"
+					onchange={onFileSelected}
+					class="text-sm file:mr-3 file:cursor-pointer file:rounded-md file:border file:bg-background file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-accent"
+				/>
+				{#if bambuPresetsDirHint}
+					<p class="text-xs text-muted-foreground">
+						Your saved presets live in <code class="rounded bg-muted px-1 py-0.5">{bambuPresetsDirHint}</code> — the browser remembers this
+						folder after your first visit here.
+					</p>
+				{/if}
+				{#if importMessage}<p class="text-sm text-muted-foreground">{importMessage}</p>{/if}
+			</div>
+
+		</section>
 	{/if}
 
-	<Card.Root>
-		<Card.Content class="pt-6">
-			<div class="flex flex-col gap-1">
-				<Label for="name">Name</Label>
-				<Input id="name" bind:value={name} />
-			</div>
-			<div class="mt-4 flex flex-col gap-1">
-				<Label for="spool">Spool</Label>
-				<Picker id="spool" bind:value={spoolId} options={spoolOptions} />
-			</div>
-		</Card.Content>
-	</Card.Root>
+	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+		<div class="flex flex-col gap-1.5">
+			<Label for="name">Name</Label>
+			<Input id="name" bind:value={name} />
+		</div>
+		<div class="flex flex-col gap-1.5">
+			<Label for="spool">Spool</Label>
+			<Picker id="spool" bind:value={spoolId} options={spoolOptions} />
+		</div>
+	</div>
 
-	<Card.Root>
-		<Card.Content class="pt-6">
-			<Tabs.Root bind:value={activeTab}>
-				<Tabs.List class="mb-4">
-					{#each tabs as tab (tab.title)}
-						<Tabs.Trigger value={tab.title}>{tab.title}</Tabs.Trigger>
-					{/each}
-				</Tabs.List>
+	<Tabs.Root bind:value={activeTab}>
+		<Tabs.List class="mb-4">
+			{#each tabs as tab (tab.title)}
+				<Tabs.Trigger value={tab.title}>{tab.title}</Tabs.Trigger>
+			{/each}
+		</Tabs.List>
 
-				{#each tabs as tab (tab.title)}
-					<Tabs.Content value={tab.title} class="min-h-[420px] space-y-6">
-						{#each tab.sections as section, i (section.title)}
-							{#if i > 0}<Separator />{/if}
-							<div>
-								<h3 class="mb-3 text-sm font-semibold tracking-wide text-muted-foreground uppercase">{section.title}</h3>
-								<div class="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-									{#each section.fields.filter(showRow) as field (field.name)}
-										{#if field.isBool}
-											<div class="flex items-center gap-2">
-												<Checkbox
-													id="field-{field.name}"
-													checked={field.value === 'true'}
-													onCheckedChange={(v: boolean) => (field.value = v ? 'true' : 'false')}
-												/>
-												<Label for="field-{field.name}">{field.label}{field.unit ? ` (${field.unit})` : ''}</Label>
-											</div>
+		{#each tabs as tab (tab.title)}
+			<Tabs.Content value={tab.title} class="min-h-[420px] space-y-6">
+				{#each tab.sections as section, i (section.title)}
+					{#if i > 0}<Separator />{/if}
+					<div>
+						<h3 class="mb-3 text-sm font-semibold tracking-wide text-muted-foreground uppercase">{section.title}</h3>
+						<div class="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+							{#each section.fields.filter(showRow) as field (field.name)}
+								{#if field.isBool}
+									<div class="flex items-center gap-2">
+										<Checkbox
+											id="field-{field.name}"
+											checked={field.value === 'true'}
+											onCheckedChange={(v: boolean) => (field.value = v ? 'true' : 'false')}
+										/>
+										<Label for="field-{field.name}">{field.label}{field.unit ? ` (${field.unit})` : ''}</Label>
+									</div>
+								{:else}
+									<div class="flex flex-col gap-1">
+										<Label for="field-{field.name}">
+											{field.label}{field.unit && (field.isEnum || field.isTextArea) ? ` (${field.unit})` : ''}
+										</Label>
+										{#if field.isEnum}
+											<Picker
+												id="field-{field.name}"
+												bind:value={field.value}
+												options={[{ value: '', label: '--' }, ...(field.options ?? []).map((opt) => ({ value: opt, label: opt }))]}
+											/>
+										{:else if field.isTextArea}
+											<Textarea id="field-{field.name}" bind:value={field.value} rows={4} class="font-mono text-xs" />
+										{:else if field.unit}
+											<InputGroup.Root>
+												<InputGroup.Input id="field-{field.name}" bind:value={field.value} />
+												<InputGroup.Addon align="inline-end">
+													<InputGroup.Text>{field.unit}</InputGroup.Text>
+												</InputGroup.Addon>
+											</InputGroup.Root>
 										{:else}
-											<div class="flex flex-col gap-1">
-												<Label for="field-{field.name}">
-													{field.label}{field.unit && (field.isEnum || field.isTextArea) ? ` (${field.unit})` : ''}
-												</Label>
-												{#if field.isEnum}
-													<Picker
-														id="field-{field.name}"
-														bind:value={field.value}
-														options={[{ value: '', label: '--' }, ...(field.options ?? []).map((opt) => ({ value: opt, label: opt }))]}
-													/>
-												{:else if field.isTextArea}
-													<Textarea id="field-{field.name}" bind:value={field.value} rows={4} class="font-mono text-xs" />
-												{:else if field.unit}
-													<InputGroup.Root>
-														<InputGroup.Input id="field-{field.name}" bind:value={field.value} />
-														<InputGroup.Addon align="inline-end">
-															<InputGroup.Text>{field.unit}</InputGroup.Text>
-														</InputGroup.Addon>
-													</InputGroup.Root>
-												{:else}
-													<Input id="field-{field.name}" bind:value={field.value} />
-												{/if}
-											</div>
+											<Input id="field-{field.name}" bind:value={field.value} />
 										{/if}
-									{/each}
-								</div>
-							</div>
-						{/each}
-					</Tabs.Content>
+									</div>
+								{/if}
+							{/each}
+						</div>
+					</div>
 				{/each}
-			</Tabs.Root>
-		</Card.Content>
-	</Card.Root>
+			</Tabs.Content>
+		{/each}
+	</Tabs.Root>
 
-	{#if errorMessage}<p class="text-sm text-destructive">{errorMessage}</p>{/if}
-
-	<form onsubmit={save} class="flex items-center gap-3">
-		<Button type="submit">Save</Button>
+	{#snippet aside()}
 		{#if id !== null}
-			<Button type="button" variant="outline" onclick={(e) => save(e, true)}>Save as new version</Button>
+			{#key id}
+				<VersionsPanel {id} onSelected={(selectedId) => (isCurrentVersion = selectedId === id)} />
+			{/key}
+		{/if}
+	{/snippet}
+
+	{#snippet actions()}
+		{#if id !== null}
+			<Button type="button" variant="outline" onclick={() => save(true)}>Save as new version</Button>
 			<Button type="button" variant="outline" onclick={duplicate}>Duplicate</Button>
 		{/if}
-		<a href="/profiles" onclick={() => unsaved.markClean()} class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
-	</form>
-
-	{#if id !== null}
-		{#key id}
-			<VersionsPanel {id} onSelected={(selectedId) => (isCurrentVersion = selectedId === id)} />
-		{/key}
-	{/if}
-</div>
+	{/snippet}
+</FormModal>

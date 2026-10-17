@@ -17,21 +17,38 @@ test('leaving an edit form with unsaved changes asks first; saving clears it', a
 		return answer ? d.accept() : d.dismiss();
 	});
 
-	// Untouched: leaving doesn't ask.
-	await page.getByRole('link', { name: 'Colors' }).click();
-	await expect(page).toHaveURL(/\/filaments\/colors$/);
+	// Untouched: closing doesn't ask.
+	const dialog = page.getByRole('dialog');
+	await page.keyboard.press('Escape');
+	await expect(dialog).toBeHidden();
 
-	await page.goto(`/spools/edit/${spool}`);
+	// History in and out of the modal, in this one document: back reopens it untouched; with
+	// edits, forward (leaving it) asks — dismissed stays put, accepted leaves. (The modal covers
+	// the page, so history, closing it, reload and closing the tab are the ways out.)
+	await page.evaluate(() => history.back());
 	await expect(page.getByLabel('Lot code')).toHaveValue('before');
 	await page.getByLabel('Lot code').fill('after');
 	answers.push(false);
-	await page.getByRole('link', { name: 'Colors' }).click();
-	await expect(page).toHaveURL(new RegExp(`/spools/edit/${spool}$`));
+	await page.evaluate(() => history.forward());
+	await expect.poll(() => answers.length).toBe(0);
+	await expect(page).toHaveURL(new RegExp(`/spools\\?edit=${spool}$`));
 	await expect(page.getByLabel('Lot code')).toHaveValue('after');
 
 	answers.push(true);
-	await page.getByRole('link', { name: 'Colors' }).click();
-	await expect(page).toHaveURL(/\/filaments\/colors$/);
+	await page.evaluate(() => history.forward());
+	await expect(dialog).toBeHidden();
+	await expect(page).toHaveURL(/\/spools$/);
+
+	// Closing the modal with edits asks too: Escape kept open when dismissed, Cancel closes when accepted.
+	await page.goto(`/spools/edit/${spool}`);
+	await page.getByLabel('Lot code').fill('unsaved');
+	answers.push(false);
+	await page.keyboard.press('Escape');
+	await expect(page.getByLabel('Lot code')).toHaveValue('unsaved');
+	answers.push(true);
+	await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+	await expect(page.getByRole('dialog')).toBeHidden();
+	await expect(page).toHaveURL(/\/spools$/);
 
 	await page.goto(`/spools/edit/${spool}`);
 	await page.getByLabel('Lot code').fill('saved');

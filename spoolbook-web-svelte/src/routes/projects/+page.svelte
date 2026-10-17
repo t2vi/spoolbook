@@ -5,6 +5,8 @@
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import ProjectAdder from '$lib/components/projects/ProjectAdder.svelte';
+	import FormModal from '$lib/components/form-modal.svelte';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import { deleteProject, listProjects, me, renameProject } from '$lib/api/client';
 	import type { Project } from '$lib/api/types';
 
@@ -14,6 +16,8 @@
 	let selected = $state<Set<number>>(new Set());
 	let renamingId = $state<number | null>(null);
 	let renameValue = $state('');
+	let renameError = $state<string | null>(null);
+	let adding = $state(false);
 
 	// null = closed. 'bulk' or a project id = confirm prompt open. blockedNames set = the delete
 	// guard fired (has_prints) -- dialog switches to a single-button acknowledgement instead of
@@ -40,20 +44,20 @@
 	function startRename(project: Project) {
 		renamingId = project.id;
 		renameValue = project.fileName;
+		renameError = null;
 	}
 
 	async function confirmRename() {
 		if (renamingId === null) return;
 		if (!renameValue.trim()) {
-			errorMessage = 'Name is required.';
+			renameError = 'Name is required.';
 			return;
 		}
 		const result = await renameProject(renamingId, renameValue.trim());
 		if (!result.ok) {
-			errorMessage = result.error ?? 'Rename failed.';
+			renameError = result.error ?? 'Rename failed.';
 			return;
 		}
-		errorMessage = null;
 		renamingId = null;
 		await load();
 	}
@@ -120,7 +124,7 @@
 	</p>
 
 	{#if authenticated}
-		<div class="mb-6 max-w-md"><ProjectAdder onAdded={load} /></div>
+		<div class="mb-6"><Button onclick={() => (adding = true)}>+ Add project</Button></div>
 	{/if}
 
 	{#if authenticated && selected.size > 0}
@@ -153,24 +157,12 @@
 									<Checkbox checked={selected.has(p.id)} onCheckedChange={(v: boolean) => toggleSelected(p.id, v)} />
 								</Table.Cell>
 							{/if}
+							<Table.Cell><a href="/projects/{p.id}" class="hover:underline">{p.fileName}</a></Table.Cell>
 							<Table.Cell>
-								{#if renamingId === p.id}
-									<div class="flex items-center gap-2">
-										<Input bind:value={renameValue} class="h-8 max-w-xs" onkeydown={(e) => e.key === 'Enter' && confirmRename()} />
-										<Button size="sm" onclick={confirmRename}>Save</Button>
-										<button type="button" class="text-sm text-muted-foreground hover:text-foreground" onclick={() => (renamingId = null)}>Cancel</button>
-									</div>
-								{:else}
-									<a href="/projects/{p.id}" class="hover:underline">{p.fileName}</a>
-								{/if}
-							</Table.Cell>
-							<Table.Cell>
-								{#if renamingId !== p.id}
-									<a href="/projects/{p.id}" class="hover:underline">View</a>
-									{#if authenticated}
-										<button type="button" onclick={() => startRename(p)} class="ml-3 hover:underline">Rename</button>
-										<button type="button" onclick={() => askDelete(p.id)} class="ml-3 text-destructive hover:underline">Delete</button>
-									{/if}
+								<a href="/projects/{p.id}" class="hover:underline">View</a>
+								{#if authenticated}
+									<button type="button" onclick={() => startRename(p)} class="ml-3 hover:underline">Rename</button>
+									<button type="button" onclick={() => askDelete(p.id)} class="ml-3 text-destructive hover:underline">Delete</button>
 								{/if}
 							</Table.Cell>
 						</Table.Row>
@@ -183,6 +175,23 @@
 	{#if !authenticated}<p class="mt-3 text-sm text-muted-foreground"><a href="/login" class="underline">Sign in</a> to rename or delete.</p>{/if}
 	{#if errorMessage}<p class="mt-3 text-sm text-destructive">{errorMessage}</p>{/if}
 </div>
+
+{#if renamingId !== null}
+	<FormModal title="Rename project" error={renameError} onClose={() => (renamingId = null)} onSubmit={confirmRename}>
+		<div class="flex flex-col gap-1.5">
+			<Label for="project-name">Name</Label>
+			<Input id="project-name" bind:value={renameValue} />
+		</div>
+	</FormModal>
+{/if}
+
+{#if adding}
+	<FormModal title="Add project" onClose={() => (adding = false)}>
+		<p class="text-sm text-muted-foreground">Upload a <code>.3mf</code>, or paste a direct link to one.</p>
+		<!-- ProjectAdder has its own form, so it sits outside the modal's. -->
+		{#snippet aside()}<ProjectAdder onAdded={load} />{/snippet}
+	</FormModal>
+{/if}
 
 <AlertDialog.Root open={deleteTarget !== null} onOpenChange={(open) => !open && closeDeleteDialog()}>
 	<AlertDialog.Content class="sm:max-w-md">

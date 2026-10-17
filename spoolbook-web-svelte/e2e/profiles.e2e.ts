@@ -53,6 +53,7 @@ test('profile versions: save as new, switch back with "Use this version", rename
 	await expect(v1Row).toContainText('Winter 2026');
 
 	await page.getByRole('button', { name: 'Duplicate' }).click();
-	await expect(page).not.toHaveURL(new RegExp(`/profiles/edit/${v1}$`));
+	await expect(page).toHaveURL(/\/profiles\?edit=\d+$/);
+	await expect(page).not.toHaveURL(new RegExp(`edit=${v1}$`));
 	await expect(page.getByLabel('Name')).toHaveValue(`${name} (copy)`);
 });

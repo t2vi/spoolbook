@@ -3,7 +3,7 @@
 **Status:** Implemented (retroactive spec — see Notes)
 **Area:** Profiles (#149)
 **Code:** `spoolbook-rs/src/{profiles,profile_field_spec,bambu_import}.rs`; pages `/profiles`,
-`/profiles/new`, `/profiles/edit/[id]` (`lib/components/profiles/ProfileForm.svelte`)
+the add / edit profile modal (`lib/components/profiles/ProfileForm.svelte`)
 
 ## Summary
 
@@ -120,19 +120,19 @@ Bambu system preset, and are what a Print records and a re-slice applies.
   nozzle temp / created headers; paging with a page-size choice (10 / 20 / 50); filters, sort
   and page in the URL; delete with the `has_prints` / `has_newer_version` refusal shown.
   *Verify: e2e*
-- **FR-041** — `/profiles/new` and `/profiles/edit/[id]` render the tabbed form from the field
-  spec, pre-fill from a file import or a system preset, show per-field errors, and save. A
-  Spool picker chooses generic or one of the profile's filament's spools; the edit page starts
+- **FR-041** — The add / edit profile modal (002/FR-015, wide) renders the tabbed form from the
+  field spec, pre-fill from a file import or a system preset, show per-field errors, and save. A
+  Spool picker chooses generic or one of the profile's filament's spools; editing starts
   on the profile's current choice and saving sends it. The
-  edit page shows the version number and a "Save as new version" button (FR-021); a `Locked`
-  refusal points the user at it. Saving from the edit page keeps the profile's provenance
+  edit form shows the version number and a "Save as new version" button (FR-021); a `Locked`
+  refusal points the user at it. Saving an edit keeps the profile's provenance
   (`source`, `source_slicer`, `raw_settings_json`) unless a file or system preset was imported
   into the form during that edit — then the import's provenance is saved. The filament picker is
   searchable (007/FR-052). Unsaved edits are guarded (002/FR-008). *Verify: e2e*
-- **FR-042** — The edit page has a Versions panel (FR-023): each version's number, name, nozzle
+- **FR-042** — The edit form has a Versions panel (FR-023): each version's number, name, nozzle
   temp, created date and Selected / Locked badges; open any version in the editor; "Use this
   version" selects it (FR-024); rename sets its version name (FR-025). *Verify: e2e*
-- **FR-043** — The edit page has "Duplicate" (FR-026), which opens the new copy in the editor.
+- **FR-043** — The edit form has "Duplicate" (FR-026), which opens the new copy in the editor.
   *Verify: e2e*
 
 ## Notes

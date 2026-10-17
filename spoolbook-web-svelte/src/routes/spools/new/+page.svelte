@@ -1,11 +1,1 @@
-<script lang="ts">
-	import SpoolForm from '$lib/components/spools/SpoolForm.svelte';
-</script>
-
-<svelte:head>
-	<title>Add spool</title>
-</svelte:head>
-
-<div class="mx-auto w-full max-w-3xl px-4 py-8">
-	<SpoolForm id={null} />
-</div>
+<!-- Redirects to the list's add modal (+page.ts, 002/FR-015). -->

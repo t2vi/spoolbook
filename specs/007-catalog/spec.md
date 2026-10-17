@@ -128,16 +128,16 @@ filament. Colors are discovered from filaments as they're added.
 
 - **FR-040** — `/filaments` searches by brand/material with paging, runs the catalog sync
   (showing the added/skipped counts, or the error when it fails), and
-  deletes with the refusal reason shown; `/filaments/new` and `/filaments/edit/[id]` edit the
+  deletes with the refusal reason shown; the add / edit filament modal (002/FR-015) edits the
   four fields with color autocomplete from known colors. *Verify: e2e*
 - **FR-041** — `/spools` lists spools (FR-034) with columns brand, material, color (swatch),
   lot code, purchased, opened, emptied and status; filters for brand, material, status and
   purchase-date range; sortable filament / date headers; paging with a page-size choice
-  (10 / 20 / 50); filters, sort and page in the URL. `/spools/new` and `/spools/edit/[id]` pick
-  the filament (FR-052) and edit the spool's fields. *Verify: e2e*
+  (10 / 20 / 50); filters, sort and page in the URL. The add / edit spool modal (002/FR-015)
+  picks the filament (FR-052) and edits the spool's fields. *Verify: e2e*
 - **FR-042** — `/filaments/colors` (sidebar: Filaments → Colors) lists colors (FR-017) with
   swatch, name and hex; a name filter; sortable name / hex; paging with a page-size choice;
-  add and edit in a form with name, hex (hint: comma-separate for multi-color) and a live
+  add and edit in a modal (002/FR-015) with name, hex (hint: comma-separate for multi-color) and a live
   swatch preview, showing `duplicate` / `invalid_hex` errors; delete after confirmation, showing
   the `in_use` refusal. *Verify: e2e*
 

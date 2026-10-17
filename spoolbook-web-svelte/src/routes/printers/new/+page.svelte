@@ -1,11 +1,1 @@
-<script lang="ts">
-	import PrinterForm from '$lib/components/printers/PrinterForm.svelte';
-</script>
-
-<svelte:head>
-	<title>Add printer</title>
-</svelte:head>
-
-<div class="mx-auto w-full max-w-3xl px-4 py-8">
-	<PrinterForm id={null} />
-</div>
+<!-- Redirects to the list's add modal (+page.ts, 002/FR-015). -->

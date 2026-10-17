@@ -8,6 +8,10 @@
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import { deleteFilament, me, searchFilaments, syncFilamentCatalog } from '$lib/api/client';
 	import type { FilamentSearchResult } from '$lib/api/types';
+	import FilamentForm from '$lib/components/filaments/FilamentForm.svelte';
+	import { formHref, openForm } from '$lib/form-url';
+	import { goto } from '$app/navigation';
+	import { page as appPage } from '$app/state';
 
 	let result = $state<FilamentSearchResult | null>(null);
 	let brandFilter = $state('');
@@ -17,6 +21,14 @@
 	let syncing = $state(false);
 	let syncStatusMessage = $state<string | null>(null);
 	let authenticated = $state(false);
+
+	// The open add/edit modal lives in the URL (002/FR-015); closing drops it, which runs the
+	// unsaved-changes guard, and keeps the list's own query.
+	let form = $derived(openForm(appPage.url));
+	async function closeForm(saved: boolean) {
+		await goto(formHref(appPage.url, undefined), { noScroll: true });
+		if (saved) await load();
+	}
 
 	async function load() {
 		result = await searchFilaments(brandFilter, materialFilter, page);
@@ -83,7 +95,7 @@
 		<Input placeholder="Filter by brand" bind:value={brandFilter} oninput={applyFilters} class="w-48" />
 		<Input placeholder="Filter by material" bind:value={materialFilter} oninput={applyFilters} class="w-48" />
 		{#if authenticated}
-			<Button href="/filaments/new">+ Add filament</Button>
+			<Button href={formHref(appPage.url, null)}>+ Add filament</Button>
 			<Button variant="outline" disabled={syncing} onclick={syncCatalog}>{syncing ? 'Syncing…' : 'Sync filament catalog'}</Button>
 		{:else}
 			<a href="/login" class="text-sm text-muted-foreground underline">Sign in to edit</a>
@@ -119,7 +131,7 @@
 							<Table.Cell><span class="flex items-center gap-2"><ColorSwatch hex={hexFor(f.color)} />{f.color}</span></Table.Cell>
 							<Table.Cell>
 								{#if authenticated}
-									<a href="/filaments/edit/{f.id}" class="hover:underline">Edit</a>
+									<a href={formHref(appPage.url, f.id)} class="hover:underline">Edit</a>
 									<button onclick={() => remove(f.id)} class="ml-3 text-destructive hover:underline">Delete</button>
 								{/if}
 							</Table.Cell>
@@ -159,3 +171,9 @@
 
 	{#if errorMessage}<p class="mt-3 text-sm text-destructive">{errorMessage}</p>{/if}
 </div>
+
+{#if form !== undefined}
+	{#key form}
+		<FilamentForm id={form} onClose={closeForm} />
+	{/key}
+{/if}

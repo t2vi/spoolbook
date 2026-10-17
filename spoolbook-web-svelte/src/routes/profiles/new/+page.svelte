@@ -1,11 +1,1 @@
-<script lang="ts">
-	import ProfileForm from '$lib/components/profiles/ProfileForm.svelte';
-</script>
-
-<svelte:head>
-	<title>Add profile</title>
-</svelte:head>
-
-<div class="mx-auto w-full max-w-4xl px-4 py-8">
-	<ProfileForm id={null} />
-</div>
+<!-- Redirects to the list's add modal (+page.ts, 002/FR-015). -->
