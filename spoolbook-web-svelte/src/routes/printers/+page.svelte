@@ -4,9 +4,21 @@
 	import PrinterCard from '$lib/components/printers/PrinterCard.svelte';
 	import { listPrinters, me } from '$lib/api/client';
 	import type { Printer } from '$lib/api/types';
+	import PrinterForm from '$lib/components/printers/PrinterForm.svelte';
+	import { formHref, openForm } from '$lib/form-url';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 
 	let printers = $state<Printer[] | null>(null);
 	let authenticated = $state(false);
+
+	// The open add/edit modal lives in the URL (002/FR-015); closing drops it, which runs the
+	// unsaved-changes guard, and keeps the list's own query.
+	let form = $derived(openForm(page.url));
+	async function closeForm(saved: boolean) {
+		await goto(formHref(page.url, undefined), { noScroll: true });
+		if (saved) await load();
+	}
 
 	async function load() {
 		printers = await listPrinters();
@@ -26,7 +38,7 @@
 	<div class="mb-6 flex items-center justify-between">
 		<h1 class="text-2xl font-semibold">Printers</h1>
 		{#if authenticated}
-			<Button href="/printers/new">+ Add printer</Button>
+			<Button href={formHref(page.url, null)}>+ Add printer</Button>
 		{/if}
 	</div>
 
@@ -55,3 +67,9 @@
 		</div>
 	{/if}
 </div>
+
+{#if form !== undefined}
+	{#key form}
+		<PrinterForm id={form} onClose={closeForm} />
+	{/key}
+{/if}

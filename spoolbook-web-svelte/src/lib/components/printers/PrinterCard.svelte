@@ -171,7 +171,7 @@
 				<h2 class="truncate text-xl font-semibold">{printer.name}</h2>
 				{#if authenticated}
 					<div class="flex shrink-0 items-center gap-3 text-sm">
-						<a href="/printers/edit/{printer.id}" class="text-muted-foreground hover:text-foreground hover:underline">Edit</a>
+						<a href="/printers?edit={printer.id}" class="text-muted-foreground hover:text-foreground hover:underline">Edit</a>
 						<button onclick={remove} class="text-destructive hover:underline">Delete</button>
 					</div>
 				{/if}

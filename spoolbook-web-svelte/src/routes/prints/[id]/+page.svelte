@@ -6,7 +6,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Chart from '$lib/components/ui/chart/index.js';
-	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import FormModal from '$lib/components/form-modal.svelte';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -73,6 +73,11 @@
 	// Guarded only while the dialog is open (002/FR-008); every way of closing it marks it clean.
 	const unsaved = unsavedGuard({ outcome: () => (editing ? [draft, roomTempText] : null) });
 	unsaved.markClean();
+
+	// Cancel, ×, Escape, outside click: asks first when there are edits (002/FR-008).
+	function requestClose() {
+		if (unsaved.confirmLeave()) closeEditor();
+	}
 
 	function closeEditor() {
 		editing = false;
@@ -340,50 +345,38 @@
 </div>
 
 {#if editing}
-	<Dialog.Root open={true} onOpenChange={(open) => !open && closeEditor()}>
-		<Dialog.Content class="max-w-md">
-			<Dialog.Header>
-				<Dialog.Title>Edit outcome</Dialog.Title>
-			</Dialog.Header>
-			<div class="space-y-4">
-				<div class="flex flex-col gap-1">
-					<Label for="outcome-status">Result</Label>
-					<Picker id="outcome-status" bind:value={draft.status} options={OUTCOMES} />
+	<FormModal title="Edit outcome" error={outcomeError} onClose={requestClose} onSubmit={saveOutcome}>
+		<div class="flex flex-col gap-1">
+			<Label for="outcome-status">Result</Label>
+			<Picker id="outcome-status" bind:value={draft.status} options={OUTCOMES} />
+		</div>
+		{#if draft.status !== 'Success'}
+			<div class="flex flex-col gap-2">
+				<Label>Failure modes</Label>
+				<div class="grid grid-cols-2 gap-2">
+					{#each Object.entries(FAILURE_MODE_LABELS) as [mode, label] (mode)}
+						<label class="flex items-center gap-2 text-sm">
+							<Checkbox
+								checked={draft.failureModes.includes(mode as FailureMode)}
+								onCheckedChange={(on) => toggleMode(mode as FailureMode, on === true)}
+							/>
+							{label}
+						</label>
+					{/each}
 				</div>
-				{#if draft.status !== 'Success'}
-					<div class="flex flex-col gap-2">
-						<Label>Failure modes</Label>
-						<div class="grid grid-cols-2 gap-2">
-							{#each Object.entries(FAILURE_MODE_LABELS) as [mode, label] (mode)}
-								<label class="flex items-center gap-2 text-sm">
-									<Checkbox
-										checked={draft.failureModes.includes(mode as FailureMode)}
-										onCheckedChange={(on) => toggleMode(mode as FailureMode, on === true)}
-									/>
-									{label}
-								</label>
-							{/each}
-						</div>
-					</div>
-				{/if}
-				<div class="flex flex-col gap-1">
-					<Label for="outcome-room-temp">Room temp (°C)</Label>
-					<Input id="outcome-room-temp" inputmode="decimal" placeholder="e.g. 19.5" bind:value={roomTempText} />
-				</div>
-				<label class="flex items-center gap-2 text-sm">
-					<Checkbox checked={draft.cleanBuildPlate === true} onCheckedChange={(on) => (draft.cleanBuildPlate = on === true)} />
-					Clean build plate
-				</label>
-				<div class="flex flex-col gap-1">
-					<Label for="outcome-notes">Notes</Label>
-					<Textarea id="outcome-notes" rows={4} value={draft.notes ?? ''} oninput={(e) => (draft.notes = e.currentTarget.value)} />
-				</div>
-				{#if outcomeError}<p class="text-sm text-destructive">{outcomeError}</p>{/if}
 			</div>
-			<Dialog.Footer>
-				<Button variant="ghost" onclick={closeEditor}>Cancel</Button>
-				<Button onclick={saveOutcome}>Save</Button>
-			</Dialog.Footer>
-		</Dialog.Content>
-	</Dialog.Root>
+		{/if}
+		<div class="flex flex-col gap-1">
+			<Label for="outcome-room-temp">Room temp (°C)</Label>
+			<Input id="outcome-room-temp" inputmode="decimal" placeholder="e.g. 19.5" bind:value={roomTempText} />
+		</div>
+		<label class="flex items-center gap-2 text-sm">
+			<Checkbox checked={draft.cleanBuildPlate === true} onCheckedChange={(on) => (draft.cleanBuildPlate = on === true)} />
+			Clean build plate
+		</label>
+		<div class="flex flex-col gap-1">
+			<Label for="outcome-notes">Notes</Label>
+			<Textarea id="outcome-notes" rows={4} value={draft.notes ?? ''} oninput={(e) => (draft.notes = e.currentTarget.value)} />
+		</div>
+	</FormModal>
 {/if}

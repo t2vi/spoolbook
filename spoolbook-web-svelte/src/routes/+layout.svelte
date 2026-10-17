@@ -77,7 +77,7 @@
 	let filamentsOpen = $state(filamentsSubItems.some((item) => isActive(item.href)));
 	let workflowOpen = $state(workflowSubItems.some((item) => isActive(item.href)));
 
-	// Home / group / page / New|Edit|Details, named as the sidebar names them (002/FR-009).
+	// Home / group / page / New|Edit (open form, 002/FR-015) or Details, named as the sidebar names them (002/FR-009).
 	const groups = [
 		{ label: 'Filaments', items: filamentsSubItems },
 		{ label: 'Print workflow', items: workflowSubItems }
@@ -85,8 +85,8 @@
 	let crumbs = $derived.by(() => {
 		const item = navItems.find((i) => isActive(i.href));
 		if (!item) return null;
-		const rest = page.url.pathname.slice(item.href.length);
-		const sub = rest.startsWith('/new') ? 'New' : rest.startsWith('/edit') ? 'Edit' : rest.length > 1 ? 'Details' : null;
+		const params = page.url.searchParams;
+		const sub = params.has('new') ? 'New' : params.has('edit') ? 'Edit' : page.url.pathname.length > item.href.length + 1 ? 'Details' : null;
 		return { group: groups.find((g) => g.items.includes(item))?.label, item, sub };
 	});
 

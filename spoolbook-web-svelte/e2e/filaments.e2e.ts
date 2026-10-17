@@ -21,7 +21,7 @@ test('filaments: add, find by brand, edit, and the delete refusal while a spool 
 	await page.getByPlaceholder('Filter by brand').fill(brand);
 	await expect(row).toContainText('Translucent');
 
-	const id = Number((await row.getByRole('link', { name: 'Edit' }).getAttribute('href'))!.split('/').pop());
+	const id = Number((await row.getByRole('link', { name: 'Edit' }).getAttribute('href'))!.split('=').pop());
 	await addSpool(request, id);
 	await row.getByRole('button', { name: 'Delete' }).click();
 	await expect(page.getByText("Can't delete — spools reference this filament.")).toBeVisible();

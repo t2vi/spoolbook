@@ -1,15 +1,16 @@
 <script lang="ts">
 	import ColorSwatch from '$lib/components/color-swatch.svelte';
-	import { Button } from '$lib/components/ui/button/index.js';
+	import FormModal from '$lib/components/form-modal.svelte';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { createFilament, listAllFilaments, listFilamentColors, updateFilament } from '$lib/api/client';
 	import type { FilamentInput } from '$lib/api/client';
 	import type { FilamentColor } from '$lib/api/types';
-	import { goto } from '$app/navigation';
 	import { unsavedGuard } from '$lib/unsaved.svelte';
 
-	let { id }: { id: number | null } = $props();
+	// `onClose(true)` after a save; `onClose(false)` to close without one (the list page's URL
+	// change runs the unsaved-changes guard).
+	let { id, onClose }: { id: number | null; onClose: (saved: boolean) => void } = $props();
 
 	let brand = $state('');
 	let material = $state('');
@@ -37,8 +38,7 @@
 		});
 	});
 
-	async function save(e: Event) {
-		e.preventDefault();
+	async function save() {
 		const input: FilamentInput = { brand, material, variant: variant.trim() || null, color };
 		try {
 			const result = id === null ? await createFilament(input) : await updateFilament(id, input);
@@ -47,29 +47,29 @@
 				return;
 			}
 			unsaved.markClean();
-			goto('/filaments');
+			onClose(true);
 		} catch (e) {
 			errorMessage = e instanceof Error ? e.message : 'Save failed.';
 		}
 	}
 </script>
 
-<h1 class="mb-6 text-2xl font-semibold">{id === null ? 'Add filament' : 'Edit filament'}</h1>
-
-<form onsubmit={save} class="max-w-lg space-y-4">
-	<div class="flex flex-col gap-1">
+<FormModal title={id === null ? 'Add filament' : 'Edit filament'} error={errorMessage} onClose={() => onClose(false)} onSubmit={save}>
+	<div class="flex flex-col gap-1.5">
 		<Label for="brand">Brand</Label>
 		<Input id="brand" bind:value={brand} />
 	</div>
-	<div class="flex flex-col gap-1">
-		<Label for="material">Material</Label>
-		<Input id="material" bind:value={material} />
+	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+		<div class="flex flex-col gap-1.5">
+			<Label for="material">Material</Label>
+			<Input id="material" bind:value={material} />
+		</div>
+		<div class="flex flex-col gap-1.5">
+			<Label for="variant">Variant</Label>
+			<Input id="variant" bind:value={variant} />
+		</div>
 	</div>
-	<div class="flex flex-col gap-1">
-		<Label for="variant">Variant</Label>
-		<Input id="variant" bind:value={variant} />
-	</div>
-	<div class="flex flex-col gap-1">
+	<div class="flex flex-col gap-1.5">
 		<Label for="color">Color</Label>
 		<div class="flex items-center gap-2">
 			<Input id="color" bind:value={color} list="color-options" />
@@ -81,11 +81,4 @@
 			<ColorSwatch hex={swatchHex} class="size-5" />
 		</div>
 	</div>
-
-	{#if errorMessage}<p class="text-sm text-destructive">{errorMessage}</p>{/if}
-
-	<div class="flex items-center gap-3 pt-2">
-		<Button type="submit">Save</Button>
-		<a href="/filaments" onclick={() => unsaved.markClean()} class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
-	</div>
-</form>
+</FormModal>

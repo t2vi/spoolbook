@@ -20,8 +20,8 @@ test('projects: rename, open the detail page, and deleting a printed project is 
 	await page.goto('/projects');
 	const renamed = `renamed-${name}`;
 	await row.getByRole('button', { name: 'Rename' }).click();
-	await page.getByRole('row').filter({ has: page.getByRole('textbox') }).getByRole('textbox').fill(renamed);
-	await page.getByRole('button', { name: 'Save' }).click();
+	await page.getByRole('dialog').getByLabel('Name').fill(renamed);
+	await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
 	const renamedRow = page.getByRole('row').filter({ hasText: renamed });
 	await expect(renamedRow).toHaveCount(1);
 

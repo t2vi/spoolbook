@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button/index.js';
+	import FormModal from '$lib/components/form-modal.svelte';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
@@ -7,11 +7,11 @@
 	import { createSpool, getSpool, listAllFilaments, updateSpool } from '$lib/api/client';
 	import type { SpoolInput } from '$lib/api/client';
 	import type { Filament } from '$lib/api/types';
-	import { goto } from '$app/navigation';
 	import { unsavedGuard } from '$lib/unsaved.svelte';
 	import { numOrNull } from '$lib/utils.js';
 
-	let { id }: { id: number | null } = $props();
+	// `onClose(true)` after a save; `onClose(false)` to close without one.
+	let { id, onClose }: { id: number | null; onClose: (saved: boolean) => void } = $props();
 
 	let filaments = $state<Filament[]>([]);
 	let selectedFilamentId = $state(0);
@@ -45,8 +45,7 @@
 		});
 	});
 
-	async function save(e: Event) {
-		e.preventDefault();
+	async function save() {
 		const input: SpoolInput = {
 			lotCode: lotCode.trim() || null,
 			purchasedAt: purchasedAt || null,
@@ -65,7 +64,7 @@
 					return;
 				}
 				unsaved.markClean();
-			goto('/spools');
+				onClose(true);
 				return;
 			}
 
@@ -79,58 +78,50 @@
 				return;
 			}
 			unsaved.markClean();
-			goto('/spools');
+			onClose(true);
 		} catch (e) {
 			errorMessage = e instanceof Error ? e.message : 'Save failed.';
 		}
 	}
 </script>
 
-<h1 class="mb-6 text-2xl font-semibold">{id === null ? 'Add spool' : 'Edit spool'}</h1>
-
-<div class="max-w-lg space-y-4">
+<FormModal title={id === null ? 'Add spool' : 'Edit spool'} error={errorMessage} onClose={() => onClose(false)} onSubmit={save}>
 	{#if id === null}
-		<div class="flex flex-col gap-1">
+		<div class="flex flex-col gap-1.5">
 			<Label for="filament">Filament</Label>
 			<FilamentPicker id="filament" bind:value={selectedFilamentId} {filaments} />
 		</div>
 	{/if}
-
-	<form onsubmit={save} class="space-y-4">
-		<div class="flex flex-col gap-1">
-			<Label for="lot-code">Lot code</Label>
-			<Input id="lot-code" bind:value={lotCode} />
-		</div>
-		<div class="flex flex-col gap-1">
+	<div class="flex flex-col gap-1.5">
+		<Label for="lot-code">Lot code</Label>
+		<Input id="lot-code" bind:value={lotCode} />
+	</div>
+	<div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+		<div class="flex flex-col gap-1.5">
 			<Label for="purchased">Purchased</Label>
 			<Input id="purchased" type="date" bind:value={purchasedAt} />
 		</div>
-		<div class="flex flex-col gap-1">
+		<div class="flex flex-col gap-1.5">
 			<Label for="opened">Opened</Label>
 			<Input id="opened" type="date" bind:value={openedAt} />
 		</div>
-		<div class="flex flex-col gap-1">
+		<div class="flex flex-col gap-1.5">
 			<Label for="emptied">Emptied</Label>
 			<Input id="emptied" type="date" bind:value={emptiedAt} />
 		</div>
-		<div class="flex flex-col gap-1">
+	</div>
+	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+		<div class="flex flex-col gap-1.5">
 			<Label for="weight">Weight (g)</Label>
 			<Input id="weight" type="number" bind:value={weightGrams} />
 		</div>
-		<div class="flex flex-col gap-1">
+		<div class="flex flex-col gap-1.5">
 			<Label for="diameter">Diameter (mm)</Label>
 			<Input id="diameter" type="number" step="0.01" bind:value={diameterMm} />
 		</div>
-		<div class="flex flex-col gap-1">
-			<Label for="notes">Notes</Label>
-			<Textarea id="notes" bind:value={notes} class="min-h-[80px]" />
-		</div>
-
-		{#if errorMessage}<p class="text-sm text-destructive">{errorMessage}</p>{/if}
-
-		<div class="flex items-center gap-3 pt-2">
-			<Button type="submit">Save</Button>
-			<a href="/spools" onclick={() => unsaved.markClean()} class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
-		</div>
-	</form>
-</div>
+	</div>
+	<div class="flex flex-col gap-1.5">
+		<Label for="notes">Notes</Label>
+		<Textarea id="notes" bind:value={notes} class="min-h-[80px]" />
+	</div>
+</FormModal>

@@ -295,3 +295,80 @@ async fn repair_renames_broken_filaments_or_merges_them_into_an_existing_clean_o
     let markup_left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM filaments WHERE material LIKE '%<%' OR variant LIKE '%<%'").fetch_one(&pool).await.unwrap();
     assert_eq!(markup_left, 0);
 }
+
+// spec: 007/FR-023
+#[test]
+fn parse_catalog_keeps_a_multi_color_hex_list() {
+    let entries = spoolbook_rs::filament_catalog_sync::parse_catalog(
+        r##"[{ "Brand": "Eryone", "Material": "PLA", "Variant": "Silk", "Color": "Black+Gold", "Hex": "#000000, #FFD700" }]"##,
+    );
+    assert_eq!(entries[0].hex.as_deref(), Some("#000000, #FFD700"));
+}
+
+async fn color_hex(pool: &sqlx::SqlitePool, name: &str) -> String {
+    sqlx::query_scalar("SELECT hex FROM filament_colors WHERE name = ?1").bind(name).fetch_one(pool).await.unwrap()
+}
+
+fn entry(color: &str, hex: Option<&str>) -> spoolbook_rs::filaments::FilamentInput {
+    let hex = hex.map(|h| format!(r#""{h}""#)).unwrap_or("null".to_string());
+    spoolbook_rs::filament_catalog_sync::parse_catalog(&format!(
+        r#"[{{ "Brand": "Eryone", "Material": "PLA", "Variant": "Silk", "Color": "{color}", "Hex": {hex} }}]"#
+    ))
+    .remove(0)
+}
+
+// spec: 007/FR-027
+#[tokio::test]
+async fn sync_updates_a_catalog_color_to_the_feeds_newer_hex_even_when_the_filament_is_skipped() {
+    let pool = test_pool().await;
+    spoolbook_rs::filament_catalog_sync::import_many(&pool, &[entry("Black+Gold", Some("#FFD700"))]).await;
+    assert_eq!(color_hex(&pool, "Black+Gold").await, "#FFD700");
+
+    let (added, skipped) = spoolbook_rs::filament_catalog_sync::import_many(&pool, &[entry("Black+Gold", Some("#000000, #FFD700"))]).await;
+    assert_eq!((added, skipped), (0, 1), "the filament itself is already known");
+    assert_eq!(color_hex(&pool, "Black+Gold").await, "#000000, #FFD700");
+}
+
+// spec: 007/FR-027, 007/FR-015
+#[tokio::test]
+async fn sync_never_overwrites_a_hex_a_person_set() {
+    let pool = test_pool().await;
+    let (_, created) = send(&pool, "POST", "/api/filament-colors", Some(json!({ "name": "Galaxy", "hex": "#101010, #4040FF" }))).await;
+    spoolbook_rs::filament_catalog_sync::import_many(&pool, &[entry("Galaxy", Some("#000000"))]).await;
+    assert_eq!(color_hex(&pool, "Galaxy").await, "#101010, #4040FF");
+
+    // A catalog-made color edited on the Colors screen is the person's from then on.
+    spoolbook_rs::filament_catalog_sync::import_many(&pool, &[entry("Rainbow", Some("#CCCCCC"))]).await;
+    let id: i64 = sqlx::query_scalar("SELECT id FROM filament_colors WHERE name = 'Rainbow'").fetch_one(&pool).await.unwrap();
+    send(&pool, "PUT", &format!("/api/filament-colors/{id}"), Some(json!({ "name": "Rainbow", "hex": "#FF0000, #0000FF" }))).await;
+    spoolbook_rs::filament_catalog_sync::import_many(&pool, &[entry("Rainbow", Some("#E40303, #FF8C00, #FFED00, #008026, #24408E, #732982"))]).await;
+    assert_eq!(color_hex(&pool, "Rainbow").await, "#FF0000, #0000FF");
+    assert!(created["color"]["id"].is_i64());
+}
+
+// spec: 007/FR-027
+#[tokio::test]
+async fn sync_leaves_the_hex_alone_when_the_entry_has_none_or_an_invalid_one() {
+    let pool = test_pool().await;
+    spoolbook_rs::filament_catalog_sync::import_many(&pool, &[entry("Teal", Some("#008080"))]).await;
+    spoolbook_rs::filament_catalog_sync::import_many(&pool, &[entry("Teal", None)]).await;
+    spoolbook_rs::filament_catalog_sync::import_many(&pool, &[entry("Teal", Some("teal-ish"))]).await;
+    assert_eq!(color_hex(&pool, "Teal").await, "#008080");
+}
+
+// spec: 007/FR-027
+#[tokio::test]
+async fn a_color_that_already_held_a_hex_list_counts_as_set_by_a_person() {
+    let pool = SqlitePoolOptions::new().max_connections(1).connect("sqlite::memory:").await.unwrap();
+    let migrator = sqlx::migrate!();
+    let (before, after): (Vec<_>, Vec<_>) = migrator.iter().partition(|m| m.description != "add color hex set by user");
+    assert_eq!(after.len(), 1, "the migration that adds the flag");
+    for m in &before {
+        sqlx::raw_sql(&m.sql).execute(&pool).await.unwrap();
+    }
+    sqlx::query("INSERT INTO filament_colors (name, hex) VALUES ('Black+Gold', '#1A1A1A, #D4AF37'), ('Teal', '#008080')").execute(&pool).await.unwrap();
+    sqlx::raw_sql(&after[0].sql).execute(&pool).await.unwrap();
+
+    let set: Vec<(String, bool)> = sqlx::query_as("SELECT name, hex_set_by_user FROM filament_colors ORDER BY name").fetch_all(&pool).await.unwrap();
+    assert_eq!(set, vec![("Black+Gold".to_string(), true), ("Teal".to_string(), false)]);
+}

@@ -3,7 +3,7 @@
 **Status:** Implemented (retroactive spec — see Notes)
 **Area:** Printers & telemetry (#151)
 **Code:** `spoolbook-rs/src/{printers,send_print,printer_camera,bambu_mqtt_payload_parser,jpeg_frame_extractor}.rs`;
-pages `/printers`, `/printers/new`, `/printers/edit/[id]` (`lib/components/printers/{PrinterCard,PrintModal,PrinterForm}.svelte`)
+page `/printers` (`lib/components/printers/{PrinterCard,PrintModal,PrinterForm}.svelte`)
 
 ## Summary
 
@@ -111,8 +111,9 @@ background telemetry connection itself is spec 001.
   profile with a recommended default; AMS tray; optional re-slice) that sends the print. The
   plate preview steps through a multi-plate project with ‹ / › and shows "n / N"; the spool and
   profile pickers show filament swatches (007/FR-051). *Verify: e2e*
-- **FR-051** — `/printers/new` and `/printers/edit/[id]` edit name, model (dropdown), IP,
-  access code, serial, with a Test Connection button; delete is offered from the card.
+- **FR-051** — The add / edit printer modal (002/FR-015, from **+ Add printer** and the card's
+  Edit) edits name, model (dropdown), IP, access code, serial, with a Test Connection button;
+  delete is offered from the card.
   *Verify: e2e*
 
 ## Notes

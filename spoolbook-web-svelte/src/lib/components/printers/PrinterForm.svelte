@@ -1,14 +1,15 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
+	import FormModal from '$lib/components/form-modal.svelte';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { createPrinter, getPrinter, testPrinterConnection, updatePrinter } from '$lib/api/client';
 	import type { PrinterInput } from '$lib/api/client';
 	import { KNOWN_PRINTER_MODELS } from '$lib/printer-image';
-	import { goto } from '$app/navigation';
 	import { unsavedGuard } from '$lib/unsaved.svelte';
 
-	let { id }: { id: number | null } = $props();
+	// `onClose(true)` after a save; `onClose(false)` to close without one.
+	let { id, onClose }: { id: number | null; onClose: (saved: boolean) => void } = $props();
 
 	// Local form state stays plain strings — shadcn's Input binds HTMLInputAttributes['value']
 	// (string), not string | null. Blank -> null happens once, at submit.
@@ -52,8 +53,7 @@
 		}
 	}
 
-	async function save(e: Event) {
-		e.preventDefault();
+	async function save() {
 		const input: PrinterInput = {
 			name,
 			model: model.trim() || null,
@@ -68,63 +68,54 @@
 				return;
 			}
 			unsaved.markClean();
-			goto('/printers');
+			onClose(true);
 		} catch (e) {
 			errorMessage = e instanceof Error ? e.message : 'Save failed.';
 		}
 	}
 </script>
 
-<h1 class="mb-6 text-2xl font-semibold">{id === null ? 'Add printer' : 'Edit printer'}</h1>
+<FormModal title={id === null ? 'Add printer' : 'Edit printer'} error={errorMessage} onClose={() => onClose(false)} onSubmit={save}>
+	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+		<div class="flex flex-col gap-1.5">
+			<Label for="name">Name</Label>
+			<Input id="name" bind:value={name} />
+		</div>
+		<div class="flex flex-col gap-1.5">
+			<Label for="model">Model</Label>
+			<Input id="model" bind:value={model} list="known-printer-models" placeholder="Pick or type a model" />
+			<datalist id="known-printer-models">
+				{#each KNOWN_PRINTER_MODELS as m (m)}
+					<option value={m}></option>
+				{/each}
+			</datalist>
+		</div>
+	</div>
 
-<form onsubmit={save} class="max-w-lg space-y-4">
-	<div class="flex flex-col gap-1">
-		<Label for="name">Name</Label>
-		<Input id="name" bind:value={name} />
+	<h3 class="pt-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Live telemetry (optional)</h3>
+	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+		<div class="flex flex-col gap-1.5">
+			<Label for="ip">IP address</Label>
+			<Input id="ip" bind:value={ipAddress} />
+		</div>
+		<div class="flex flex-col gap-1.5">
+			<Label for="access-code">Access code</Label>
+			<Input id="access-code" bind:value={accessCode} placeholder={hasStoredAccessCode ? 'Saved — leave blank to keep' : ''} />
+		</div>
 	</div>
-	<div class="flex flex-col gap-1">
-		<Label for="model">Model</Label>
-		<Input id="model" bind:value={model} list="known-printer-models" placeholder="Pick or type a model" />
-		<datalist id="known-printer-models">
-			{#each KNOWN_PRINTER_MODELS as m (m)}
-				<option value={m}></option>
-			{/each}
-		</datalist>
-	</div>
-
-	<h3 class="pt-2 text-sm font-semibold">Live telemetry (optional)</h3>
-	<div class="flex flex-col gap-1">
-		<Label for="ip">IP address</Label>
-		<Input id="ip" bind:value={ipAddress} />
-	</div>
-	<div class="flex flex-col gap-1">
-		<Label for="access-code">Access code</Label>
-		<Input
-			id="access-code"
-			bind:value={accessCode}
-			placeholder={hasStoredAccessCode ? 'Saved — leave blank to keep' : ''}
-		/>
-	</div>
-	<div class="flex flex-col gap-1">
+	<div class="flex flex-col gap-1.5">
 		<Label for="serial">Serial number</Label>
 		<Input id="serial" bind:value={serialNumber} />
 	</div>
 
-	<div class="flex items-center gap-3">
+	<div class="flex flex-wrap items-center gap-3">
 		<Button type="button" variant="outline" disabled={testing} onclick={testConnection}>
 			{testing ? 'Testing…' : 'Test connection'}
 		</Button>
 		{#if testResult}
-			<span class="text-sm {testResult.ok ? 'text-green-700' : 'text-destructive'}">
+			<span class="text-sm {testResult.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'}">
 				{testResult.ok ? 'Connected successfully.' : `Failed: ${testResult.error}`}
 			</span>
 		{/if}
 	</div>
-
-	{#if errorMessage}<p class="text-sm text-destructive">{errorMessage}</p>{/if}
-
-	<div class="flex items-center gap-3 pt-2">
-		<Button type="submit">Save</Button>
-		<a href="/printers" onclick={() => unsaved.markClean()} class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
-	</div>
-</form>
+</FormModal>
