@@ -80,7 +80,7 @@ async fn create(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Js
         Ok(v) => v,
         Err(response) => return response,
     };
-    let color = sqlx::query_as::<_, FilamentColor>("INSERT INTO filament_colors (name, hex) VALUES (?1, ?2) RETURNING id, name, hex")
+    let color = sqlx::query_as::<_, FilamentColor>("INSERT INTO filament_colors (name, hex, hex_set_by_user) VALUES (?1, ?2, 1) RETURNING id, name, hex")
         .bind(name)
         .bind(hex)
         .fetch_one(&pool)
@@ -102,7 +102,7 @@ async fn update(_editor: crate::auth::Editor, State(pool): State<SqlitePool>, Pa
     // Filaments refer to a color by name, so a rename carries them along or they'd lose their swatch.
     let mut tx = pool.begin().await.expect("begin failed");
     sqlx::query("UPDATE filaments SET color = ?1 WHERE color = ?2").bind(&name).bind(&old_name).execute(&mut *tx).await.expect("update failed");
-    let color = sqlx::query_as::<_, FilamentColor>("UPDATE filament_colors SET name = ?1, hex = ?2 WHERE id = ?3 RETURNING id, name, hex")
+    let color = sqlx::query_as::<_, FilamentColor>("UPDATE filament_colors SET name = ?1, hex = ?2, hex_set_by_user = 1 WHERE id = ?3 RETURNING id, name, hex")
         .bind(name)
         .bind(hex)
         .bind(id)
