@@ -113,8 +113,21 @@ pub async fn import_many(pool: &SqlitePool, entries: &[FilamentInput]) -> (i64, 
             Ok(_) => added += 1,
             Err(_) => skipped += 1,
         }
+        refresh_color_hex(pool, entry).await;
     }
     (added, skipped)
+}
+
+// The feed's hex wins over what an earlier sync stored — e.g. a multi-color filament's list
+// replacing a single guess — but never over a hex a person set (007/FR-027).
+async fn refresh_color_hex(pool: &SqlitePool, entry: &FilamentInput) {
+    let Some(hex) = entry.hex.as_deref().and_then(crate::colors::normalize_hex) else { return };
+    sqlx::query("UPDATE filament_colors SET hex = ?1 WHERE name = ?2 AND hex_set_by_user = 0 AND hex <> ?1")
+        .bind(hex)
+        .bind(entry.color.trim())
+        .execute(pool)
+        .await
+        .expect("update failed");
 }
 
 // True when the catalog has never been synced, or the last sync was over 24h ago — shared by
