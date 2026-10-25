@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod bambu_error_text;
 pub mod bambu_import;
 pub mod bambu_mqtt_payload_parser;
 pub mod colors;

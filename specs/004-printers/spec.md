@@ -50,9 +50,30 @@ background telemetry connection itself is spec 001.
   real % when the AMS reports `humidity_raw`, else only the coarse 1–5 level). A report with no
   `print` object, no `gcode_state`, or invalid JSON is ignored. `RUNNING`, `PAUSE` and
   `PREPARE` are active states; everything else is terminal/idle. *Verify: unit*
-- **FR-012** — The printer's blocking `print_error` and HMS codes are decoded into
-  human-readable messages (known codes get specific advice; unknown codes a generic message,
-  never a bare number); no error → empty list. *Verify: unit*
+- **FR-012** — The printer's blocking `print_error` and its `hms` warnings become a list of
+  errors in Bambu's own code format, matching Bambu Studio, with nothing dropped from the
+  code. The blocking `print_error` comes first, then the warnings, and no code appears twice.
+  `print_error: 0` and an empty `hms` → empty list. *Verify: unit*
+  - `print_error` (one u32) → 8 hex, shown `AAAA-BBBB` (e.g. `0700-8012`).
+  - `hms` entry (`attr` + `code`, two u32s) → 16 hex = `attr` then `code`, shown
+    `AAAA-AAAA-CCCC-CCCC` (e.g. `0500-0300-0002-0070`).
+  - Each error carries a link to Bambu's error-code redirector for this exact code and printer:
+    `https://e.bambulab.com/index.php?e=<hex>&d=<serial>&s=<device_error|device_hms>&lang=en`.
+    Bambu resolves it to the model's own wiki page (e.g. `/en/p2s/…/hmscode/0500_0300_0001_0001`),
+    or to the wiki's HMS home page for codes without one.
+- **FR-014** — Error text comes from Bambu's official error dictionary, the one Bambu Studio
+  uses: `https://e.bambulab.com/query.php?lang=en&d=<first 3 chars of the serial>`
+  (`device_error` for `print_error` codes, `device_hms` for `hms` codes, matched on the hex
+  code, case-insensitive). spoolbook keeps no error table of its own. *Verify: unit + integration*
+  Every error is shown; nothing is hidden.
+  - **Listed with text** → shown with that text.
+  - **Listed with blank text** → Bambu marks it internal (Bambu Studio hides these) → shown,
+    flagged `internal`, with a message saying Bambu publishes no description for it.
+  - **Not listed, or dictionary not loaded yet / unreachable** → shown with a generic
+    "Printer reported `<code>`" message and the link, never a bare number.
+  - Fetched once per printer model (serial prefix), held in memory, refreshed at most daily.
+    A failed fetch is retried later. Fetching never delays telemetry, and an error reported
+    while the dictionary is loading shows its text once the fetch finishes.
 - **FR-013** — `POST /api/printers/{id}/control` `{ command }` (editor) accepts `pause`,
   `resume`, `stop` and publishes it on the Printer's live connection. Unknown Printer or one
   with no serial → 404; other command → 400 `Unknown command.`; no live connection → 400 with
@@ -105,7 +126,8 @@ background telemetry connection itself is spec 001.
 
 ### Pages
 
-- **FR-050** — `/printers` shows a card per printer: connection + print state, decoded errors,
+- **FR-050** — `/printers` shows a card per printer: connection + print state, decoded errors
+  (FR-012/FR-014; an internal one is labelled "internal"),
   AMS trays, live camera (with retry / pop-out), pause/resume/stop, its 5 most recent Prints,
   and a Print modal (upload, paste a `.3mf` URL (005/FR-003) or pick a project; plate; spool;
   profile with a recommended default; AMS tray; optional re-slice) that sends the print. The
@@ -128,3 +150,9 @@ background telemetry connection itself is spec 001.
   (`tests/printer_live.rs`); the camera relay was written without real-hardware verification.
 - Only RTSP-camera models (X1/X2/H2/P2 family) are supported; A1/P1's port-6000 image protocol
   is not implemented.
+- **#257:** errors used to be squashed to `AAAA-BBBB` for both kinds. That dropped the middle
+  8 hex digits of every `hms` code, linked a wiki path that doesn't exist (`/en/hms/<code>`),
+  and described codes from a hand-written table that mixed the two kinds (`0500-8092` is a
+  `print_error`, not `hms`). It also showed internal codes, e.g. `0500-0300-0002-0070` on a
+  P2S, which Bambu Studio hides. FR-012/FR-014 follow Bambu Studio instead (`DevHMS.cpp`
+  `get_long_error_code`, `DevHMSQuery.cpp`, `HMSPanel.cpp` `append_hms_panel`).
