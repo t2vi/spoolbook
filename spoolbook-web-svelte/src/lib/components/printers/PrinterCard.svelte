@@ -223,6 +223,7 @@
 
 		{#each printerErrors as err (err.code)}
 			<div
+				role="alert"
 				class="mt-2 rounded-lg border p-3 text-sm {err.blocking
 					? 'border-destructive/40 bg-destructive/10 text-destructive'
 					: 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400'}"
@@ -230,6 +231,7 @@
 				<div class="flex items-center gap-2 font-medium">
 					<TriangleAlert class="h-4 w-4 shrink-0" />
 					<span>{err.blocking ? 'Printer error' : 'Printer warning'} {err.code}</span>
+					{#if err.internal}<Badge variant="outline">internal</Badge>{/if}
 				</div>
 				<p class="mt-1 text-foreground/80">{err.message}</p>
 				<a

@@ -34,9 +34,10 @@ export type CameraStatus = 'NotStarted' | 'Connecting' | 'Streaming' | 'Unavaila
 
 // A decoded Bambu HMS / print error, straight from the printer's live report.
 export interface PrinterError {
-	code: string; // "07FF-8012"
-	message: string; // plain-language explanation + what to try
+	code: string; // "07FF-8012" (print_error) or "0500-0300-0002-0070" (hms)
+	message: string; // Bambu's own text for the code, or a generic line
 	blocking: boolean; // true = halts the print; false = warning, print continues
+	internal: boolean; // Bambu lists the code with no description (Bambu Studio hides these)
 	wikiUrl: string;
 }
 

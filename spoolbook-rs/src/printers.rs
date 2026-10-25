@@ -136,7 +136,7 @@ struct PrinterLiveSnapshot {
     camera_status: &'static str,
     camera_error: Option<String>,
     gcode_state: Option<String>,
-    errors: Vec<crate::bambu_mqtt_payload_parser::PrinterError>,
+    errors: Vec<crate::bambu_error_text::DescribedError>,
 }
 
 // SSE: direct port of PrinterCard.razor's poll loop (2s cadence). Streams a snapshot of the
@@ -159,7 +159,7 @@ async fn live(
                 camera_status: camera_status.as_str(),
                 camera_error,
                 gcode_state: status.gcode_state,
-                errors: status.errors,
+                errors: crate::bambu_error_text::describe(status.serial_number.as_deref(), &status.errors),
             };
             Ok(SseEvent::default().data(serde_json::to_string(&snapshot).unwrap()))
         }

@@ -18,7 +18,11 @@ pub struct PrinterLiveStatus {
     // What the printer is currently complaining about (HMS / print_error), decoded for the UI.
     // Replaced wholesale on every full status, so it clears itself when the printer stops
     // reporting the error.
+    #[serde(skip)]
     pub errors: Vec<parser::PrinterError>,
+    // Picks the right per-model error dictionary and wiki page (bambu_error_text.rs).
+    #[serde(skip)]
+    pub serial_number: Option<String>,
     // Reused by printer control commands so pause/resume/stop publish on the
     // same live connection telemetry already holds open, rather than opening a new one per
     // action. AsyncClient is a cheap handle (channel sender), not the real socket — cloning it
@@ -222,7 +226,12 @@ pub async fn connect_and_subscribe_loop(
             continue;
         }
         eprintln!("[mqtt {printer_id}] connecting to {ip_address}:8883");
-        store.write().await.entry(printer_id).or_default().client = Some(client.clone());
+        {
+            let mut s = store.write().await;
+            let entry = s.entry(printer_id).or_default();
+            entry.client = Some(client.clone());
+            entry.serial_number = Some(serial_number.clone());
+        }
 
         loop {
             match eventloop.poll().await {
