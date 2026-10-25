@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import ColorSwatch from '$lib/components/color-swatch.svelte';
 	import { hexFor } from '$lib/color-hexes.svelte';
 	import FormModal from '$lib/components/form-modal.svelte';
@@ -81,12 +82,11 @@
 		return tray ? amsSlotNumber(tray) : null;
 	});
 
-	$effect(() => {
-		(async () => {
-			projects = await listProjects();
-			spools = await listSpools();
-		})();
-
+	// Once, not $effect: amsTrays changes on every telemetry tick, and re-running this would
+	// snap the user's tray/spool pick back to the default.
+	onMount(async () => {
+		projects = await listProjects();
+		spools = await listSpools();
 		const defaultTray = amsTrays.find((t) => t.materialType !== null);
 		if (defaultTray) onAmsTraySelected(defaultTray.key);
 	});

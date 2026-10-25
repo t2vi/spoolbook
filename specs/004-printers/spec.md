@@ -110,7 +110,10 @@ background telemetry connection itself is spec 001.
   and a Print modal (upload, paste a `.3mf` URL (005/FR-003) or pick a project; plate; spool;
   profile with a recommended default; AMS tray; optional re-slice) that sends the print. The
   plate preview steps through a multi-plate project with ‹ / › and shows "n / N"; the spool and
-  profile pickers show filament swatches (007/FR-051). *Verify: e2e*
+  profile pickers show filament swatches (007/FR-051). The AMS tray defaults to the first
+  loaded one; picking a tray (or a spool / profile) sticks — live telemetry updates never reset
+  it — and a tray whose material matches exactly one Spool selects that Spool, whose Filament's
+  profiles then fill the profile picker. *Verify: e2e*
 - **FR-051** — The add / edit printer modal (002/FR-015, from **+ Add printer** and the card's
   Edit) edits name, model (dropdown), IP, access code, serial, with a Test Connection button;
   delete is offered from the card.
