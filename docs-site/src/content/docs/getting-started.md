@@ -44,13 +44,15 @@ see the [repo README](https://github.com/t2vi/spoolbook) for the full dev workfl
 
 ## Printer control and live camera
 
-Add a printer under **Settings → Printers** with its IP address and access code (found on the
-printer's own network settings screen) to connect. Once connected, the **Printers** page shows a
-live card per printer: current status and temperatures, full AMS tray contents, pause/resume/stop
-controls, and a live camera view (opens in a popup window). The **Print** button on a card lets
-you send a `.3mf` project straight to that printer — pick the plate and AMS slot, and spoolbook
-creates the print-history entry automatically, filling in its outcome once the printer reports
-the job finished.
+Add a printer with **+ Add printer** on the **Printers** page, giving its IP address, serial
+number and access code (found on the printer's own network settings screen). Once connected,
+the page shows a live card per printer: current status and temperatures, full AMS tray contents,
+pause/resume/stop controls, a live camera view (opens in a popup window), and any errors or
+warnings the printer reports — with Bambu's own description and a link to Bambu's troubleshooting
+page for that code. The **Print** button on a card lets you send a `.3mf` project straight to that
+printer — pick the plate and AMS slot (a slot whose material matches one of your spools picks that
+spool and its profiles for you), and spoolbook creates the print-history entry automatically,
+filling in its outcome once the printer reports the job finished.
 
 ## Migrating between installs
 
