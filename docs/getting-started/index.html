@@ -23,13 +23,15 @@ follows your system setting; your choice is remembered in that browser.</p>
 <p>Set <code>SPOOLBOOK_ADMIN_PASSWORD</code> first. Useful for development or if you’d rather not use Docker;
 see the <a href="https://github.com/t2vi/spoolbook">repo README</a> for the full dev workflow.</p>
 <h2 id="printer-control-and-live-camera">Printer control and live camera</h2>
-<p>Add a printer under <strong>Settings → Printers</strong> with its IP address and access code (found on the
-printer’s own network settings screen) to connect. Once connected, the <strong>Printers</strong> page shows a
-live card per printer: current status and temperatures, full AMS tray contents, pause/resume/stop
-controls, and a live camera view (opens in a popup window). The <strong>Print</strong> button on a card lets
-you send a <code>.3mf</code> project straight to that printer — pick the plate and AMS slot, and spoolbook
-creates the print-history entry automatically, filling in its outcome once the printer reports
-the job finished.</p>
+<p>Add a printer with <strong>+ Add printer</strong> on the <strong>Printers</strong> page, giving its IP address, serial
+number and access code (found on the printer’s own network settings screen). Once connected,
+the page shows a live card per printer: current status and temperatures, full AMS tray contents,
+pause/resume/stop controls, a live camera view (opens in a popup window), and any errors or
+warnings the printer reports — with Bambu’s own description and a link to Bambu’s troubleshooting
+page for that code. The <strong>Print</strong> button on a card lets you send a <code>.3mf</code> project straight to that
+printer — pick the plate and AMS slot (a slot whose material matches one of your spools picks that
+spool and its profiles for you), and spoolbook creates the print-history entry automatically,
+filling in its outcome once the printer reports the job finished.</p>
 <h2 id="migrating-between-installs">Migrating between installs</h2>
 <p><strong>Settings → Data</strong> lets you move data from one spoolbook install to another without shell or
 Docker access to either host — moving to new hardware, for example. <strong>Export</strong> downloads a zip of
