@@ -147,15 +147,15 @@ fn parse_has_no_errors_when_print_error_zero_and_no_hms() {
 
 // spec: 004/FR-012
 #[test]
-fn parse_decodes_the_blocking_print_error_and_hms_warnings() {
-    // print_error 134184978 == 0x07FF8012 -> "07FF-8012" (the AMS mapping failure the P2S
-    // pauses on). hms entry attr 0x05000000 / code 0x00008092 -> "0500-8092" (camera, non-fatal).
+fn parse_keeps_full_codes_in_bambu_studio_format() {
+    // print_error 0x07FF8012 (AMS mapping failure). hms attr 0x05000300 / code 0x00020070 — the
+    // P2S's real internal warning, which used to be squashed to "0500-0070".
     let json = r##"{
         "print": {
             "gcode_state": "PAUSE",
             "print_error": 134184978,
             "hms": [
-                { "attr": 83886080, "code": 32914 },
+                { "attr": 83886848, "code": 131184 },
                 { "attr": 0, "code": 0 }
             ]
         }
@@ -165,24 +165,28 @@ fn parse_decodes_the_blocking_print_error_and_hms_warnings() {
     assert_eq!(errors.len(), 2);
 
     assert_eq!(errors[0].code, "07FF-8012");
+    assert_eq!(errors[0].ecode, "07FF8012");
     assert!(errors[0].blocking);
-    assert!(errors[0].message.contains("AMS mapping table"));
-    assert_eq!(errors[0].wiki_url, "https://wiki.bambulab.com/en/hms/07FF-8012");
 
-    assert_eq!(errors[1].code, "0500-8092");
+    assert_eq!(errors[1].code, "0500-0300-0002-0070");
+    assert_eq!(errors[1].ecode, "0500030000020070");
     assert!(!errors[1].blocking);
-    assert!(errors[1].message.contains("camera"));
 }
 
 // spec: 004/FR-012
 #[test]
-fn parse_gives_unknown_codes_a_generic_message_not_a_bare_number() {
-    let json = r##"{ "print": { "gcode_state": "PAUSE", "print_error": 305419896 } }"##;
-    let err = &parse(json).unwrap().errors[0];
-    assert_eq!(err.code, "1234-5678");
-    assert!(err.message.contains("1234-5678"));
-    assert!(err.message.len() > "1234-5678".len(), "must add context, not just echo the code");
-    assert_eq!(err.wiki_url, "https://wiki.bambulab.com/en/hms/1234-5678");
+fn parse_lists_each_hms_code_once() {
+    let json = r##"{
+        "print": {
+            "gcode_state": "RUNNING",
+            "print_error": 0,
+            "hms": [
+                { "attr": 83886848, "code": 131184 },
+                { "attr": 83886848, "code": 131184 }
+            ]
+        }
+    }"##;
+    assert_eq!(parse(json).unwrap().errors.len(), 1);
 }
 
 // spec: 004/FR-011

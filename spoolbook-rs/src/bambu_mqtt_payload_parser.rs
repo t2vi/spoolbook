@@ -52,75 +52,21 @@ pub struct BambuTelemetryMessage {
     pub errors: Vec<PrinterError>,
 }
 
-// A decoded Bambu HMS / print error, ready for the UI — so the printer's own problems show on
-// the spoolbook card instead of only in Bambu Studio.
-#[derive(Clone, Serialize, PartialEq, Eq, Debug)]
-#[serde(rename_all = "camelCase")]
+// One thing the printer is complaining about, in Bambu Studio's own code format. Text and link
+// come from Bambu's error dictionary (bambu_error_text.rs), keyed on `ecode`.
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct PrinterError {
-    /// `AAAA-BBBB`, e.g. `07FF-8012`.
+    /// As shown: `07FF-8012` for a print_error, `0500-0300-0002-0070` for an hms entry.
     pub code: String,
-    /// Plain-language explanation + what to try. Falls back to a generic line for codes we
-    /// haven't catalogued.
-    pub message: String,
-    /// `true` for a `print_error` that halts the print; `false` for an `hms` warning that lets
-    /// it continue.
+    /// The dictionary key: the same hex without dashes (8 digits print_error, 16 hms).
+    pub ecode: String,
+    /// `true` for the `print_error` that halts the print; `false` for an `hms` warning.
     pub blocking: bool,
-    /// Bambu's own troubleshooting page for this exact code.
-    pub wiki_url: String,
 }
 
-// Bambu packs an HMS code into two u32s; the human-facing short form is the top half of `attr`
-// and the bottom half of `code`. `print_error` is already that packed short form in one int.
-fn format_hms(attr: u64, code: u64) -> String {
-    format!("{:04X}-{:04X}", (attr >> 16) & 0xFFFF, code & 0xFFFF)
-}
-
-fn format_print_error(raw: u64) -> String {
-    format!("{:04X}-{:04X}", (raw >> 16) & 0xFFFF, raw & 0xFFFF)
-}
-
-// Known codes we've actually hit against this project's P2S, plus the common families. Anything
-// not listed still shows its code + the wiki link — never a bare number with no context.
-fn describe(code: &str) -> String {
-    let known = match code {
-        "07FF-8012" | "0700-8012" | "07FF-2000" => {
-            "Failed to get the AMS mapping table — the printer couldn't match this print's \
-             filament to an AMS slot. Check the mapped slot actually has filament, that every \
-             tray is seated and its RFID is read, and that the AMS-to-printer cable is firm. \
-             Power-cycle the printer and AMS if it keeps happening."
-        }
-        "0500-8092" | "0500-8093" => {
-            "Toolhead camera failed to initialise — the print still runs, but AI failure \
-             detection (spaghetti / first-layer) is off for this job. Usually clears after a \
-             reboot; contact Bambu support if it's persistent."
-        }
-        "0300-0100" | "0300-0200" => {
-            "Nozzle temperature is abnormal (heating too slow, or a thermistor reading fault). \
-             Check the hotend wiring and that the silicone sock isn't fouling the sensor."
-        }
-        "0700-4000" | "0700-4001" => {
-            "AMS filament ran out or snapped mid-feed. Load the tray and hit resume."
-        }
-        "0700-2000" => "AMS filament is stuck — a tube or the buffer is jammed. Clear it, then resume.",
-        "1200-8003" | "1200-8004" => {
-            "First-layer inspection flagged a problem (poor adhesion or a gap). Check the plate \
-             and the first layer before resuming."
-        }
-        _ => "",
-    };
-    if !known.is_empty() {
-        return known.to_string();
-    }
-    format!("Printer reported HMS {code}. See the linked Bambu troubleshooting page for details.")
-}
-
-fn make_error(code: String, blocking: bool) -> PrinterError {
-    PrinterError {
-        message: describe(&code),
-        wiki_url: format!("https://wiki.bambulab.com/en/hms/{code}"),
-        blocking,
-        code,
-    }
+fn make_error(ecode: String, blocking: bool) -> PrinterError {
+    let code = ecode.as_bytes().chunks(4).map(|c| std::str::from_utf8(c).unwrap()).collect::<Vec<_>>().join("-");
+    PrinterError { code, ecode, blocking }
 }
 
 fn parse_errors(print: &Value) -> Vec<PrinterError> {
@@ -133,7 +79,7 @@ fn parse_errors(print: &Value) -> Vec<PrinterError> {
         .or_else(|| print.get("print_error").and_then(Value::as_str).and_then(|s| s.parse().ok()))
         .unwrap_or(0);
     if raw != 0 {
-        out.push(make_error(format_print_error(raw), true));
+        out.push(make_error(format!("{raw:08X}"), true));
     }
 
     // Then hms warnings (attr+code pairs). De-dupe against the blocking code and each other.
@@ -145,11 +91,12 @@ fn parse_errors(print: &Value) -> Vec<PrinterError> {
             if attr == 0 && code == 0 {
                 continue;
             }
-            let formatted = format_hms(attr, code);
-            if out.iter().any(|e| e.code == formatted) {
+            // Bambu Studio's DevHMSItem::get_long_error_code: attr, then code, all 32 bits each.
+            let ecode = format!("{attr:08X}{code:08X}");
+            if out.iter().any(|e| e.ecode == ecode) {
                 continue;
             }
-            out.push(make_error(formatted, false));
+            out.push(make_error(ecode, false));
         }
     }
 
